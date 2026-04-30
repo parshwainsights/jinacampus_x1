@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleCode {
+  TENANT_OWNER
+  PRINCIPAL
+  ADMIN
+  CLASS_TEACHER
+  TEACHER
+  STAFF
+  PARENT
+  STUDENT
+}
+
+model Tenant {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  institutions    Institution[]
+  users           User[]
+  roles           Role[]
+  tenantSettings  TenantSettings?
+  attendanceRules AttendanceSetting[]
+  auditLogs       AuditLog[]
+
+  @@index([isActive])
+}
+
+model Institution {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  code        String
+  boardName   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branches    Branch[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, name])
+}
+
+model Branch {
+  id            String   @id @default(cuid())
+  tenantId      String
+  institutionId String
+  name          String
+  code          String
+  timezone      String   @default("Asia/Kolkata")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  institution   Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  academicYears AcademicYear[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, institutionId, isActive])
+}
+
+model AcademicYear {
+  id          String   @id @default(cuid())
+  tenantId    String
+  branchId    String
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, branchId, name])
+  @@index([tenantId, branchId, isActive])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  tenantId       String
+  email          String
+  fullName       String
+  passwordHash   String
+  isActive       Boolean  @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleAssignments UserRoleAssignment[]
+  branchAccess    UserBranchAccess[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, isActive])
+}
+
+model Role {
+  id           String   @id @default(cuid())
+  tenantId     String
+  code         RoleCode?
+  name         String
+  isSystem     Boolean  @default(false)
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isSystem])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserRoleAssignment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  userId      String
+  roleId      String
+  branchId    String?
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, userId, roleId, branchId])
+  @@index([tenantId, userId, branchId])
+}
+
+model UserBranchAccess {
+  id          String   @id @default(cuid())
+  tenantId    String
+  userId      String
+  branchId    String
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, userId, branchId])
+  @@index([tenantId, branchId])
+}
+
+model TenantSettings {
+  id          String   @id @default(cuid())
+  tenantId    String   @unique
+  appName     String   @default("JinaCampus")
+  locale      String   @default("en-IN")
+  currency    String   @default("INR")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AttendanceSetting {
+  id                           String   @id @default(cuid())
+  tenantId                     String
+  branchId                     String   @unique
+  studentAttendanceMode        String   @default("DAILY")
+  studentDefaultSessionType    String   @default("FULL_DAY")
+  studentAutoLockEnabled       Boolean  @default(true)
+  studentAutoLockTime          String   @default("15:00")
+  sendStudentAbsentAlert       Boolean  @default(true)
+  sendStudentLateAlert         Boolean  @default(false)
+  minimumAttendancePercentage  Decimal  @default(75.0)
+  staffQrAttendanceEnabled     Boolean  @default(true)
+  staffCheckInStartTime        String   @default("07:30")
+  staffLateAfterTime           String   @default("08:15")
+  staffHalfDayBeforeMinutes    Int      @default(240)
+  staffMinimumWorkingMinutes   Int      @default(480)
+  staffQrTokenValiditySeconds  Int      @default(180)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  @@index([tenantId, branchId])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  tenantId       String
+  branchId       String?
+  academicYearId String?
+  actorUserId    String
+  action         String
+  entityType     String
+  entityId       String
+  beforeJson     Json?
+  afterJson      Json?
+  metadataJson   Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@index([actorUserId, createdAt])
+}

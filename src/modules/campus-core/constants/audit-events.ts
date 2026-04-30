@@ -1,0 +1,16 @@
+export const AUDIT_EVENTS = {
+  TENANT_CREATED: "campuscore.tenant.created",
+  TENANT_UPDATED: "campuscore.tenant.updated",
+  BRANCH_CREATED: "campuscore.branch.created",
+  BRANCH_UPDATED: "campuscore.branch.updated",
+  ACADEMIC_YEAR_ACTIVATED: "campuscore.academic_year.activated",
+  USER_CREATED: "campuscore.user.created",
+  USER_UPDATED: "campuscore.user.updated",
+  USER_DEACTIVATED: "campuscore.user.deactivated",
+  ROLE_CREATED: "campuscore.role.created",
+  ROLE_UPDATED: "campuscore.role.updated",
+  ROLE_PERMISSION_UPDATED: "campuscore.role_permission.updated",
+  USER_ROLE_ASSIGNED: "campuscore.user_role.assigned",
+  USER_ROLE_REMOVED: "campuscore.user_role.removed",
+  SETTINGS_UPDATED: "campuscore.settings.updated",
+} as const;
