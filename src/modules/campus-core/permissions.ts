@@ -1,0 +1,30 @@
+export const CAMPUS_CORE_PERMISSIONS = [
+  "platform.dashboard.view",
+  "platform.tenant.manage",
+  "platform.institution.manage",
+  "platform.school.view",
+  "platform.school.create",
+  "platform.school.update",
+  "platform.school.deactivate",
+  "platform.school.delete",
+  "platform.school.update_school_id",
+  "platform.user.manage",
+  "platform.audit.view",
+  "campuscore.tenant.view",
+  "campuscore.tenant.manage",
+  "campuscore.institution.manage",
+  "campuscore.branch.manage",
+  "campuscore.academic_year.manage",
+  "campuscore.user.view",
+  "campuscore.user.manage",
+  "campuscore.user.create",
+  "campuscore.user.update",
+  "campuscore.user.deactivate",
+  "campuscore.user.reset_password",
+  "campuscore.role.view",
+  "campuscore.role.manage",
+  "campuscore.audit.view",
+  "campuscore.settings.manage"
+] as const;
+
+export type CampusCorePermissionCode = (typeof CAMPUS_CORE_PERMISSIONS)[number];

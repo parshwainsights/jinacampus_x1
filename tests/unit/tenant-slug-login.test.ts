@@ -1,0 +1,241 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  db: {
+    tenant: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn(), update: vi.fn() },
+    session: { create: vi.fn() }
+  },
+  verifyPassword: vi.fn(),
+  createRawSessionToken: vi.fn(),
+  getSessionExpiresAt: vi.fn(),
+  hashSessionToken: vi.fn(),
+  setSessionCookie: vi.fn(),
+  writeAuditLog: vi.fn()
+}));
+
+vi.mock("@/lib/db", () => ({ db: mocks.db }));
+vi.mock("@/lib/auth/password", () => ({ verifyPassword: mocks.verifyPassword }));
+vi.mock("@/lib/auth/session", () => ({
+  createRawSessionToken: mocks.createRawSessionToken,
+  getSessionExpiresAt: mocks.getSessionExpiresAt,
+  hashSessionToken: mocks.hashSessionToken
+}));
+vi.mock("@/lib/auth/cookies", () => ({ setSessionCookie: mocks.setSessionCookie }));
+vi.mock("@/lib/audit/audit-log", () => ({ writeAuditLog: mocks.writeAuditLog }));
+
+import { POST } from "@/app/api/auth/login/route";
+import { SCHOOL_LOGIN_ERROR_MESSAGE, normalizeTenantSlug, validateSchoolId } from "@/modules/campus-core/tenant-login-policy";
+
+const tenant = {
+  id: "tenant-demo-id",
+  name: "JinaCampus Demo School",
+  status: "ACTIVE"
+};
+
+const principalUser = {
+  id: "principal-user-id",
+  tenantId: tenant.id,
+  email: "principal@demo.jinacampus.test",
+  userType: "STAFF",
+  status: "ACTIVE",
+  passwordCredential: { passwordHash: "stored-hash" },
+  roleAssignments: [{ role: { code: "PRINCIPAL", isActive: true } }]
+};
+
+const teacherUser = {
+  ...principalUser,
+  id: "teacher-user-id",
+  email: "teacher@demo.jinacampus.test",
+  roleAssignments: [{ role: { code: "CLASS_TEACHER", isActive: true } }]
+};
+
+function source(path: string) {
+  return readFileSync(resolve(process.cwd(), path), "utf8");
+}
+
+function loginRequest(body: Record<string, unknown>) {
+  return new Request("http://localhost/api/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json", "user-agent": "vitest" },
+    body: JSON.stringify(body)
+  });
+}
+
+async function postLogin(body: Record<string, unknown>) {
+  const response = await POST(loginRequest(body));
+  return {
+    status: response.status,
+    body: await response.json()
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.db.tenant.findUnique.mockResolvedValue(tenant);
+  mocks.db.user.findUnique.mockResolvedValue(principalUser);
+  mocks.db.user.update.mockResolvedValue({});
+  mocks.db.session.create.mockResolvedValue({});
+  mocks.verifyPassword.mockResolvedValue(true);
+  mocks.createRawSessionToken.mockReturnValue("raw-session-token");
+  mocks.hashSessionToken.mockResolvedValue("hashed-session-token");
+  mocks.getSessionExpiresAt.mockReturnValue(new Date("2026-06-03T00:00:00.000Z"));
+  mocks.setSessionCookie.mockResolvedValue(undefined);
+  mocks.writeAuditLog.mockResolvedValue(undefined);
+});
+
+describe("School ID login", () => {
+  it("normalizes valid School IDs and rejects invalid or reserved School IDs", () => {
+    expect(normalizeTenantSlug(" JinaCampus-Demo ")).toBe("jinacampus-demo");
+    expect(normalizeTenantSlug("jinacampus_demo")).toBeNull();
+    expect(normalizeTenantSlug("")).toBeNull();
+    expect(validateSchoolId("administrator")).toEqual({
+      ok: false,
+      message: "This School ID is reserved. Please choose another."
+    });
+  });
+
+  it("rejects malformed School IDs before any tenant or user lookup", async () => {
+    const result = await postLogin({
+      schoolId: "jinacampus_demo",
+      email: "principal@demo.jinacampus.test",
+      password: "candidate-password"
+    });
+
+    expect(result).toEqual({ status: 400, body: { error: SCHOOL_LOGIN_ERROR_MESSAGE } });
+    expect(mocks.db.tenant.findUnique).not.toHaveBeenCalled();
+    expect(mocks.db.user.findUnique).not.toHaveBeenCalled();
+    expect(JSON.stringify(result.body)).not.toMatch(/passwordHash|tokenHash|tenantId|role/i);
+  });
+
+  it("logs in a principal through School ID using tenantId plus email lookup", async () => {
+    const result = await postLogin({
+      schoolId: "jinacampus-demo",
+      email: "principal@demo.jinacampus.test",
+      password: "correct-password"
+    });
+
+    expect(result).toEqual({ status: 200, body: { ok: true, redirectTo: "/dashboard" } });
+    expect(mocks.db.tenant.findUnique).toHaveBeenCalledWith({ where: { slug: "jinacampus-demo" } });
+    expect(mocks.db.user.findUnique.mock.calls[0][0].where.tenantId_email).toEqual({
+      tenantId: tenant.id,
+      email: "principal@demo.jinacampus.test"
+    });
+    expect(mocks.db.session.create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ tenantId: tenant.id, userId: principalUser.id, tokenHash: "hashed-session-token" })
+    );
+    expect(mocks.setSessionCookie).toHaveBeenCalledWith("raw-session-token", expect.any(Date));
+    expect(JSON.stringify(result.body)).not.toMatch(/passwordHash|tokenHash|tenantId/);
+  });
+
+  it("keeps legacy tenantSlug request compatibility while the UI uses School ID", async () => {
+    const result = await postLogin({
+      tenantSlug: "jinacampus-demo",
+      email: "principal@demo.jinacampus.test",
+      password: "correct-password"
+    });
+
+    expect(result.status).toBe(200);
+    expect(mocks.db.tenant.findUnique).toHaveBeenCalledWith({ where: { slug: "jinacampus-demo" } });
+  });
+
+  it("logs in a class teacher through School ID and returns the teacher landing route", async () => {
+    mocks.db.user.findUnique.mockResolvedValue(teacherUser);
+
+    const result = await postLogin({
+      schoolId: "jinacampus-demo",
+      email: "teacher@demo.jinacampus.test",
+      password: "correct-password"
+    });
+
+    expect(result).toEqual({ status: 200, body: { ok: true, redirectTo: "/academia/attendance/mark" } });
+  });
+
+  it("returns the same safe error for wrong tenant, unknown email, inactive tenant, inactive user, and bad password", async () => {
+    const attempts: Array<{
+      tenantResult?: unknown;
+      userResult?: unknown;
+      passwordValid?: boolean;
+    }> = [
+      { tenantResult: null },
+      { tenantResult: { ...tenant, id: "tenant-other-id" }, userResult: null },
+      { userResult: null },
+      { tenantResult: { ...tenant, status: "SUSPENDED" } },
+      { userResult: { ...principalUser, status: "SUSPENDED" } },
+      { passwordValid: false }
+    ];
+
+    for (const attempt of attempts) {
+      vi.clearAllMocks();
+      mocks.db.tenant.findUnique.mockResolvedValue("tenantResult" in attempt ? attempt.tenantResult : tenant);
+      mocks.db.user.findUnique.mockResolvedValue("userResult" in attempt ? attempt.userResult : principalUser);
+      mocks.verifyPassword.mockResolvedValue("passwordValid" in attempt ? attempt.passwordValid : true);
+
+      const result = await postLogin({
+        schoolId: "jinacampus-demo",
+        email: "principal@demo.jinacampus.test",
+        password: "candidate-password"
+      });
+
+      expect(result).toEqual({ status: 401, body: { error: SCHOOL_LOGIN_ERROR_MESSAGE } });
+      expect(JSON.stringify(result.body)).not.toMatch(/tenant exists|email exists|role|passwordHash|tokenHash/i);
+    }
+  });
+
+  it("ignores client-supplied tenantId and creates session from server-resolved tenant", async () => {
+    const result = await postLogin({
+      schoolId: "jinacampus-demo",
+      tenantId: "client-supplied-cross-tenant-id",
+      email: "principal@demo.jinacampus.test",
+      password: "correct-password"
+    });
+
+    expect(result.status).toBe(200);
+    expect(mocks.db.user.findUnique.mock.calls[0][0].where.tenantId_email.tenantId).toBe(tenant.id);
+    expect(mocks.db.session.create.mock.calls[0][0].data.tenantId).toBe(tenant.id);
+    expect(JSON.stringify(mocks.db.user.findUnique.mock.calls)).not.toContain("client-supplied-cross-tenant-id");
+  });
+
+  it("supports /login schoolId query and /t/[tenantSlug]/login route with locked School ID UI", () => {
+    const loginPage = source("src/app/(auth)/login/page.tsx");
+    const tenantLoginPage = source("src/app/t/[tenantSlug]/login/page.tsx");
+    const loginForm = source("src/components/auth/login-form.tsx");
+
+    expect(loginPage).toContain("params.schoolId");
+    expect(loginPage).toContain("getSchoolLoginBranding(schoolId)");
+    expect(tenantLoginPage).toContain("params: Promise<{ tenantSlug: string }>");
+    expect(tenantLoginPage).toContain("schoolIdLocked={true}");
+    expect(loginForm).toContain('label="School ID"');
+    expect(loginForm).toContain('type="hidden" name="schoolId"');
+    expect(loginForm).toContain("Administrator Login");
+    expect(loginForm).toContain("/administrator/login");
+    expect(loginForm).toContain("schoolName");
+    expect(loginForm).toContain("logoUrl");
+    expect(loginForm).toContain("Forgot password?");
+    expect(loginForm).toContain("PasswordInput");
+    expect(loginForm).not.toContain("admin@demo.jinacampus.test");
+    expect(loginForm).not.toContain("JinaCampus@123");
+  });
+
+  it("keeps administrator login separate from school login", () => {
+    expect(existsSync(resolve(process.cwd(), "src/app/administrator/login/page.tsx"))).toBe(true);
+    expect(existsSync(resolve(process.cwd(), "src/app/api/auth/administrator-login/route.ts"))).toBe(true);
+    expect(existsSync(resolve(process.cwd(), "src/app/platform/login/page.tsx"))).toBe(false);
+    expect(source("src/components/auth/administrator-login-form.tsx")).not.toContain("schoolId");
+  });
+
+  it("session context source resolves tenant, branch, academic year, roles, and institution branding after login", () => {
+    const contextSource = source("src/lib/tenant/context.ts");
+
+    expect(contextSource).toContain("tenantId: session.tenantId");
+    expect(contextSource).toContain("activeBranchId");
+    expect(contextSource).toContain("activeAcademicYearId");
+    expect(contextSource).toContain("institutionDisplayName");
+    expect(contextSource).toContain("institutionLogoUrl");
+    expect(contextSource).toContain("roleLabels");
+    expect(contextSource).toContain("roleCodes");
+    expect(contextSource).not.toContain("clientTenantId");
+  });
+});

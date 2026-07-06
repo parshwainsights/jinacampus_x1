@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "JinaCampus",
+    "description": "The Complete School OS",
+    "slug": "jinacampus-mobile",
+    "version": "0.1.0",
+    "scheme": "jinacampus",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8FAFC"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.parshavinsights.jinacampus.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "JinaCampus uses the camera to scan staff attendance QR codes."
+      }
+    },
+    "android": {
+      "package": "com.parshavinsights.jinacampus.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F8FAFC"
+      },
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow JinaCampus to scan staff attendance QR codes.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

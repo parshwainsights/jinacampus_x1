@@ -1,0 +1,280 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { TenantContext } from "@/lib/tenant/context";
+import { getStaffProfileByUserId } from "@/modules/staffboard-lite/queries/staff-profile.queries";
+import { correctStaffAttendance } from "@/modules/staffboard-lite/services/staff-attendance.service";
+import { updateStaffProfile } from "@/modules/staffboard-lite/services/staff-profile.service";
+import {
+  generateStaffAttendanceQrToken,
+  hashStaffAttendanceQrToken,
+  scanStaffAttendanceQr
+} from "@/modules/staffboard-lite/services/staff-qr.service";
+
+const mocks = vi.hoisted(() => {
+  const tx = {
+    attendanceSetting: { findFirst: vi.fn() },
+    branch: { findFirst: vi.fn() },
+    staffAttendanceQrToken: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+    staffAttendanceRecord: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+    staffProfile: { findFirst: vi.fn(), update: vi.fn() }
+  };
+  const db = {
+    ...tx,
+    $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx))
+  };
+  const requirePermission = vi.fn();
+  const writeAuditLog = vi.fn();
+  return { db, requirePermission, tx, writeAuditLog };
+});
+
+vi.mock("@/lib/db", () => ({ db: mocks.db }));
+vi.mock("@/lib/rbac/require-permission", () => ({ requirePermission: mocks.requirePermission }));
+vi.mock("@/lib/audit/audit-log", () => ({ writeAuditLog: mocks.writeAuditLog }));
+
+const tenantId = "00000000-0000-0000-0000-000000000001";
+const actorUserId = "00000000-0000-0000-0000-000000000002";
+const branchId = "00000000-0000-0000-0000-000000000003";
+const academicYearId = "00000000-0000-0000-0000-000000000004";
+const staffId = "00000000-0000-0000-0000-000000000005";
+const qrTokenId = "00000000-0000-0000-0000-000000000006";
+const attendanceRecordId = "00000000-0000-0000-0000-000000000007";
+const rawToken = "raw-staff-qr-token-tenant-check";
+const attendanceDate = new Date(Date.UTC(2026, 4, 5));
+
+const ctx: TenantContext = {
+  tenantId,
+  userId: actorUserId,
+  userEmail: "teacher@example.com",
+  userType: "STAFF",
+  activeBranchId: branchId,
+  accessibleBranchIds: [branchId],
+  activeAcademicYearId: academicYearId
+};
+
+function staffProfile(overrides: Record<string, unknown> = {}) {
+  return {
+    id: staffId,
+    tenantId,
+    branchId,
+    userId: actorUserId,
+    employeeCode: "EMP-1001",
+    firstName: "Meera",
+    middleName: null,
+    lastName: "Sharma",
+    staffType: "TEACHER",
+    designation: "Teacher",
+    department: "Academics",
+    employmentStatus: "ACTIVE",
+    branch: { id: branchId, timezone: "Asia/Kolkata", status: "ACTIVE" },
+    ...overrides
+  };
+}
+
+function qrToken(overrides: Record<string, unknown> = {}) {
+  return {
+    id: qrTokenId,
+    tenantId,
+    branchId,
+    purpose: "CHECK_IN",
+    validFrom: new Date("2026-05-05T00:00:00.000Z"),
+    validUntil: new Date("2026-05-05T18:00:00.000Z"),
+    ...overrides
+  };
+}
+
+function attendanceRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: attendanceRecordId,
+    tenantId,
+    branchId,
+    academicYearId,
+    staffId,
+    attendanceDate,
+    status: "PRESENT",
+    checkInAt: new Date("2026-05-05T02:30:00.000Z"),
+    checkOutAt: null,
+    workingMinutes: null,
+    checkInSource: "QR_SCAN",
+    checkOutSource: null,
+    checkInQrTokenId: qrTokenId,
+    checkOutQrTokenId: null,
+    markedById: actorUserId,
+    updatedById: null,
+    correctionReason: null,
+    branch: { id: branchId, timezone: "Asia/Kolkata", status: "ACTIVE" },
+    ...overrides
+  };
+}
+
+function resetMocks() {
+  mocks.tx.attendanceSetting.findFirst.mockReset();
+  mocks.tx.branch.findFirst.mockReset();
+  mocks.tx.staffAttendanceQrToken.create.mockReset();
+  mocks.tx.staffAttendanceQrToken.findFirst.mockReset();
+  mocks.tx.staffAttendanceQrToken.update.mockReset();
+  mocks.tx.staffAttendanceRecord.create.mockReset();
+  mocks.tx.staffAttendanceRecord.findFirst.mockReset();
+  mocks.tx.staffAttendanceRecord.update.mockReset();
+  mocks.tx.staffProfile.findFirst.mockReset();
+  mocks.tx.staffProfile.update.mockReset();
+  mocks.db.$transaction.mockReset();
+  mocks.db.$transaction.mockImplementation((callback: (client: typeof mocks.tx) => unknown) => callback(mocks.tx));
+  mocks.requirePermission.mockReset();
+  mocks.requirePermission.mockResolvedValue(true);
+  mocks.writeAuditLog.mockReset();
+  mocks.writeAuditLog.mockResolvedValue({ id: "audit-id" });
+  mocks.tx.branch.findFirst.mockResolvedValue({ id: branchId });
+  mocks.tx.attendanceSetting.findFirst.mockResolvedValue({
+    staffQrAttendanceEnabled: true,
+    staffLateAfterTime: "08:00",
+    staffHalfDayBeforeMinutes: 240,
+    staffMinimumWorkingMinutes: 480
+  });
+}
+
+describe("StaffBoard Lite tenant isolation", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-05T02:20:00.000Z"));
+    resetMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("looks up staff profiles by user within tenant and accessible branch scope", async () => {
+    mocks.tx.staffProfile.findFirst.mockResolvedValue(null);
+
+    await expect(getStaffProfileByUserId(ctx, actorUserId)).resolves.toBeNull();
+
+    expect(mocks.tx.staffProfile.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        userId: actorUserId,
+        tenantId,
+        branchId: { in: [branchId] }
+      }
+    }));
+    expect(mocks.requirePermission).not.toHaveBeenCalled();
+  });
+
+  it("does not update a staff profile when the scoped tenant lookup returns nothing", async () => {
+    mocks.tx.staffProfile.findFirst.mockResolvedValue(null);
+
+    await expect(updateStaffProfile(ctx, {
+      staffId,
+      designation: "Senior Teacher"
+    })).rejects.toMatchObject({ code: "STAFF_PROFILE_NOT_FOUND" });
+
+    expect(mocks.tx.staffProfile.findFirst).toHaveBeenCalledWith({
+      where: { id: staffId, tenantId }
+    });
+    expect(mocks.tx.staffProfile.update).not.toHaveBeenCalled();
+  });
+
+  it("generates staff QR tokens under the current tenant and verified branch only", async () => {
+    mocks.tx.staffAttendanceQrToken.create.mockImplementation(({ data }) => ({
+      id: qrTokenId,
+      purpose: data.purpose,
+      branchId: data.branchId,
+      validFrom: data.validFrom,
+      validUntil: data.validUntil
+    }));
+
+    const result = await generateStaffAttendanceQrToken(ctx, { purpose: "CHECK_IN" });
+
+    expect(mocks.tx.branch.findFirst).toHaveBeenCalledWith({
+      where: { id: branchId, tenantId, status: { not: "ARCHIVED" } },
+      select: { id: true }
+    });
+    expect(mocks.tx.attendanceSetting.findFirst).toHaveBeenCalledWith({
+      where: { tenantId, branchId },
+      select: {
+        staffQrAttendanceEnabled: true,
+        staffQrTokenValiditySeconds: true
+      }
+    });
+    expect(mocks.tx.staffAttendanceQrToken.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        tenantId,
+        branchId,
+        createdById: actorUserId
+      })
+    }));
+    expect(JSON.stringify(result)).not.toContain("tokenHash");
+  });
+
+  it("rejects another tenant QR token because scan lookup is tenant-scoped", async () => {
+    mocks.tx.staffProfile.findFirst.mockResolvedValue(staffProfile());
+    mocks.tx.staffAttendanceQrToken.findFirst.mockResolvedValue(null);
+
+    await expect(scanStaffAttendanceQr(ctx, { token: rawToken })).rejects.toMatchObject({
+      code: "INVALID_STAFF_QR"
+    });
+
+    expect(mocks.tx.staffProfile.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        tenantId,
+        userId: actorUserId,
+        employmentStatus: "ACTIVE"
+      }
+    }));
+    expect(mocks.tx.staffAttendanceQrToken.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId,
+        tokenHash: hashStaffAttendanceQrToken(rawToken)
+      },
+      select: expect.any(Object)
+    });
+    expect(mocks.tx.staffAttendanceRecord.create).not.toHaveBeenCalled();
+  });
+
+  it("checks in only after tenant-scoped staff, QR token, and attendance record lookups", async () => {
+    mocks.tx.staffProfile.findFirst.mockResolvedValue(staffProfile());
+    mocks.tx.staffAttendanceQrToken.findFirst.mockResolvedValue(qrToken());
+    mocks.tx.staffAttendanceQrToken.update.mockResolvedValue({ id: qrTokenId });
+    mocks.tx.staffAttendanceRecord.findFirst.mockResolvedValue(null);
+    mocks.tx.staffAttendanceRecord.create.mockImplementation(({ data }) => ({
+      id: attendanceRecordId,
+      ...data
+    }));
+
+    await scanStaffAttendanceQr(ctx, { token: rawToken });
+
+    expect(mocks.tx.staffAttendanceRecord.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId,
+        branchId,
+        staffId,
+        attendanceDate
+      }
+    });
+    expect(mocks.tx.staffAttendanceRecord.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId,
+        branchId,
+        academicYearId,
+        staffId
+      })
+    });
+  });
+
+  it("does not correct another tenant or inaccessible staff attendance record", async () => {
+    mocks.tx.staffAttendanceRecord.findFirst.mockResolvedValue(null);
+
+    await expect(correctStaffAttendance(ctx, {
+      attendanceRecordId,
+      status: "PRESENT",
+      correctionReason: "Admin verified register"
+    })).rejects.toMatchObject({ code: "STAFF_ATTENDANCE_RECORD_NOT_FOUND" });
+
+    expect(mocks.tx.staffAttendanceRecord.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        id: attendanceRecordId,
+        tenantId,
+        branchId: { in: [branchId] }
+      }
+    }));
+    expect(mocks.requirePermission).not.toHaveBeenCalled();
+    expect(mocks.tx.staffAttendanceRecord.update).not.toHaveBeenCalled();
+  });
+});

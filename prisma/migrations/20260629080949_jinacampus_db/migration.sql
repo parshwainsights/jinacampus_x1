@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "notification_templates_tenantId_branchId_channel_templateKey_id" RENAME TO "notification_templates_tenantId_branchId_channel_templateKe_idx";

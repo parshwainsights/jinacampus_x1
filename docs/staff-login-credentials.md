@@ -1,0 +1,99 @@
+# Staff Login Credentials And Access Policy
+
+Date: 2026-06-29
+
+## Current Login Method
+
+Staff users log in through the normal school login flow:
+
+- Route: `/login`
+- School ID: school tenant slug, for example `jinacampus-demo`
+- Identifier: user email address
+- Password: user password
+
+The current web login route does not accept mobile number or username as the login identifier. Mobile number can be stored on the user/staff profile, but email is required for app login access.
+
+## Staff Profiles Versus Login Users
+
+Staff profiles are StaffBoard records used for employment and attendance operations. A staff profile can exist without app login access.
+
+When staff app access is enabled, the staff profile is linked to a CampusCore `User` through `StaffProfile.userId`. The linked user receives:
+
+- tenant-scoped user record
+- branch access for the staff profile branch
+- a non-platform school role such as `STAFF`, `TEACHER`, `CLASS_TEACHER`, or `OFFICE_STAFF`
+- a hashed password credential with first-change required for admin-created access
+
+Password hashes are never displayed in UI or docs.
+
+## Demo Seed Credentials
+
+The demo seed creates linked login users for admin, principal, teacher, staff, and office QA.
+
+Local-only staff demo login:
+
+- School ID: `jinacampus-demo`
+- Email: `staff@demo.jinacampus.test`
+- Password: `JinaCampus@123` by default
+
+The default is for local development and QA only. Do not use it for production, staging, or real school accounts.
+
+Seed password variables:
+
+- `DEMO_USER_PASSWORD`: overrides the default local demo password for seeded school users.
+- `DEMO_STAFF_PASSWORD`: overrides only the seeded staff demo user; if unset, the staff user uses `DEMO_USER_PASSWORD`.
+
+All seed passwords are hashed with the existing password hashing utility before storage.
+
+## Staff Account Creation Flow
+
+Staff profile creation now includes optional login access:
+
+- Admin/principal creates the staff profile.
+- Admin/principal can check `Create login access`.
+- Email is required when login access is enabled.
+- A temporary password and confirmation are required.
+- The temporary password is hashed immediately and is not displayed after submission.
+- Role options are restricted to non-platform school roles.
+
+Staff profile edit now shows login access status:
+
+- enabled or no app access
+- linked user email
+- account status
+- password-change requirement
+- active role labels
+
+Available admin actions:
+
+- Create login access for unlinked staff profiles.
+- Reset password through CampusCore user management.
+- Disable login access, which deactivates the linked user and revokes active sessions.
+
+## RBAC And Security Rules
+
+- Staff login access creation requires StaffBoard staff update/create permission plus CampusCore user create/update/manage permissions.
+- Role assignment remains bounded by the actor role; principals cannot assign platform admin roles.
+- Branch access is derived from the staff profile branch and actor permissions.
+- Staff and teacher roles do not receive admin permissions by default.
+- Disable login access does not delete staff profiles or attendance history.
+- Audit logs are written for staff creation, staff login access creation/disable, user creation, role assignment, branch assignment, and user deactivation.
+
+## Smoke Checklist
+
+Use seeded or safe QA users only:
+
+- Valid staff login with School ID, email, and password.
+- Invalid password returns the safe login error.
+- Disabled/deactivated staff login is rejected.
+- Wrong School ID login is rejected safely.
+- Staff can access permitted StaffBoard self-scan flows only.
+- Staff cannot access admin-only CampusCore or staff management routes.
+- Logout clears the session and protected routes redirect back to login.
+
+## Remaining Notes
+
+- Mobile number login is not implemented.
+- Invite email delivery is deferred.
+- Do not share one common password for real staff.
+- Rotate pilot/staging temporary passwords before production-like use.

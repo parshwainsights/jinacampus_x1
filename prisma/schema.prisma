@@ -1,0 +1,1156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum InstitutionStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum AcademicYearStatus {
+  DRAFT
+  ACTIVE
+  LOCKED
+  ARCHIVED
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum UserType {
+  OWNER
+  STAFF
+  PARENT
+  STUDENT
+  SYSTEM
+}
+
+enum PermissionModule {
+  CAMPUS_CORE
+  ACADEMIA
+  GRADEBOOK
+  FEEDESK
+  STAFFBOARD
+  NOTIFICATIONS
+  SCHOOLCAST
+  INSIGHTBOARD
+  CAMPUSFLEET
+  BOOKNEST
+  ASSETROOM
+  SYSTEM
+}
+
+enum RoleScope {
+  TENANT
+  BRANCH
+  ACADEMIC_YEAR
+}
+
+enum RoleAssignmentScope {
+  TENANT
+  BRANCH
+  ACADEMIC_YEAR
+}
+
+enum TenantPlan {
+  TRIAL
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+enum StudentAttendanceMode {
+  DAILY
+  PERIOD
+}
+
+enum AttendanceSessionType {
+  FULL_DAY
+  MORNING
+  AFTERNOON
+  PERIOD
+}
+
+enum AcademicRecordStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  ALUMNI
+  TRANSFERRED
+  WITHDRAWN
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PROMOTED
+  TRANSFERRED
+  WITHDRAWN
+  CANCELLED
+  COMPLETED
+}
+
+enum GuardianRelation {
+  FATHER
+  MOTHER
+  GUARDIAN
+  GRANDFATHER
+  GRANDMOTHER
+  UNCLE
+  AUNT
+  SIBLING
+  OTHER
+}
+
+enum StudentAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  ON_LEAVE
+  EXCUSED
+  NOT_MARKED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  NOT_SPECIFIED
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+  UNKNOWN
+}
+
+enum SubjectType {
+  CORE
+  ELECTIVE
+  OPTIONAL
+  CO_CURRICULAR
+}
+
+enum StaffType {
+  TEACHER
+  ADMIN
+  ACCOUNTANT
+  LIBRARIAN
+  DRIVER
+  HELPER
+  SECURITY
+  PEON
+  CLEANING_STAFF
+  MANAGEMENT
+  OTHER
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+  RESIGNED
+  TERMINATED
+}
+
+enum StaffAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  ON_LEAVE
+  WEEK_OFF
+  HOLIDAY
+  NOT_MARKED
+}
+
+enum StaffAttendanceSource {
+  QR_SCAN
+  MANUAL_ADMIN
+  IMPORT
+  BIOMETRIC
+}
+
+enum StaffQrPurpose {
+  CHECK_IN
+  CHECK_OUT
+}
+
+enum CommunicationPreferenceOwnerType {
+  GUARDIAN
+  STAFF
+}
+
+enum NotificationChannel {
+  WHATSAPP
+}
+
+enum NotificationTemplateCategory {
+  UTILITY
+}
+
+enum NotificationRecipientType {
+  GUARDIAN
+  STAFF
+}
+
+enum NotificationOutboxStatus {
+  QUEUED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum NotificationDeliveryStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum WhatsAppProvider {
+  META_CLOUD
+  BSP
+  DRY_RUN
+}
+
+enum StudentAttendanceNotificationMode {
+  DISABLED
+  EXCEPTION_ONLY
+  ALL_STATUSES
+}
+
+model Tenant {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String       @unique
+  status       TenantStatus @default(ACTIVE)
+  plan         TenantPlan   @default(TRIAL)
+  legalName    String?
+  supportEmail String?
+  phone        String?
+  website      String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  institutions             Institution[]
+  branches                 Branch[]
+  academicYears            AcademicYear[]
+  users                    User[]
+  roles                    Role[]
+  rolePermissions          RolePermission[]
+  roleAssignments          UserRoleAssignment[]
+  branchAccesses           UserBranchAccess[]
+  sessions                 Session[]
+  tenantSettings           TenantSettings?
+  attendanceSettings       AttendanceSetting[]
+  auditLogs                AuditLog[]
+  classes                  Class[]
+  sections                 Section[]
+  classSections            ClassSection[]
+  subjects                 Subject[]
+  students                 Student[]
+  guardians                Guardian[]
+  studentGuardianLinks     StudentGuardianLink[]
+  enrollments              Enrollment[]
+  studentAttendanceRecords StudentAttendanceRecord[]
+  staffProfiles            StaffProfile[]
+  staffAttendanceRecords   StaffAttendanceRecord[]
+  staffAttendanceQrTokens  StaffAttendanceQrToken[]
+  communicationPreferences CommunicationPreference[]
+  notificationTemplates    NotificationTemplate[]
+  notificationOutboxItems  NotificationOutbox[]
+  notificationDeliveryLogs NotificationDeliveryLog[]
+  whatsAppSettings         WhatsAppIntegrationSetting[]
+
+  @@index([status])
+  @@map("tenants")
+}
+
+model Institution {
+  id            String            @id @default(uuid()) @db.Uuid
+  tenantId      String            @db.Uuid
+  name          String
+  displayName   String?
+  code          String
+  status        InstitutionStatus @default(ACTIVE)
+  board         String?
+  medium        String?
+  logoUrl       String?
+  logoObjectKey String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  state         String?
+  postalCode    String?
+  country       String            @default("India")
+  createdById   String?           @db.Uuid
+  updatedById   String?           @db.Uuid
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branches      Branch[]
+  academicYears AcademicYear[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@map("institutions")
+}
+
+model Branch {
+  id            String       @id @default(uuid()) @db.Uuid
+  tenantId      String       @db.Uuid
+  institutionId String       @db.Uuid
+  name          String
+  code          String
+  status        BranchStatus @default(ACTIVE)
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  state         String?
+  postalCode    String?
+  country       String       @default("India")
+  phone         String?
+  email         String?
+  timezone      String       @default("Asia/Kolkata")
+  createdById   String?      @db.Uuid
+  updatedById   String?      @db.Uuid
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  tenant                   Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  institution              Institution                  @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  userBranchAccesses       UserBranchAccess[]
+  attendanceSetting        AttendanceSetting?
+  auditLogs                AuditLog[]
+  classSections            ClassSection[]
+  students                 Student[]
+  enrollments              Enrollment[]
+  studentAttendanceRecords StudentAttendanceRecord[]
+  staffProfiles            StaffProfile[]
+  staffAttendanceRecords   StaffAttendanceRecord[]
+  staffAttendanceQrTokens  StaffAttendanceQrToken[]
+  communicationPreferences CommunicationPreference[]
+  notificationTemplates    NotificationTemplate[]
+  notificationOutboxItems  NotificationOutbox[]
+  whatsAppSettings         WhatsAppIntegrationSetting[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, institutionId])
+  @@index([tenantId, status])
+  @@map("branches")
+}
+
+model AcademicYear {
+  id            String             @id @default(uuid()) @db.Uuid
+  tenantId      String             @db.Uuid
+  institutionId String             @db.Uuid
+  name          String
+  startDate     DateTime           @db.Date
+  endDate       DateTime           @db.Date
+  status        AcademicYearStatus @default(DRAFT)
+  isActive      Boolean            @default(false)
+  createdById   String?            @db.Uuid
+  updatedById   String?            @db.Uuid
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  institution              Institution               @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  auditLogs                AuditLog[]
+  classSections            ClassSection[]
+  enrollments              Enrollment[]
+  studentAttendanceRecords StudentAttendanceRecord[]
+  staffAttendanceRecords   StaffAttendanceRecord[]
+  notificationOutboxItems  NotificationOutbox[]
+
+  @@unique([tenantId, institutionId, name])
+  @@index([tenantId, institutionId, status])
+  @@index([tenantId, institutionId, isActive])
+  @@map("academic_years")
+}
+
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  tenantId      String     @db.Uuid
+  email         String
+  phone         String?
+  firstName     String
+  middleName    String?
+  lastName      String?
+  displayName   String?
+  userType      UserType   @default(STAFF)
+  status        UserStatus @default(INVITED)
+  lastLoginAt   DateTime?
+  invitedAt     DateTime?
+  activatedAt   DateTime?
+  deactivatedAt DateTime?
+  createdById   String?    @db.Uuid
+  updatedById   String?    @db.Uuid
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  tenant                     Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  passwordCredential         PasswordCredential?
+  sessions                   Session[]
+  roleAssignments            UserRoleAssignment[]
+  branchAccesses             UserBranchAccess[]
+  auditLogs                  AuditLog[]                @relation("AuditActor")
+  classSectionsAsTeacher     ClassSection[]            @relation("ClassSectionTeacher")
+  markedStudentAttendance    StudentAttendanceRecord[] @relation("StudentAttendanceMarkedBy")
+  correctedStudentAttendance StudentAttendanceRecord[] @relation("StudentAttendanceCorrectedBy")
+  staffProfile               StaffProfile?             @relation("StaffProfileUser")
+  markedStaffAttendance      StaffAttendanceRecord[]   @relation("StaffAttendanceMarkedBy")
+  updatedStaffAttendance     StaffAttendanceRecord[]   @relation("StaffAttendanceUpdatedBy")
+  createdStaffQrTokens       StaffAttendanceQrToken[]  @relation("StaffAttendanceQrTokenCreatedBy")
+
+  @@unique([tenantId, email])
+  @@unique([tenantId, phone])
+  @@index([tenantId, status])
+  @@index([tenantId, userType])
+  @@map("users")
+}
+
+model PasswordCredential {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @db.Uuid
+  passwordHash      String
+  passwordUpdatedAt DateTime @default(now())
+  mustChange        Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_credentials")
+}
+
+model Session {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  code        String           @unique
+  module      PermissionModule
+  description String?
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  rolePermissions RolePermission[]
+
+  @@index([module])
+  @@index([isActive])
+  @@map("permissions")
+}
+
+model Role {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  code        String
+  name        String
+  description String?
+  scope       RoleScope @default(TENANT)
+  isSystem    Boolean   @default(false)
+  isMutable   Boolean   @default(true)
+  isActive    Boolean   @default(true)
+  createdById String?   @db.Uuid
+  updatedById String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+  assignments     UserRoleAssignment[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive])
+  @@map("roles")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  roleId       String   @db.Uuid
+  permissionId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, roleId, permissionId])
+  @@index([tenantId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRoleAssignment {
+  id           String              @id @default(uuid()) @db.Uuid
+  tenantId     String              @db.Uuid
+  userId       String              @db.Uuid
+  roleId       String              @db.Uuid
+  scopeType    RoleAssignmentScope @default(TENANT)
+  scopeId      String              @default("TENANT")
+  assignedById String?             @db.Uuid
+  startsAt     DateTime?
+  endsAt       DateTime?
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, roleId, scopeType, scopeId])
+  @@index([tenantId, userId, isActive])
+  @@index([tenantId, roleId])
+  @@map("user_role_assignments")
+}
+
+model UserBranchAccess {
+  id                        String   @id @default(uuid()) @db.Uuid
+  tenantId                  String   @db.Uuid
+  userId                    String   @db.Uuid
+  branchId                  String   @db.Uuid
+  canAccessAllAcademicYears Boolean  @default(true)
+  isPrimary                 Boolean  @default(false)
+  isActive                  Boolean  @default(true)
+  grantedById               String?  @db.Uuid
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, branchId])
+  @@index([tenantId, branchId])
+  @@index([tenantId, userId, isActive])
+  @@map("user_branch_accesses")
+}
+
+model TenantSettings {
+  id                               String   @id @default(uuid()) @db.Uuid
+  tenantId                         String   @unique @db.Uuid
+  brandName                        String   @default("JinaCampus")
+  brandByline                      String   @default("powered by Parshav Insights")
+  primaryColor                     String?
+  logoUrl                          String?
+  timezone                         String   @default("Asia/Kolkata")
+  locale                           String   @default("en-IN")
+  dateFormat                       String   @default("dd/MM/yyyy")
+  currency                         String   @default("INR")
+  allowMultipleActiveAcademicYears Boolean  @default(false)
+  createdById                      String?  @db.Uuid
+  updatedById                      String?  @db.Uuid
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_settings")
+}
+
+model AttendanceSetting {
+  id                                 String                            @id @default(uuid()) @db.Uuid
+  tenantId                           String                            @db.Uuid
+  branchId                           String                            @unique @db.Uuid
+  studentAttendanceMode              StudentAttendanceMode             @default(DAILY)
+  studentDefaultSessionType          AttendanceSessionType             @default(FULL_DAY)
+  studentAutoLockEnabled             Boolean                           @default(true)
+  studentAutoLockTime                String                            @default("15:00")
+  sendStudentAbsentAlert             Boolean                           @default(true)
+  sendStudentLateAlert               Boolean                           @default(false)
+  studentAttendanceWhatsAppEnabled   Boolean                           @default(false)
+  studentAttendanceNotificationMode  StudentAttendanceNotificationMode @default(EXCEPTION_ONLY)
+  minimumAttendancePercentage        Int                               @default(75)
+  staffQrAttendanceEnabled           Boolean                           @default(true)
+  staffCheckInStartTime              String                            @default("07:30")
+  staffLateAfterTime                 String                            @default("08:00")
+  staffHalfDayBeforeMinutes          Int                               @default(240)
+  staffMinimumWorkingMinutes         Int                               @default(360)
+  staffQrTokenValiditySeconds        Int                               @default(180)
+  staffMonthlySummaryWhatsAppEnabled Boolean                           @default(false)
+  staffMonthlySummarySendDay         Int                               @default(1)
+  staffMonthlySummarySendTime        String                            @default("09:00")
+  createdById                        String?                           @db.Uuid
+  updatedById                        String?                           @db.Uuid
+  createdAt                          DateTime                          @default(now())
+  updatedAt                          DateTime                          @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId])
+  @@map("attendance_settings")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  branchId       String?  @db.Uuid
+  academicYearId String?  @db.Uuid
+  actorUserId    String?  @db.Uuid
+  action         String
+  entityType     String
+  entityId       String?
+  beforeJson     Json?
+  afterJson      Json?
+  metadataJson   Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  actor        User?         @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, actorUserId])
+  @@index([tenantId, branchId])
+  @@map("audit_logs")
+}
+
+model Class {
+  id          String               @id @default(uuid()) @db.Uuid
+  tenantId    String               @db.Uuid
+  code        String
+  name        String
+  description String?
+  sortOrder   Int                  @default(0)
+  status      AcademicRecordStatus @default(ACTIVE)
+  createdById String?              @db.Uuid
+  updatedById String?              @db.Uuid
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classSections ClassSection[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+  @@index([tenantId, sortOrder])
+  @@map("classes")
+}
+
+model Section {
+  id          String               @id @default(uuid()) @db.Uuid
+  tenantId    String               @db.Uuid
+  code        String
+  name        String
+  description String?
+  sortOrder   Int                  @default(0)
+  status      AcademicRecordStatus @default(ACTIVE)
+  createdById String?              @db.Uuid
+  updatedById String?              @db.Uuid
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classSections ClassSection[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+  @@index([tenantId, sortOrder])
+  @@map("sections")
+}
+
+model ClassSection {
+  id                 String               @id @default(uuid()) @db.Uuid
+  tenantId           String               @db.Uuid
+  branchId           String               @db.Uuid
+  academicYearId     String               @db.Uuid
+  classId            String               @db.Uuid
+  sectionId          String               @db.Uuid
+  classTeacherUserId String?              @db.Uuid
+  displayName        String
+  capacity           Int?
+  status             AcademicRecordStatus @default(ACTIVE)
+  createdById        String?              @db.Uuid
+  updatedById        String?              @db.Uuid
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch                   Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  academicYear             AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  academicClass            Class                     @relation(fields: [classId], references: [id], onDelete: Restrict)
+  section                  Section                   @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  classTeacherUser         User?                     @relation("ClassSectionTeacher", fields: [classTeacherUserId], references: [id], onDelete: SetNull)
+  enrollments              Enrollment[]
+  studentAttendanceRecords StudentAttendanceRecord[]
+
+  @@unique([tenantId, branchId, academicYearId, classId, sectionId])
+  @@index([tenantId, branchId, academicYearId, status])
+  @@index([tenantId, academicYearId, classId])
+  @@index([tenantId, classTeacherUserId])
+  @@map("class_sections")
+}
+
+model Subject {
+  id          String               @id @default(uuid()) @db.Uuid
+  tenantId    String               @db.Uuid
+  code        String
+  name        String
+  type        SubjectType          @default(CORE)
+  description String?
+  status      AcademicRecordStatus @default(ACTIVE)
+  createdById String?              @db.Uuid
+  updatedById String?              @db.Uuid
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+  @@map("subjects")
+}
+
+model Student {
+  id                String        @id @default(uuid()) @db.Uuid
+  tenantId          String        @db.Uuid
+  branchId          String        @db.Uuid
+  admissionNumber   String
+  admissionDate     DateTime?     @db.Date
+  fullName          String?
+  firstName         String
+  middleName        String?
+  lastName          String?
+  displayName       String?
+  dateOfBirth       DateTime?     @db.Date
+  gender            Gender        @default(NOT_SPECIFIED)
+  bloodGroup        BloodGroup?
+  fatherName        String?
+  fatherOccupation  String?
+  motherName        String?
+  guardianName      String?
+  aadhaarMasked     String?
+  aadhaarLast4      String?
+  familyIdNumber    String?
+  sssmIdNumber      String?
+  apaarIdNumber     String?
+  religion          String?
+  caste             String?
+  category          String?
+  nationality       String?
+  currentAddress    String?       @db.Text
+  permanentAddress  String?       @db.Text
+  city              String?
+  state             String?
+  pincode           String?
+  bankAccountMasked String?
+  bankAccountLast4  String?
+  bankBranchName    String?
+  ifscCode          String?
+  status            StudentStatus @default(ACTIVE)
+  joinedAt          DateTime?     @db.Date
+  leftAt            DateTime?     @db.Date
+  createdById       String?       @db.Uuid
+  updatedById       String?       @db.Uuid
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch                   Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  guardianLinks            StudentGuardianLink[]
+  enrollments              Enrollment[]
+  studentAttendanceRecords StudentAttendanceRecord[]
+
+  @@unique([tenantId, admissionNumber])
+  @@index([tenantId, branchId, status])
+  @@index([tenantId, branchId, category])
+  @@index([tenantId, displayName])
+  @@map("students")
+}
+
+model Guardian {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  firstName    String
+  middleName   String?
+  lastName     String?
+  displayName  String?
+  phone        String?
+  email        String?
+  occupation   String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  country      String   @default("India")
+  createdById  String?  @db.Uuid
+  updatedById  String?  @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentLinks StudentGuardianLink[]
+
+  @@unique([tenantId, phone])
+  @@unique([tenantId, email])
+  @@index([tenantId, displayName])
+  @@map("guardians")
+}
+
+model StudentGuardianLink {
+  id                  String           @id @default(uuid()) @db.Uuid
+  tenantId            String           @db.Uuid
+  studentId           String           @db.Uuid
+  guardianId          String           @db.Uuid
+  relation            GuardianRelation
+  isPrimary           Boolean          @default(false)
+  isEmergencyContact  Boolean          @default(false)
+  hasPickupPermission Boolean          @default(false)
+  createdById         String?          @db.Uuid
+  updatedById         String?          @db.Uuid
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian Guardian @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, studentId, guardianId, relation])
+  @@index([tenantId, studentId, isPrimary])
+  @@index([tenantId, guardianId])
+  @@map("student_guardian_links")
+}
+
+model Enrollment {
+  id             String           @id @default(uuid()) @db.Uuid
+  tenantId       String           @db.Uuid
+  branchId       String           @db.Uuid
+  academicYearId String           @db.Uuid
+  studentId      String           @db.Uuid
+  classSectionId String           @db.Uuid
+  rollNumber     String?
+  status         EnrollmentStatus @default(ACTIVE)
+  enrolledOn     DateTime         @db.Date
+  leftOn         DateTime?        @db.Date
+  createdById    String?          @db.Uuid
+  updatedById    String?          @db.Uuid
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch                   Branch                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  academicYear             AcademicYear              @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  student                  Student                   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classSection             ClassSection              @relation(fields: [classSectionId], references: [id], onDelete: Restrict)
+  studentAttendanceRecords StudentAttendanceRecord[]
+
+  @@unique([tenantId, academicYearId, studentId])
+  @@unique([tenantId, academicYearId, classSectionId, rollNumber])
+  @@index([tenantId, branchId, academicYearId, status])
+  @@index([tenantId, classSectionId, status])
+  @@map("enrollments")
+}
+
+model StudentAttendanceRecord {
+  id               String                  @id @default(uuid()) @db.Uuid
+  tenantId         String                  @db.Uuid
+  branchId         String                  @db.Uuid
+  academicYearId   String                  @db.Uuid
+  classSectionId   String                  @db.Uuid
+  enrollmentId     String                  @db.Uuid
+  studentId        String                  @db.Uuid
+  attendanceDate   DateTime                @db.Date
+  sessionType      AttendanceSessionType   @default(FULL_DAY)
+  status           StudentAttendanceStatus @default(NOT_MARKED)
+  remarks          String?
+  correctionReason String?
+  markedById       String?                 @db.Uuid
+  correctedById    String?                 @db.Uuid
+  markedAt         DateTime?
+  correctedAt      DateTime?
+  lockedAt         DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Restrict)
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  markedBy     User?        @relation("StudentAttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+  correctedBy  User?        @relation("StudentAttendanceCorrectedBy", fields: [correctedById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, academicYearId, studentId, attendanceDate, sessionType])
+  @@index([tenantId, branchId, attendanceDate])
+  @@index([tenantId, academicYearId, classSectionId, attendanceDate])
+  @@index([tenantId, enrollmentId, attendanceDate])
+  @@index([tenantId, status, attendanceDate])
+  @@map("student_attendance_records")
+}
+
+model StaffProfile {
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @db.Uuid
+  branchId         String           @db.Uuid
+  userId           String?          @unique @db.Uuid
+  employeeCode     String
+  firstName        String
+  middleName       String?
+  lastName         String?
+  staffType        StaffType
+  designation      String?
+  department       String?
+  phone            String?
+  email            String?
+  joiningDate      DateTime?        @db.Date
+  employmentStatus EmploymentStatus @default(ACTIVE)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch                 Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  user                   User?                   @relation("StaffProfileUser", fields: [userId], references: [id], onDelete: SetNull)
+  staffAttendanceRecords StaffAttendanceRecord[]
+
+  @@unique([tenantId, employeeCode])
+  @@index([tenantId, branchId])
+  @@index([tenantId, staffType])
+  @@index([tenantId, employmentStatus])
+  @@map("staff_profiles")
+}
+
+model StaffAttendanceRecord {
+  id                String                 @id @default(uuid()) @db.Uuid
+  tenantId          String                 @db.Uuid
+  branchId          String                 @db.Uuid
+  academicYearId    String?                @db.Uuid
+  staffId           String                 @db.Uuid
+  attendanceDate    DateTime               @db.Date
+  status            StaffAttendanceStatus  @default(NOT_MARKED)
+  checkInAt         DateTime?
+  checkOutAt        DateTime?
+  workingMinutes    Int?
+  checkInSource     StaffAttendanceSource?
+  checkOutSource    StaffAttendanceSource?
+  checkInQrTokenId  String?                @db.Uuid
+  checkOutQrTokenId String?                @db.Uuid
+  markedById        String?                @db.Uuid
+  updatedById       String?                @db.Uuid
+  correctionReason  String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  tenant          Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  academicYear    AcademicYear?           @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  staff           StaffProfile            @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  checkInQrToken  StaffAttendanceQrToken? @relation("StaffAttendanceCheckInQrToken", fields: [checkInQrTokenId], references: [id], onDelete: SetNull)
+  checkOutQrToken StaffAttendanceQrToken? @relation("StaffAttendanceCheckOutQrToken", fields: [checkOutQrTokenId], references: [id], onDelete: SetNull)
+  markedBy        User?                   @relation("StaffAttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+  updatedBy       User?                   @relation("StaffAttendanceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, branchId, staffId, attendanceDate])
+  @@index([tenantId, branchId, attendanceDate])
+  @@index([tenantId, branchId, academicYearId])
+  @@index([tenantId, staffId])
+  @@index([tenantId, status, attendanceDate])
+  @@map("staff_attendance_records")
+}
+
+model StaffAttendanceQrToken {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  branchId      String         @db.Uuid
+  tokenHash     String         @unique
+  purpose       StaffQrPurpose
+  validFrom     DateTime
+  validUntil    DateTime
+  consumedCount Int            @default(0)
+  createdById   String?        @db.Uuid
+  createdAt     DateTime       @default(now())
+
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch              Branch                  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdBy           User?                   @relation("StaffAttendanceQrTokenCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  checkInAttendances  StaffAttendanceRecord[] @relation("StaffAttendanceCheckInQrToken")
+  checkOutAttendances StaffAttendanceRecord[] @relation("StaffAttendanceCheckOutQrToken")
+
+  @@index([tenantId, branchId, validFrom, validUntil])
+  @@index([tenantId, branchId, purpose])
+  @@index([validUntil])
+  @@map("staff_attendance_qr_tokens")
+}
+
+model CommunicationPreference {
+  id                      String                           @id @default(uuid()) @db.Uuid
+  tenantId                String                           @db.Uuid
+  branchId                String?                          @db.Uuid
+  ownerType               CommunicationPreferenceOwnerType
+  ownerId                 String                           @db.Uuid
+  whatsappEnabled         Boolean                          @default(false)
+  whatsappNumber          String?
+  attendanceAlertsEnabled Boolean                          @default(false)
+  monthlySummaryEnabled   Boolean                          @default(false)
+  consentCapturedAt       DateTime?
+  consentSource           String?
+  createdAt               DateTime                         @default(now())
+  updatedAt               DateTime                         @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, ownerType, ownerId])
+  @@index([tenantId, branchId])
+  @@index([tenantId, ownerType])
+  @@map("communication_preferences")
+}
+
+model NotificationTemplate {
+  id                   String                       @id @default(uuid()) @db.Uuid
+  tenantId             String                       @db.Uuid
+  branchId             String?                      @db.Uuid
+  channel              NotificationChannel
+  templateKey          String
+  providerTemplateName String
+  languageCode         String                       @default("en")
+  category             NotificationTemplateCategory @default(UTILITY)
+  isActive             Boolean                      @default(true)
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, branchId, channel, templateKey])
+  @@index([tenantId, channel, isActive])
+  @@map("notification_templates")
+}
+
+model NotificationOutbox {
+  id             String                    @id @default(uuid()) @db.Uuid
+  tenantId       String                    @db.Uuid
+  branchId       String?                   @db.Uuid
+  academicYearId String?                   @db.Uuid
+  channel        NotificationChannel
+  templateKey    String
+  recipientType  NotificationRecipientType
+  recipientId    String                    @db.Uuid
+  recipientPhone String
+  payloadJson    Json
+  status         NotificationOutboxStatus  @default(QUEUED)
+  idempotencyKey String                    @unique
+  scheduledFor   DateTime                  @default(now())
+  sentAt         DateTime?
+  failedAt       DateTime?
+  failureReason  String?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch       Branch?                   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  academicYear AcademicYear?             @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  deliveryLogs NotificationDeliveryLog[]
+
+  @@index([tenantId, status, scheduledFor])
+  @@index([tenantId, recipientType, recipientId])
+  @@index([tenantId, branchId, createdAt])
+  @@map("notification_outbox")
+}
+
+model NotificationDeliveryLog {
+  id                String                     @id @default(uuid()) @db.Uuid
+  tenantId          String                     @db.Uuid
+  outboxId          String                     @db.Uuid
+  provider          WhatsAppProvider
+  providerMessageId String?
+  status            NotificationDeliveryStatus
+  rawStatusJson     Json?
+  errorCode         String?
+  errorMessage      String?
+  createdAt         DateTime                   @default(now())
+
+  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outbox NotificationOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, outboxId, createdAt])
+  @@index([providerMessageId])
+  @@index([tenantId, status, createdAt])
+  @@map("notification_delivery_logs")
+}
+
+model WhatsAppIntegrationSetting {
+  id                     String           @id @default(uuid()) @db.Uuid
+  tenantId               String           @db.Uuid
+  branchId               String?          @db.Uuid
+  provider               WhatsAppProvider @default(META_CLOUD)
+  phoneNumberId          String?
+  businessAccountId      String?
+  accessTokenEncrypted   String?
+  webhookVerifyTokenHash String?
+  isEnabled              Boolean          @default(false)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, branchId, isEnabled])
+  @@index([tenantId, provider])
+  @@map("whatsapp_integration_settings")
+}
