@@ -153,6 +153,15 @@ Never paste full database URLs or secrets into support logs or issue trackers.
 | Login fails after session-secret change | Existing session hashes are invalid; sign in again. |
 | Direct migration host cannot be reached | Use an IPv6-capable runner or the approved Supabase IPv4 option. |
 | Environment changes appear ignored | Vercel variables affect only new deployments; redeploy. |
+| Prisma seed cannot resolve `tsx` on Windows | Keep the checked-in `node --import tsx prisma/seed.ts` seed command; it avoids relying on child-process PATH resolution. |
+
+## Administrator Provisioning Record
+
+- On 2026-07-21, an active tenant-scoped `ADMINISTRATOR` account was provisioned for the production Administrator Portal.
+- The credential was stored only as a salted scrypt hash using the production password pepper.
+- The account is marked for password change, existing sessions were revoked, and the operation was audited as `administrator.account_bootstrap`.
+- The deployed administrator login API returned a successful redirect to `/administrator` during verification.
+- No email address, raw password, password hash, session cookie, or database secret is recorded in this document.
 
 ## Post-Deployment Gate
 

@@ -96,6 +96,6 @@ describe("deployment environment validation", () => {
       "db:migrate:status": "prisma migrate status",
       "db:seed": "prisma db seed"
     });
-    expect(packageJson.prisma?.seed).toBe("tsx prisma/seed.ts");
+    expect(packageJson.prisma?.seed).toBe("node --import tsx prisma/seed.ts");
   });
 });
