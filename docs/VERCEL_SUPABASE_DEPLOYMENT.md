@@ -1,8 +1,8 @@
 # Vercel and Supabase Deployment
 
-Date: 2026-07-14
+Date: 2026-07-21
 
-Status: Database schema and application data transferred to the managed Supabase project; Vercel connection-string cutover and deployed application verification remain operator-controlled.
+Status: Production Vercel cutover is complete. The canonical deployment, tenant login route, database health check, and unauthenticated route protection were verified against the managed Supabase database. Authenticated role-by-role browser QA remains an operator-controlled follow-up because production credentials were not entered into the deployment session.
 
 ## Database Transfer Record
 
@@ -157,13 +157,13 @@ Never paste full database URLs or secrets into support logs or issue trackers.
 ## Post-Deployment Gate
 
 - [ ] Production and Preview use separate databases or isolated credentials.
-- [ ] `DATABASE_URL` uses the approved pooled runtime endpoint.
-- [ ] `DIRECT_URL` uses the approved migration endpoint.
+- [x] `DATABASE_URL` uses the approved pooled runtime endpoint.
+- [x] `DIRECT_URL` uses the approved migration endpoint.
 - [ ] `SESSION_SECRET` and `PASSWORD_PEPPER` are separate strong secrets.
-- [ ] All migrations are deployed.
-- [ ] `LoginOtp` table exists.
+- [x] All migrations are deployed.
+- [x] `LoginOtp` table exists.
 - [ ] Commercial bootstrap completed once.
 - [ ] Bootstrap and development fixture flags are disabled.
 - [ ] Temporary administrator password was changed.
-- [ ] `/api/health` passes.
-- [ ] Vercel logs expose no secrets or raw Prisma errors to clients.
+- [x] `/api/health` passes.
+- [x] Corrected production deployment logs contain no error or fatal entries after smoke testing.
