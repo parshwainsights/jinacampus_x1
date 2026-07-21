@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { PermissionCode } from "@/lib/rbac/permissions";
-import { DASHBOARD_QUICK_ACTIONS, getVisibleDashboardQuickActions } from "@/modules/dashboard/components/dashboard-state";
+import {
+  ADMIN_MOBILE_OPERATIONS,
+  ADMIN_MOBILE_TOOLS,
+  DASHBOARD_QUICK_ACTIONS,
+  getVisibleAdminMobileActions,
+  getVisibleDashboardQuickActions
+} from "@/modules/dashboard/components/dashboard-state";
 
 function readProjectFile(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
@@ -93,6 +99,46 @@ describe("dashboard UI", () => {
       "/academia/attendance/mark",
       "/staffboard/staff"
     ]);
+  });
+
+  it("keeps mobile administrator operations and tools permission-aware", () => {
+    expect(ADMIN_MOBILE_OPERATIONS.map((action) => action.label)).toEqual([
+      "Attendance",
+      "Users",
+      "Branches",
+      "Academic Years",
+      "Settings"
+    ]);
+    expect(ADMIN_MOBILE_TOOLS.map((action) => action.label)).toEqual([
+      "Roles & Permissions",
+      "Audit Logs",
+      "Tenant Settings"
+    ]);
+
+    const permissions = new Set<PermissionCode>([
+      "academia.attendance.view",
+      "campuscore.user.view",
+      "campuscore.audit.view"
+    ]);
+
+    expect(getVisibleAdminMobileActions(permissions, ADMIN_MOBILE_OPERATIONS).map((action) => action.label)).toEqual([
+      "Attendance",
+      "Users"
+    ]);
+    expect(getVisibleAdminMobileActions(permissions, ADMIN_MOBILE_TOOLS).map((action) => action.label)).toEqual([
+      "Audit Logs"
+    ]);
+  });
+
+  it("renders the dedicated mobile administrator dashboard sections", () => {
+    const routeSource = readProjectFile("src/app/(dashboard)/dashboard/page.tsx");
+    const mobileDashboardSource = readProjectFile("src/modules/dashboard/components/mobile-dashboard.tsx");
+
+    expect(routeSource).toContain("ADMIN_MOBILE_OPERATIONS");
+    expect(routeSource).toContain("ADMIN_MOBILE_TOOLS");
+    expect(mobileDashboardSource).toContain("Today's Operations");
+    expect(mobileDashboardSource).toContain("Quick Stats");
+    expect(mobileDashboardSource).toContain("Admin Tools");
   });
 
   it("renders the empty state used when dashboard data is unavailable", () => {

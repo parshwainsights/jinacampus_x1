@@ -22,7 +22,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   };
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(79,70,229,0.10),transparent_32rem),linear-gradient(135deg,#f8fafc_0%,#eef6ff_48%,#f8fafc_100%)]">
+    <div className="flex min-h-dvh overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(79,70,229,0.10),transparent_32rem),linear-gradient(135deg,#f8fafc_0%,#eef6ff_48%,#f8fafc_100%)]">
       <DesktopShell permissions={permissions} branding={branding} />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="hidden lg:block">

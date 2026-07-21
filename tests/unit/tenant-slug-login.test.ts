@@ -198,13 +198,14 @@ describe("School ID login", () => {
     expect(JSON.stringify(mocks.db.user.findUnique.mock.calls)).not.toContain("client-supplied-cross-tenant-id");
   });
 
-  it("supports /login schoolId query and /t/[tenantSlug]/login route with locked School ID UI", () => {
+  it("keeps generic login blank and supports an explicit tenant route with locked School ID UI", () => {
     const loginPage = source("src/app/(auth)/login/page.tsx");
     const tenantLoginPage = source("src/app/t/[tenantSlug]/login/page.tsx");
     const loginForm = source("src/components/auth/login-form.tsx");
 
-    expect(loginPage).toContain("params.schoolId");
-    expect(loginPage).toContain("getSchoolLoginBranding(schoolId)");
+    expect(loginPage).toContain("schoolId={null}");
+    expect(loginPage).toContain("schoolIdLocked={false}");
+    expect(loginPage).not.toContain("searchParams");
     expect(tenantLoginPage).toContain("params: Promise<{ tenantSlug: string }>");
     expect(tenantLoginPage).toContain("schoolIdLocked={true}");
     expect(loginForm).toContain('label="School ID"');
@@ -216,7 +217,7 @@ describe("School ID login", () => {
     expect(loginForm).toContain("Forgot password?");
     expect(loginForm).toContain("PasswordInput");
     expect(loginForm).not.toContain("admin@demo.jinacampus.test");
-    expect(loginForm).not.toContain("JinaCampus@123");
+    expect(loginForm).not.toContain("sample credentials");
   });
 
   it("keeps administrator login separate from school login", () => {

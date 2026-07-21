@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../../src/lib/auth/password";
+import { normalizePhone } from "../../src/lib/auth/otp";
 import { WHATSAPP_TEMPLATE_KEYS } from "../../src/modules/notifications/templates/whatsapp-template-mapper";
 import { seedDefaultRolesForTenant } from "./roles.seed";
 import {
@@ -16,6 +17,8 @@ import {
   DEMO_TENANT,
   DEMO_TODAY_STUDENT_ATTENDANCE,
   DEMO_USERS,
+  SEED_ADMIN_EMAIL,
+  getDemoUserMustChangePassword,
   getDemoUserPassword
 } from "./demo-data.seed";
 
@@ -70,12 +73,37 @@ async function upsertDemoUsers(db: PrismaClient, tenantId: string, branchId: str
   });
   const roleByCode = new Map(roles.map((role) => [role.code, role]));
 
+  const configuredAdmin = DEMO_USERS.find((user) => user.key === "admin");
+  if (configuredAdmin) {
+    const existingConfiguredAdmin = await db.user.findUnique({
+      where: { tenantId_email: { tenantId, email: configuredAdmin.email } },
+      select: { id: true }
+    });
+    if (!existingConfiguredAdmin) {
+      const legacyAdmin = await db.user.findUnique({
+        where: { tenantId_email: { tenantId, email: "admin@demo.jinacampus.test" } },
+        select: { id: true }
+      });
+      if (legacyAdmin) {
+        await db.user.update({
+          where: { id: legacyAdmin.id },
+          data: { email: SEED_ADMIN_EMAIL }
+        });
+      }
+    }
+  }
+
   for (const demoUser of DEMO_USERS) {
+    const normalizedPhone = demoUser.phone ? normalizePhone(demoUser.phone) : null;
+    if (demoUser.key === "admin" && !normalizedPhone) {
+      console.warn("SEED_ADMIN_PHONE is missing or invalid; OTP login needs a valid phone number.");
+    }
     const user = await db.user.upsert({
       where: { tenantId_email: { tenantId, email: demoUser.email } },
       create: {
         tenantId,
         email: demoUser.email,
+        phone: normalizedPhone ?? undefined,
         firstName: demoUser.firstName,
         lastName: demoUser.lastName,
         displayName: demoUser.displayName,
@@ -87,6 +115,7 @@ async function upsertDemoUsers(db: PrismaClient, tenantId: string, branchId: str
         firstName: demoUser.firstName,
         lastName: demoUser.lastName,
         displayName: demoUser.displayName,
+        ...(normalizedPhone ? { phone: normalizedPhone } : {}),
         status: "ACTIVE",
         activatedAt: new Date()
       },
@@ -96,8 +125,16 @@ async function upsertDemoUsers(db: PrismaClient, tenantId: string, branchId: str
 
     await db.passwordCredential.upsert({
       where: { userId: user.id },
-      create: { userId: user.id, passwordHash: await hashPassword(getDemoUserPassword(demoUser.key)), mustChange: false },
-      update: { passwordHash: await hashPassword(getDemoUserPassword(demoUser.key)), mustChange: false }
+      create: {
+        userId: user.id,
+        passwordHash: await hashPassword(getDemoUserPassword(demoUser.key)),
+        mustChange: getDemoUserMustChangePassword(demoUser.key)
+      },
+      update: {
+        passwordHash: await hashPassword(getDemoUserPassword(demoUser.key)),
+        passwordUpdatedAt: new Date(),
+        mustChange: getDemoUserMustChangePassword(demoUser.key)
+      }
     });
 
     await db.userBranchAccess.upsert({

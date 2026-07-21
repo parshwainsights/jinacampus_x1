@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
       userAgent: request.headers.get("user-agent") ?? undefined
     },
-    action: CAMPUS_CORE_AUDIT_EVENTS.AUTH_LOGIN_SUCCESS,
+    action: CAMPUS_CORE_AUDIT_EVENTS.AUTH_LOGIN_PASSWORD_SUCCESS,
     entityType: "User",
     entityId: user.id,
     metadata: { userEmail: user.email }

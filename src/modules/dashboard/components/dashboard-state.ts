@@ -12,6 +12,13 @@ type DashboardQuickActionDefinition = {
   audiences: readonly NavigationAudience[];
 };
 
+export type AdminMobileAction = {
+  label: string;
+  description: string;
+  href: string;
+  permission: PermissionCode;
+};
+
 const sectionPermissions = {
   campusCore: [DASHBOARD_VIEW_PERMISSION],
   academia: ["academia.student.view", "academia.enrollment.manage", "academia.class.manage", "academia.guardian.manage"],
@@ -79,6 +86,20 @@ export const DASHBOARD_QUICK_ACTIONS = [
   }
 ] as const satisfies readonly DashboardQuickActionDefinition[];
 
+export const ADMIN_MOBILE_OPERATIONS = [
+  { label: "Attendance", description: "Review today's student attendance.", href: "/academia/attendance", permission: "academia.attendance.view" },
+  { label: "Users", description: "Manage school user access.", href: "/campus-core/users", permission: "campuscore.user.view" },
+  { label: "Branches", description: "Review institution branches.", href: "/campus-core/branches", permission: "campuscore.branch.manage" },
+  { label: "Academic Years", description: "Manage active academic-year setup.", href: "/campus-core/academic-years", permission: "campuscore.academic_year.manage" },
+  { label: "Settings", description: "Open tenant and attendance settings.", href: "/campus-core/settings", permission: "campuscore.settings.manage" }
+] as const satisfies readonly AdminMobileAction[];
+
+export const ADMIN_MOBILE_TOOLS = [
+  { label: "Roles & Permissions", description: "Review role and permission assignments.", href: "/campus-core/roles", permission: "campuscore.role.view" },
+  { label: "Audit Logs", description: "Review security and governance events.", href: "/campus-core/audit-logs", permission: "campuscore.audit.view" },
+  { label: "Tenant Settings", description: "Manage school-level configuration.", href: "/campus-core/settings", permission: "campuscore.settings.manage" }
+] as const satisfies readonly AdminMobileAction[];
+
 export type DashboardQuickAction = (typeof DASHBOARD_QUICK_ACTIONS)[number];
 
 export function canViewDashboard(permissions: ReadonlySet<PermissionCode>) {
@@ -98,6 +119,13 @@ export function getVisibleDashboardQuickActions(permissions: ReadonlySet<Permiss
     action.audiences.some((actionAudience) => actionAudience === audience) &&
     action.permissions.every((permission) => permissions.has(permission))
   );
+}
+
+export function getVisibleAdminMobileActions(
+  permissions: ReadonlySet<PermissionCode>,
+  actions: readonly AdminMobileAction[]
+) {
+  return actions.filter((action) => permissions.has(action.permission));
 }
 
 export function formatDashboardDate(date: string | Date) {

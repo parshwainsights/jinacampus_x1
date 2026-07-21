@@ -21,6 +21,7 @@ import { PermissionState } from "@/components/ui/empty-state";
 import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
 import type { TenantContext } from "@/lib/tenant/context";
+import { getNavigationAudience } from "@/components/app-shell/navigation";
 import {
   DashboardAttentionPanel,
   DashboardEmptyState,
@@ -33,6 +34,9 @@ import {
   canViewDashboardSection,
   formatDashboardDate,
   getVisibleDashboardQuickActions,
+  getVisibleAdminMobileActions,
+  ADMIN_MOBILE_OPERATIONS,
+  ADMIN_MOBILE_TOOLS,
   type DashboardAttentionItem
 } from "@/modules/dashboard/components";
 import {
@@ -177,6 +181,9 @@ export default async function DashboardPage() {
   const staffBoard = settledValue<StaffBoardDashboardMetrics>(staffBoardResult);
   const staffAttendance = settledValue<StaffAttendanceDashboardMetrics>(staffAttendanceResult);
   const quickActions = getVisibleDashboardQuickActions(permissions);
+  const navigationAudience = getNavigationAudience(permissions);
+  const adminOperations = getVisibleAdminMobileActions(permissions, ADMIN_MOBILE_OPERATIONS);
+  const adminTools = getVisibleAdminMobileActions(permissions, ADMIN_MOBILE_TOOLS);
   const resolvedDateLabel = formatDashboardDate(studentAttendance?.date ?? staffAttendance?.date ?? new Date());
   const attentionItems = buildAttendanceAttentionItems(studentAttendance, staffAttendance);
   const queryFailure = hasQueryFailure(results);
@@ -184,6 +191,10 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <MobileDashboard
+        userName={ctx.userName ?? ctx.userEmail}
+        audience={navigationAudience}
+        adminOperations={adminOperations}
+        adminTools={adminTools}
         activeAcademicYearName={campusCore?.activeAcademicYearName ?? null}
         branchLabel={branchLabel}
         campusCore={campusCore}

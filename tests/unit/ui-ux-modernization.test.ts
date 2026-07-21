@@ -60,6 +60,8 @@ describe("Base MVP UI/UX modernization", () => {
     const auth = [
       source("src/app/(auth)/login/page.tsx"),
       source("src/app/(auth)/forgot-password/page.tsx"),
+      source("src/components/auth/login-form.tsx"),
+      source("src/components/auth/forgot-password-form.tsx"),
       source("src/components/forms/password-input.tsx")
     ].join("\n");
 

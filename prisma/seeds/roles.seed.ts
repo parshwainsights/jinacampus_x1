@@ -1,5 +1,7 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { DEFAULT_ROLE_CODES, DEFAULT_ROLE_PERMISSION_MAP } from "../../src/lib/rbac/roles";
+
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 const ROLE_DISPLAY_NAMES: Partial<Record<(typeof DEFAULT_ROLE_CODES)[number], string>> = {
   TENANT_OWNER: "Tenant Owner",
@@ -15,7 +17,7 @@ const ROLE_DISPLAY_NAMES: Partial<Record<(typeof DEFAULT_ROLE_CODES)[number], st
   STUDENT: "Student"
 };
 
-export async function seedDefaultRolesForTenant(db: PrismaClient, tenantId: string) {
+export async function seedDefaultRolesForTenant(db: DbClient, tenantId: string) {
   for (const roleCode of DEFAULT_ROLE_CODES) {
     const name = ROLE_DISPLAY_NAMES[roleCode] ?? roleCode.replaceAll("_", " ");
     const role = await db.role.upsert({
@@ -27,7 +29,12 @@ export async function seedDefaultRolesForTenant(db: PrismaClient, tenantId: stri
         isSystem: true,
         isMutable: roleCode !== "TENANT_OWNER"
       },
-      update: { name }
+      update: {
+        name,
+        isSystem: true,
+        isMutable: roleCode !== "TENANT_OWNER",
+        isActive: true
+      }
     });
 
     for (const permissionCode of DEFAULT_ROLE_PERMISSION_MAP[roleCode]) {

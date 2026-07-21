@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum TenantStatus {
@@ -45,6 +46,11 @@ enum UserType {
   PARENT
   STUDENT
   SYSTEM
+}
+
+enum OtpPurpose {
+  ADMIN_LOGIN
+  FORGOT_PASSWORD
 }
 
 enum PermissionModule {
@@ -275,6 +281,7 @@ model Tenant {
   roleAssignments          UserRoleAssignment[]
   branchAccesses           UserBranchAccess[]
   sessions                 Session[]
+  loginOtps                LoginOtp[]
   tenantSettings           TenantSettings?
   attendanceSettings       AttendanceSetting[]
   auditLogs                AuditLog[]
@@ -427,6 +434,7 @@ model User {
   tenant                     Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   passwordCredential         PasswordCredential?
   sessions                   Session[]
+  loginOtps                  LoginOtp[]
   roleAssignments            UserRoleAssignment[]
   branchAccesses             UserBranchAccess[]
   auditLogs                  AuditLog[]                @relation("AuditActor")
@@ -477,6 +485,29 @@ model Session {
   @@index([tenantId, userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+model LoginOtp {
+  id         String     @id @default(uuid()) @db.Uuid
+  tenantId   String     @db.Uuid
+  userId     String     @db.Uuid
+  phone      String
+  otpHash    String
+  purpose    OtpPurpose
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int        @default(0)
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime   @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, phone, purpose])
+  @@index([tenantId, userId])
+  @@index([expiresAt])
+  @@map("login_otps")
 }
 
 model Permission {

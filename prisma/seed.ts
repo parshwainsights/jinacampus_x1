@@ -1,12 +1,14 @@
 import { PrismaClient } from "@prisma/client";
+import { seedCommercialBootstrap } from "./seeds/bootstrap-commercial.seed";
+import { seedDevDemo } from "./seeds/dev-demo.seed";
 import { seedPermissions } from "./seeds/permissions.seed";
-import { seedDemoTenant } from "./seeds/demo-tenant.seed";
 
 const db = new PrismaClient();
 
 async function main() {
   await seedPermissions(db);
-  await seedDemoTenant(db);
+  await seedCommercialBootstrap(db);
+  await seedDevDemo(db);
 }
 
 main()

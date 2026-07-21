@@ -54,8 +54,12 @@ Required or supported variables:
 | `SESSION_COOKIE_NAME` | Session cookie name | Do not expose live session values. |
 | `SESSION_TTL_DAYS` | Session lifetime | Local/pilot configuration only. |
 | `PASSWORD_PEPPER` | Password hashing pepper | Must be a strong secret outside source control for non-local use. |
-| `DEMO_USER_PASSWORD` | Optional local seed password override | Local/demo seed only. Do not use for production-like accounts. |
-| `DEMO_STAFF_PASSWORD` | Optional local seed password override for `staff@demo.jinacampus.test` | Local/demo seed only. If unset, staff uses `DEMO_USER_PASSWORD`. |
+| `COMMERCIAL_BOOTSTRAP_ENABLED` | Explicit one-time tenant bootstrap gate | Keep `false` except during approved onboarding. |
+| `RESET_SEED_ADMIN_PASSWORD` | Explicit administrator credential reset gate | Keep `false`; use only for a controlled recovery. |
+| `SEED_TENANT_NAME` / `SEED_TENANT_SLUG` | Commercial school identity | Required only when commercial bootstrap is enabled. |
+| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PHONE` | Initial tenant owner identity | Values belong in environment configuration, not source control. |
+| `SEED_ADMIN_TEMP_PASSWORD` | Initial tenant owner temporary password | Must be strong, rotated after login, and never committed. |
+| `DEV_DEMO_SEED_ENABLED` | Optional development fixture gate | Must remain `false` in production; production execution rejects it. |
 | `NODE_ENV` | Runtime environment | Use expected Next.js/Node values. |
 | `WHATSAPP_PROVIDER_MODE` | WhatsApp provider mode | Keep `DRY_RUN` for this pilot. |
 | `WHATSAPP_WEBHOOK_VERIFY_TOKEN_SHA256` | WhatsApp webhook verification hash | Leave empty unless an approved provider setup exists. |
@@ -97,7 +101,7 @@ npm start
 
 Production deployment, rollback, TLS, secret management, and provider-secret storage must follow the approved deployment environment. This local runbook does not invent a production deployment process.
 
-## Migration And Seed Packaging
+## Migration And Commercial Bootstrap Packaging
 
 Database checks:
 
@@ -106,46 +110,20 @@ npx prisma migrate status
 npm run db:seed
 ```
 
-Demo school:
+Default seed behavior:
 
-```txt
-School ID: jinacampus-demo
-```
+- Global permission definitions are upserted.
+- No tenant, administrator, school structure, or operational data is created unless commercial bootstrap is explicitly enabled.
 
-Seeded demo roles:
+Commercial bootstrap behavior:
 
-- Administrator / Super Admin
-- Principal
-- Teacher
-- Staff
-- Office Staff
+- Required tenant and administrator values come only from environment configuration.
+- Institution, branch, attendance settings, and academic year are created only when their complete environment groups are provided.
+- The administrator receives `TENANT_OWNER`, a hashed temporary password, and `mustChange=true`.
+- Existing administrator passwords are preserved unless `RESET_SEED_ADMIN_PASSWORD="true"` is explicitly set.
+- Disable `COMMERCIAL_BOOTSTRAP_ENABLED` immediately after approved onboarding.
 
-Seeded demo modules:
-
-- institution
-- branch
-- active academic year
-- classes
-- sections
-- class sections
-- students
-- guardians
-- enrollments
-- staff profiles
-- student attendance records
-- staff attendance records
-- notification templates/settings
-
-Demo data warnings:
-
-- QA-only local student rows may exist.
-- Demo DB is not sanitized production-like data.
-- Staff seed login is School ID + email + password. See `docs/demo-seed.md` and `docs/staff-login-credentials.md` for local-only demo credential details.
-- Do not use real Aadhaar values.
-- Do not use real bank account values.
-- Do not use real phone numbers.
-- Do not use real production credentials.
-- Do not use a local/demo DB as a customer production database.
+Development fixture behavior is documented separately in `docs/demo-seed.md` and is blocked in production.
 
 ## Scope Included
 
@@ -183,7 +161,7 @@ Expected:
 
 - Docker/PostgreSQL is reachable.
 - Prisma migrations are up to date.
-- Demo seed completes.
+- Permission seed and any explicitly enabled commercial bootstrap complete.
 - WhatsApp smoke passes in DRY_RUN mode.
 - Typecheck, tests, build, and whitespace checks pass.
 - `npm pkg get scripts.lint` returns `{}` until a root lint script is added.
@@ -302,7 +280,7 @@ Verified:
 
 Remaining limitation: broader cross-tenant and multi-branch negative browser QA requires an additional safe fixture beyond the single launch demo school/branch.
 
-## Demo Login Model
+## School Login Model
 
 School users log in at:
 

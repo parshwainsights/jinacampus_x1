@@ -59,7 +59,7 @@ describe("auth password recovery and password visibility UX", () => {
 
     expect(loginFormSource).toContain("LoadingSpinner");
     expect(loginFormSource).toContain("animate-spin");
-    expect(loginFormSource).toContain("disabled={isSubmitting}");
+    expect(loginFormSource).toContain("disabled={isPending}");
     expect(loginFormSource).toContain("Signing in...");
     expect(loginFormSource).toContain("role=\"alert\"");
     expect(loginFormSource).toContain("Login failed. Please check your credentials.");
@@ -68,12 +68,28 @@ describe("auth password recovery and password visibility UX", () => {
   it("forgot password page renders safe public copy and no role-enumerating copy", () => {
     const forgotPasswordRoute = "src/app/(auth)/forgot-password/page.tsx";
     const pageSource = source(forgotPasswordRoute);
+    const formSource = source("src/components/auth/forgot-password-form.tsx");
 
     expect(existsSync(resolve(process.cwd(), forgotPasswordRoute))).toBe(true);
-    expect(pageSource).toContain("Forgot password?");
-    expect(pageSource).toContain("requestPasswordRecoveryAction");
-    expect(pageSource).toContain("Back to login");
-    expect(pageSource).not.toMatch(/Email not found|User does not exist|teacher role|staff role/i);
+    expect(pageSource).toContain("ForgotPasswordForm");
+    expect(formSource).toContain("Forgot password?");
+    expect(formSource).toContain("/api/auth/forgot/request");
+    expect(formSource).toContain("/api/auth/forgot/reset");
+    expect(formSource).toContain("Back to login");
+    expect(formSource).toContain("PasswordInput");
+    expect(formSource).not.toMatch(/Email not found|User does not exist|teacher role|staff role/i);
+  });
+
+  it("login exposes password and OTP tabs without transforming password case", () => {
+    const loginFormSource = source("src/components/auth/login-form.tsx");
+
+    expect(loginFormSource).toContain("Email & password");
+    expect(loginFormSource).toContain("OTP login");
+    expect(loginFormSource).toContain("/api/auth/otp/request");
+    expect(loginFormSource).toContain("/api/auth/otp/verify");
+    expect(loginFormSource).toContain("Resend OTP in");
+    expect(loginFormSource).toContain('password: formData.get("password")');
+    expect(loginFormSource).not.toMatch(/password:\s*normalize|password.*toLowerCase/i);
   });
 
   it("password create, reset, and change forms use password visibility control", () => {

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { env } from "@/lib/env";
 
 export function createRawSessionToken() {
@@ -6,7 +6,7 @@ export function createRawSessionToken() {
 }
 
 export async function hashSessionToken(rawToken: string) {
-  return createHash("sha256").update(rawToken).digest("hex");
+  return createHmac("sha256", env.SESSION_SECRET).update(rawToken).digest("hex");
 }
 
 export function getSessionExpiresAt() {

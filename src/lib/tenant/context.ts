@@ -8,6 +8,7 @@ export type TenantContext = {
   tenantName?: string;
   userId: string;
   userEmail: string;
+  userName?: string;
   userType: string;
   activeBranchId: string | null;
   activeBranchName?: string | null;
@@ -148,6 +149,7 @@ export async function getTenantContext(): Promise<TenantContext> {
     tenantName: session.tenant.name,
     userId: session.userId,
     userEmail: session.user.email,
+    userName: session.user.displayName ?? [session.user.firstName, session.user.lastName].filter(Boolean).join(" "),
     userType: session.user.userType,
     activeBranchId,
     activeBranchName: activeBranchAccess?.branch.name ?? null,

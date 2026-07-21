@@ -25,15 +25,17 @@ export const DEMO_ACADEMIC_YEAR = {
   endDate: "2027-03-31"
 } as const;
 
-const DEFAULT_DEMO_USER_PASSWORD = "JinaCampus@123";
-
-export const DEMO_USER_PASSWORD = process.env.DEMO_USER_PASSWORD ?? DEFAULT_DEMO_USER_PASSWORD;
-export const DEMO_STAFF_PASSWORD = process.env.DEMO_STAFF_PASSWORD ?? DEMO_USER_PASSWORD;
+export const DEMO_USER_PASSWORD = process.env.DEV_DEMO_USER_PASSWORD ?? "";
+export const DEMO_STAFF_PASSWORD = process.env.DEV_DEMO_STAFF_PASSWORD ?? DEMO_USER_PASSWORD;
+export const SEED_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase() ?? "";
+export const SEED_ADMIN_PHONE = process.env.SEED_ADMIN_PHONE?.trim() || null;
+export const SEED_ADMIN_TEMP_PASSWORD = process.env.SEED_ADMIN_TEMP_PASSWORD ?? "";
 
 export const DEMO_USERS = [
   {
     key: "admin",
-    email: "admin@demo.jinacampus.test",
+    email: SEED_ADMIN_EMAIL,
+    phone: SEED_ADMIN_PHONE,
     firstName: "Aarav",
     lastName: "Admin",
     displayName: "Aarav Admin",
@@ -42,6 +44,7 @@ export const DEMO_USERS = [
   {
     key: "principal",
     email: "principal@demo.jinacampus.test",
+    phone: null,
     firstName: "Meera",
     lastName: "Principal",
     displayName: "Meera Principal",
@@ -50,6 +53,7 @@ export const DEMO_USERS = [
   {
     key: "teacher",
     email: "teacher@demo.jinacampus.test",
+    phone: null,
     firstName: "Anaya",
     lastName: "Teacher",
     displayName: "Anaya Teacher",
@@ -58,6 +62,7 @@ export const DEMO_USERS = [
   {
     key: "staff",
     email: "staff@demo.jinacampus.test",
+    phone: null,
     firstName: "Rohan",
     lastName: "Staff",
     displayName: "Rohan Staff",
@@ -66,6 +71,7 @@ export const DEMO_USERS = [
   {
     key: "office",
     email: "office@demo.jinacampus.test",
+    phone: null,
     firstName: "Kavya",
     lastName: "Office",
     displayName: "Kavya Office",
@@ -76,7 +82,12 @@ export const DEMO_USERS = [
 export type DemoUserSeedKey = (typeof DEMO_USERS)[number]["key"];
 
 export function getDemoUserPassword(userKey: DemoUserSeedKey) {
+  if (userKey === "admin") return SEED_ADMIN_TEMP_PASSWORD;
   return userKey === "staff" ? DEMO_STAFF_PASSWORD : DEMO_USER_PASSWORD;
+}
+
+export function getDemoUserMustChangePassword(userKey: DemoUserSeedKey) {
+  return userKey === "admin";
 }
 
 export const DEMO_CLASSES = [

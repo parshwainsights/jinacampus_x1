@@ -27,7 +27,7 @@ describe("CampusCore auth context and institution branding repair", () => {
     const route = source("src/app/api/auth/login/route.ts");
     const loginForm = source("src/components/auth/login-form.tsx");
 
-    expect(route).toContain("CAMPUS_CORE_AUDIT_EVENTS.AUTH_LOGIN_SUCCESS");
+    expect(route).toContain("CAMPUS_CORE_AUDIT_EVENTS.AUTH_LOGIN_PASSWORD_SUCCESS");
     expect(source("src/modules/campus-core/audit-events.ts")).toContain("campuscore.auth.login_success");
     expect(route).toContain("SCHOOL_LOGIN_ERROR_MESSAGE");
     expect(source("src/modules/campus-core/tenant-login-policy.ts")).toContain("Invalid School ID, email, or password.");

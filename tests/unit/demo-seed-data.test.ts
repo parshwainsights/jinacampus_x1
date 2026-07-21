@@ -1,122 +1,149 @@
-import { describe, expect, it } from "vitest";
+import type { PrismaClient } from "@prisma/client";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+
 import {
-  DEMO_BRANCH,
-  DEMO_CLASSES,
-  DEMO_CLASS_SECTIONS,
-  DEMO_STAFF_PASSWORD,
-  DEMO_STAFF_ATTENDANCE_TODAY,
-  DEMO_STAFF_PROFILES,
-  DEMO_STUDENTS,
-  DEMO_TENANT,
-  DEMO_TODAY_STUDENT_ATTENDANCE,
-  DEMO_USER_PASSWORD,
-  getDemoUserPassword,
-  DEMO_USERS
-} from "../../prisma/seeds/demo-data.seed";
-import { DEFAULT_ROLE_PERMISSION_MAP } from "../../src/lib/rbac/roles";
+  getCommercialBootstrapConfig,
+  seedCommercialBootstrap
+} from "../../prisma/seeds/bootstrap-commercial.seed";
+import { assertDevDemoSeedAllowed, seedDevDemo } from "../../prisma/seeds/dev-demo.seed";
 
-describe("Phase 9.8 demo seed data", () => {
-  it("defines the expected deterministic demo tenant and branch", () => {
-    expect(DEMO_TENANT).toMatchObject({
-      name: "JinaCampus Demo School",
-      slug: "jinacampus-demo"
+const requiredEnvironment = {
+  COMMERCIAL_BOOTSTRAP_ENABLED: "true",
+  SEED_TENANT_NAME: "North Valley School",
+  SEED_TENANT_SLUG: "north-valley",
+  SEED_ADMIN_EMAIL: "Owner@NorthValley.example",
+  SEED_ADMIN_TEMP_PASSWORD: "StrongTemp@123"
+};
+
+function createDatabaseMock() {
+  const tx = {
+    tenant: { upsert: vi.fn().mockResolvedValue({ id: "tenant-1" }) },
+    tenantSettings: { upsert: vi.fn().mockResolvedValue({ id: "settings-1" }) },
+    role: {
+      upsert: vi.fn().mockImplementation(({ create }: { create: { code: string } }) => ({ id: `role-${create.code}` })),
+      findUnique: vi.fn().mockResolvedValue({ id: "role-TENANT_OWNER" })
+    },
+    permission: { findUnique: vi.fn().mockResolvedValue({ id: "permission-1" }) },
+    rolePermission: { upsert: vi.fn().mockResolvedValue({ id: "role-permission-1" }) },
+    institution: { upsert: vi.fn().mockResolvedValue({ id: "institution-1" }) },
+    branch: { upsert: vi.fn().mockResolvedValue({ id: "branch-1" }) },
+    attendanceSetting: { upsert: vi.fn().mockResolvedValue({ id: "attendance-setting-1" }) },
+    academicYear: { upsert: vi.fn().mockResolvedValue({ id: "academic-year-1" }) },
+    user: { upsert: vi.fn().mockResolvedValue({ id: "user-1" }) },
+    passwordCredential: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({ id: "credential-1" })
+    },
+    userRoleAssignment: { upsert: vi.fn().mockResolvedValue({ id: "assignment-1" }) },
+    userBranchAccess: { upsert: vi.fn().mockResolvedValue({ id: "access-1" }) },
+    auditLog: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) }
+  };
+  const db = {
+    $transaction: vi.fn().mockImplementation(async (callback: (client: typeof tx) => unknown) => callback(tx))
+  };
+  return { db: db as unknown as PrismaClient, tx };
+}
+
+describe("commercial seed safety", () => {
+  it("keeps the normal seed permissions-only when commercial and dev modes are disabled", async () => {
+    const seedSource = readFileSync(join(process.cwd(), "prisma/seed.ts"), "utf8");
+    const { db } = createDatabaseMock();
+
+    await expect(seedCommercialBootstrap(db, {})).resolves.toEqual({ enabled: false });
+    await expect(seedDevDemo(db, {})).resolves.toEqual({ enabled: false });
+    expect(seedSource).toContain("seedPermissions(db)");
+    expect(seedSource).toContain("seedCommercialBootstrap(db)");
+    expect(seedSource).toContain("seedDevDemo(db)");
+    expect(seedSource).not.toContain("seedDemoTenant(db)");
+  });
+
+  it("rejects development fixtures in production", () => {
+    expect(() => assertDevDemoSeedAllowed({
+      NODE_ENV: "production",
+      DEV_DEMO_SEED_ENABLED: "true"
+    })).toThrow("DEV_DEMO_SEED_ENABLED cannot be true when NODE_ENV=production.");
+  });
+
+  it("requires commercial tenant and administrator environment values", () => {
+    expect(() => getCommercialBootstrapConfig({ COMMERCIAL_BOOTSTRAP_ENABLED: "true" }))
+      .toThrow("SEED_TENANT_NAME is required");
+    expect(() => getCommercialBootstrapConfig({
+      COMMERCIAL_BOOTSTRAP_ENABLED: "true",
+      SEED_TENANT_NAME: "North Valley School"
+    })).toThrow("SEED_TENANT_SLUG is required");
+  });
+
+  it("normalizes commercial School ID and administrator email without changing the password", () => {
+    const config = getCommercialBootstrapConfig({
+      ...requiredEnvironment,
+      SEED_TENANT_SLUG: " North-Valley ",
+      SEED_ADMIN_TEMP_PASSWORD: "CaseSensitive@123"
     });
-    expect(DEMO_BRANCH).toMatchObject({ name: "Main Branch", code: "MAIN" });
+
+    expect(config).toMatchObject({
+      tenantSlug: "north-valley",
+      adminEmail: "owner@northvalley.example",
+      adminTemporaryPassword: "CaseSensitive@123"
+    });
   });
 
-  it("defines active demo users for admin, principal, teacher, staff, and office flows with .test emails", () => {
-    expect(DEMO_USERS.map((user) => user.key)).toEqual(["admin", "principal", "teacher", "staff", "office"]);
-    expect(DEMO_USERS.every((user) => user.email.endsWith(".test"))).toBe(true);
-    expect(DEMO_USERS.find((user) => user.key === "office")?.roleCodes).toEqual(["OFFICE_STAFF"]);
-    expect(DEMO_USERS.find((user) => user.key === "office")?.roleCodes).not.toContain("ADMIN");
-    expect(DEMO_USERS.some((user) => user.roleCodes.some((roleCode) => roleCode === "CLASS_TEACHER"))).toBe(true);
-    expect(DEMO_USERS.some((user) => user.roleCodes.some((roleCode) => roleCode === "STAFF"))).toBe(true);
+  it("creates an idempotent tenant owner with a hashed temporary password and mustChange", async () => {
+    const { db, tx } = createDatabaseMock();
+    const passwordHasher = vi.fn().mockResolvedValue("hashed-temporary-password");
+
+    await seedCommercialBootstrap(db, requiredEnvironment, passwordHasher);
+
+    expect(passwordHasher).toHaveBeenCalledWith("StrongTemp@123");
+    expect(tx.user.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { tenantId_email: { tenantId: "tenant-1", email: "owner@northvalley.example" } }
+    }));
+    expect(tx.passwordCredential.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ passwordHash: "hashed-temporary-password", mustChange: true })
+    }));
+    expect(tx.userRoleAssignment.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ roleId: "role-TENANT_OWNER", scopeType: "TENANT" })
+    }));
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actorUserId: null,
+        action: "tenant.commercial_bootstrap",
+        metadataJson: expect.objectContaining({ source: "commercial_bootstrap" })
+      })
+    });
+    expect(JSON.stringify(tx.passwordCredential.upsert.mock.calls)).not.toContain("StrongTemp@123");
   });
 
-  it("keeps demo login passwords local-only, code-defined, and env-overridable for staff QA", () => {
-    const dataSource = readFileSync(join(process.cwd(), "prisma/seeds/demo-data.seed.ts"), "utf8");
-    const seedSource = readFileSync(join(process.cwd(), "prisma/seeds/demo-tenant.seed.ts"), "utf8");
+  it("does not duplicate tenant/user or reset an existing password on repeated seed", async () => {
+    const { db, tx } = createDatabaseMock();
+    tx.passwordCredential.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "credential-1" });
+    const passwordHasher = vi.fn().mockResolvedValue("hashed-temporary-password");
 
-    expect(DEMO_USER_PASSWORD.length).toBeGreaterThanOrEqual(8);
-    expect(DEMO_STAFF_PASSWORD.length).toBeGreaterThanOrEqual(8);
-    expect(getDemoUserPassword("staff")).toBe(DEMO_STAFF_PASSWORD);
-    expect(getDemoUserPassword("teacher")).toBe(DEMO_USER_PASSWORD);
-    expect(dataSource).toContain("process.env.DEMO_STAFF_PASSWORD");
-    expect(seedSource).toContain("hashPassword(getDemoUserPassword(demoUser.key))");
-    expect(seedSource).not.toContain("passwordHash: DEMO_USER_PASSWORD");
+    await seedCommercialBootstrap(db, requiredEnvironment, passwordHasher);
+    await seedCommercialBootstrap(db, requiredEnvironment, passwordHasher);
+
+    expect(tx.tenant.upsert).toHaveBeenCalledTimes(2);
+    expect(tx.user.upsert).toHaveBeenCalledTimes(2);
+    expect(tx.passwordCredential.upsert).toHaveBeenCalledTimes(1);
+    expect(passwordHasher).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps demo role permissions sufficient for attendance, QR, reports, and dashboard QA", () => {
-    expect(DEFAULT_ROLE_PERMISSION_MAP.ADMIN).toEqual(expect.arrayContaining([
-      "campuscore.tenant.view",
-      "academia.attendance.mark",
-      "academia.attendance.correct",
-      "academia.attendance.report",
-      "staffboard.attendance.qr.generate",
-      "staffboard.attendance.correct",
-      "staffboard.attendance.report"
-    ]));
-    expect(DEFAULT_ROLE_PERMISSION_MAP.PRINCIPAL).toEqual(expect.arrayContaining([
-      "campuscore.tenant.view",
-      "academia.attendance.report",
-      "staffboard.staff.view",
-      "staffboard.attendance.qr.generate",
-      "staffboard.attendance.correct",
-      "staffboard.attendance.report"
-    ]));
-    expect(DEFAULT_ROLE_PERMISSION_MAP.CLASS_TEACHER).toEqual(expect.arrayContaining([
-      "academia.attendance.mark",
-      "academia.attendance.report",
-      "staffboard.attendance.self_scan"
-    ]));
-    expect(DEFAULT_ROLE_PERMISSION_MAP.STAFF).toEqual(expect.arrayContaining(["staffboard.attendance.self_scan"]));
-    expect(DEFAULT_ROLE_PERMISSION_MAP.OFFICE_STAFF).toEqual(expect.arrayContaining([
-      "staffboard.attendance.qr.generate",
-      "staffboard.attendance.correct",
-      "staffboard.attendance.report"
-    ]));
-  });
+  it("keeps login fields empty and removes committed production-facing credentials", () => {
+    const loginSource = readFileSync(join(process.cwd(), "src/components/auth/login-form.tsx"), "utf8");
+    const loginPageSource = readFileSync(join(process.cwd(), "src/app/(auth)/login/page.tsx"), "utf8");
+    const envExample = readFileSync(join(process.cwd(), ".env.example"), "utf8");
+    const readme = readFileSync(join(process.cwd(), "README.md"), "utf8");
 
-  it("includes class sections, active students, and attendance patterns for reports", () => {
-    expect(DEMO_CLASSES.map((item) => item.name)).toEqual(["Class 1", "Class 2", "Class 3"]);
-    expect(DEMO_CLASS_SECTIONS.map((item) => item.displayName)).toEqual(["Class 1-A", "Class 2-A", "Class 3-A"]);
-    expect(DEMO_STUDENTS).toHaveLength(18);
-    expect(new Set(DEMO_STUDENTS.map((student) => student.classSectionKey))).toEqual(
-      new Set(["class-1-a", "class-2-a", "class-3-a"])
-    );
-    expect(DEMO_TODAY_STUDENT_ATTENDANCE.flatMap((group) => group.statuses)).toEqual(expect.arrayContaining([
-      "PRESENT",
-      "ABSENT",
-      "LATE",
-      "HALF_DAY"
-    ]));
-  });
-
-  it("includes staff profiles linked to login users and staff attendance statuses for reports", () => {
-    const linkedUserKeys = DEMO_STAFF_PROFILES
-      .map((profile) => ("userKey" in profile ? profile.userKey : null))
-      .filter(Boolean);
-    expect(linkedUserKeys).toEqual(expect.arrayContaining(["admin", "principal", "teacher", "staff", "office"]));
-    expect(DEMO_STAFF_PROFILES.filter((profile) => profile.staffType === "TEACHER").length).toBeGreaterThanOrEqual(3);
-    expect(DEMO_STAFF_ATTENDANCE_TODAY.map((record) => record.status)).toEqual(expect.arrayContaining([
-      "PRESENT",
-      "LATE",
-      "HALF_DAY",
-      "ABSENT",
-      "ON_LEAVE"
-    ]));
-    expect(DEMO_STAFF_ATTENDANCE_TODAY.some((record) => "correctionReason" in record)).toBe(true);
-  });
-
-  it("keeps seed implementation idempotent and avoids QR secrets", () => {
-    const seedSource = readFileSync(join(process.cwd(), "prisma/seeds/demo-tenant.seed.ts"), "utf8");
-    const dataSource = readFileSync(join(process.cwd(), "prisma/seeds/demo-data.seed.ts"), "utf8");
-    expect(seedSource.match(/\.upsert\(/g)?.length ?? 0).toBeGreaterThan(20);
-    expect(seedSource).toContain("desiredRoleIds");
-    expect(seedSource).toContain("isActive: false");
-    expect(seedSource).not.toMatch(/rawToken|qrPayload|StaffAttendanceQrToken\.create/i);
-    expect(dataSource).not.toMatch(/gmail\.com|\.local/i);
+    expect(loginSource).toContain('useState(schoolId ?? "")');
+    expect(loginSource).toContain('useState("")');
+    expect(loginSource).toContain('formData.get("password")');
+    expect(loginSource).not.toMatch(/demo login|sample credentials|changeme@123/i);
+    expect(loginPageSource).toContain("schoolId={null}");
+    expect(loginPageSource).toContain("schoolIdLocked={false}");
+    expect(loginPageSource).not.toContain("searchParams");
+    expect(`${envExample}\n${readme}`).not.toMatch(/parshavinsights@gmail\.com|JinaCampus@123|ChangeMe@123/);
   });
 });
