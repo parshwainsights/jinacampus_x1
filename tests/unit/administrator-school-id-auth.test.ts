@@ -130,6 +130,21 @@ describe("administrator portal and School ID login", () => {
     expect(source("src/app/api/auth/administrator-login/route.ts")).toContain("ADMINISTRATOR_LOGIN_ERROR_MESSAGE");
   });
 
+  it("keeps administrator credentials case-safe and rejects invisible paste artifacts", () => {
+    const form = source("src/components/auth/administrator-login-form.tsx");
+
+    expect(form).toContain('headers: { "content-type": "application/json" }');
+    expect(form).toContain('String(formData.get("email") ?? "")');
+    expect(form).toContain('String(formData.get("password") ?? "")');
+    expect(form).toContain("submittedEmail.trim().toLowerCase()");
+    expect(form).toContain("password: submittedPassword");
+    expect(form).toContain("hasPasswordFormattingIssue(submittedPassword)");
+    expect(form).toContain('autoCapitalize="none"');
+    expect(form).toContain('autoCorrect="off"');
+    expect(form).toContain("spellCheck={false}");
+    expect(form).not.toMatch(/submittedPassword\.(?:trim|toLowerCase|toUpperCase)\(/);
+  });
+
   it("adds administrator school management routes with platform permission gates and audit events", () => {
     const services = source("src/modules/campus-core/administrator-services.ts");
     const actions = source("src/modules/campus-core/administrator-actions.ts");
