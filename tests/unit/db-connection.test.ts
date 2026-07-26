@@ -9,7 +9,7 @@ describe("Prisma runtime database URL", () => {
 
     const url = new URL(result!);
     expect(url.searchParams.get("pgbouncer")).toBe("true");
-    expect(url.searchParams.get("connection_limit")).toBe("1");
+    expect(url.searchParams.get("connection_limit")).toBe("3");
     expect(url.searchParams.get("sslmode")).toBe("require");
   });
 
