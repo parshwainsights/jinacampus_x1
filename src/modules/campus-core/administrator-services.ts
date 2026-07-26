@@ -37,6 +37,60 @@ export type SchoolDependencySummary = {
   roles: number;
 };
 
+type SchoolDependencyCounts = {
+  institutions: number;
+  branches: number;
+  users: number;
+  students: number;
+  staffProfiles: number;
+  studentAttendanceRecords: number;
+  staffAttendanceRecords: number;
+  auditLogs: number;
+  notificationOutboxItems: number;
+  roles: number;
+};
+
+const schoolDependencyCountSelect = {
+  institutions: true,
+  branches: true,
+  users: true,
+  students: true,
+  staffProfiles: true,
+  studentAttendanceRecords: true,
+  staffAttendanceRecords: true,
+  auditLogs: true,
+  notificationOutboxItems: true,
+  roles: true
+} as const;
+
+function toSchoolDependencySummary(counts: SchoolDependencyCounts): SchoolDependencySummary {
+  return {
+    institutions: counts.institutions,
+    branches: counts.branches,
+    users: counts.users,
+    students: counts.students,
+    staffProfiles: counts.staffProfiles,
+    studentAttendanceRecords: counts.studentAttendanceRecords,
+    staffAttendanceRecords: counts.staffAttendanceRecords,
+    auditLogs: counts.auditLogs,
+    notificationOutboxItems: counts.notificationOutboxItems,
+    roles: counts.roles
+  };
+}
+
+const emptySchoolDependencySummary: SchoolDependencySummary = {
+  institutions: 0,
+  branches: 0,
+  users: 0,
+  students: 0,
+  staffProfiles: 0,
+  studentAttendanceRecords: 0,
+  staffAttendanceRecords: 0,
+  auditLogs: 0,
+  notificationOutboxItems: 0,
+  roles: 0
+};
+
 function hasDependencies(summary: SchoolDependencySummary) {
   return Object.values(summary).some((count) => count > 0);
 }
@@ -312,84 +366,60 @@ export async function listSchoolsForAdministrator(
 }
 
 export async function getSchoolDependencySummary(tenantId: string): Promise<SchoolDependencySummary> {
-  const [
-    institutions,
-    branches,
-    users,
-    students,
-    staffProfiles,
-    studentAttendanceRecords,
-    staffAttendanceRecords,
-    auditLogs,
-    notificationOutboxItems,
-    roles
-  ] = await Promise.all([
-    db.institution.count({ where: { tenantId } }),
-    db.branch.count({ where: { tenantId } }),
-    db.user.count({ where: { tenantId } }),
-    db.student.count({ where: { tenantId } }),
-    db.staffProfile.count({ where: { tenantId } }),
-    db.studentAttendanceRecord.count({ where: { tenantId } }),
-    db.staffAttendanceRecord.count({ where: { tenantId } }),
-    db.auditLog.count({ where: { tenantId } }),
-    db.notificationOutbox.count({ where: { tenantId } }),
-    db.role.count({ where: { tenantId } })
-  ]);
-  return {
-    institutions,
-    branches,
-    users,
-    students,
-    staffProfiles,
-    studentAttendanceRecords,
-    staffAttendanceRecords,
-    auditLogs,
-    notificationOutboxItems,
-    roles
-  };
+  const school = await db.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      _count: {
+        select: schoolDependencyCountSelect
+      }
+    }
+  });
+
+  return school ? toSchoolDependencySummary(school._count) : { ...emptySchoolDependencySummary };
 }
 
 export async function getSchoolByIdForAdministrator(ctx: TenantContext, tenantId: string) {
   await requirePlatformPermission(ctx, "platform.school.view");
-  const [school, dependencySummary] = await Promise.all([
-    db.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        legalName: true,
-        supportEmail: true,
-        phone: true,
-        website: true,
-        createdAt: true,
-        updatedAt: true,
-        institutions: {
-          select: { id: true, name: true, displayName: true, code: true, status: true, logoUrl: true },
-          orderBy: { name: "asc" },
-          take: 10
+  const school = await db.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      status: true,
+      legalName: true,
+      supportEmail: true,
+      phone: true,
+      website: true,
+      createdAt: true,
+      updatedAt: true,
+      institutions: {
+        select: { id: true, name: true, displayName: true, code: true, status: true, logoUrl: true },
+        orderBy: { name: "asc" },
+        take: 10
+      },
+      branches: {
+        select: { id: true, name: true, code: true, status: true },
+        orderBy: { name: "asc" },
+        take: 10
+      },
+      users: {
+        where: {
+          status: { not: "DEACTIVATED" },
+          roleAssignments: { some: { isActive: true, role: { code: { in: ["PRINCIPAL", "ADMIN"] } } } }
         },
-        branches: {
-          select: { id: true, name: true, code: true, status: true },
-          orderBy: { name: "asc" },
-          take: 10
-        },
-        users: {
-          where: {
-            status: { not: "DEACTIVATED" },
-            roleAssignments: { some: { isActive: true, role: { code: { in: ["PRINCIPAL", "ADMIN"] } } } }
-          },
-          select: { id: true, email: true, displayName: true, firstName: true, lastName: true, status: true },
-          orderBy: { firstName: "asc" },
-          take: 10
-        }
+        select: { id: true, email: true, displayName: true, firstName: true, lastName: true, status: true },
+        orderBy: { firstName: "asc" },
+        take: 10
+      },
+      _count: {
+        select: schoolDependencyCountSelect
       }
-    }),
-    getSchoolDependencySummary(tenantId)
-  ]);
+    }
+  });
   if (!school) return null;
-  return { ...school, dependencySummary };
+  const { _count, ...schoolDetails } = school;
+  return { ...schoolDetails, dependencySummary: toSchoolDependencySummary(_count) };
 }
 
 export async function createSchool(ctx: TenantContext, input: z.infer<typeof createSchoolSchema>) {
