@@ -145,5 +145,6 @@ describe("commercial seed safety", () => {
     expect(loginPageSource).toContain("schoolIdLocked={false}");
     expect(loginPageSource).not.toContain("searchParams");
     expect(`${envExample}\n${readme}`).not.toMatch(/parshavinsights@gmail\.com|JinaCampus@123|ChangeMe@123/);
+    expect(envExample).not.toMatch(/postgres(?:ql)?:\/\/[^:\s]+:[^@\s]+@/);
   });
 });
