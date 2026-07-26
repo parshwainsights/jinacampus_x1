@@ -82,6 +82,9 @@ describe("deployment environment validation", () => {
 
   it("configures Prisma and npm scripts for hosted production deployment", () => {
     const schema = readFileSync(resolve(process.cwd(), "prisma/schema.prisma"), "utf8");
+    const vercelConfig = JSON.parse(readFileSync(resolve(process.cwd(), "vercel.json"), "utf8")) as {
+      regions?: string[];
+    };
     const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as {
       scripts: Record<string, string>;
       prisma?: { seed?: string };
@@ -97,5 +100,6 @@ describe("deployment environment validation", () => {
       "db:seed": "prisma db seed"
     });
     expect(packageJson.prisma?.seed).toBe("node --import tsx prisma/seed.ts");
+    expect(vercelConfig.regions).toEqual(["icn1"]);
   });
 });

@@ -58,6 +58,10 @@ Institution, branch, academic-year, SMS provider, and WhatsApp provider variable
 
 Use the Supabase **Supavisor transaction-mode** connection for `DATABASE_URL`. It is intended for temporary/serverless clients. Use the exact Prisma-compatible string supplied by Supabase and retain its required SSL/pooling parameters.
 
+For a transaction-mode URL on port `6543`, the runtime adds `pgbouncer=true` and a conservative Prisma `connection_limit=3` when those parameters are absent. Explicit URL parameters remain authoritative. This supports bounded parallel work without returning to Prisma's much larger CPU-derived default pool.
+
+Vercel Functions are configured in `vercel.json` to run in `icn1`, matching the current Supabase `ap-northeast-2` database region. If the production database moves regions, update the Vercel function region in the same release so application and database traffic remain co-located.
+
 ### Migrations
 
 Use the Supabase **direct database** connection for `DIRECT_URL`. Direct connections may require IPv6 support or the Supabase IPv4 option. Run migrations only from an approved secure terminal or CI runner that can reach this endpoint.

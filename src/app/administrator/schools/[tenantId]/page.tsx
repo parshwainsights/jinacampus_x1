@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PermissionState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/table-primitives";
+import { AppError } from "@/lib/errors";
 import { requireAdministratorContext } from "@/modules/campus-core/administrator-auth";
 import { getSchoolByIdForAdministrator } from "@/modules/campus-core/administrator-services";
 import { AdministratorShell } from "@/modules/campus-core/components/administrator-shell";
@@ -116,6 +117,7 @@ export default async function AdministratorSchoolDetailPage({ params }: { params
     );
   } catch (error) {
     if (isNextNotFound(error)) throw error;
+    if (!(error instanceof AppError) || error.status !== 403) throw error;
     return (
       <AdministratorShell ctx={ctx} activeHref="/administrator/schools">
         <PermissionState
