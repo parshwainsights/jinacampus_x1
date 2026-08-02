@@ -36,6 +36,8 @@ Configure secrets in **Vercel Project Settings -> Environment Variables**. Never
 | `DATABASE_URL` | Supavisor transaction-pooled PostgreSQL URL used by Vercel runtime functions. |
 | `DIRECT_URL` | Direct Supabase PostgreSQL URL used by Prisma migration commands. |
 | `APP_URL` | Canonical HTTPS application origin. |
+| `WEBAUTHN_ORIGIN` | Canonical HTTPS origin allowed to register and use passkeys. Usually the same as `APP_URL`. |
+| `WEBAUTHN_RP_ID` | Passkey relying-party domain without a scheme, for example `jinacampus.example.com`. |
 | `SESSION_SECRET` | Random server-only session-token HMAC secret, at least 32 characters. |
 | `PASSWORD_PEPPER` | Separate server-only password and OTP pepper. |
 | `SESSION_COOKIE_NAME` | Session cookie name; defaults to `jc_session`. |
@@ -96,7 +98,7 @@ Production rule: never run `prisma migrate dev` or `prisma migrate reset` agains
 npm run db:seed
 ```
 
-6. Verify the tenant, tenant owner, role assignment, and password credential through server-side SQL or authenticated JinaCampus flows.
+6. Verify the tenant, Principal, role assignment, and password credential through server-side SQL or authenticated JinaCampus flows.
 7. Set `COMMERCIAL_BOOTSTRAP_ENABLED=false` immediately.
 8. Keep `RESET_SEED_ADMIN_PASSWORD=false` unless an approved controlled reset is required.
 9. Redeploy production so the disabled bootstrap setting is active.
@@ -111,10 +113,10 @@ From the Supabase SQL Editor or an approved direct SQL client, verify migration 
 select to_regclass('public.login_otps') as login_otp_table;
 select count(*) as tenant_count from public.tenants;
 select count(*) as active_user_count from public.users where status = 'ACTIVE';
-select count(*) as tenant_owner_assignments
+select count(*) as principal_assignments
 from public.user_role_assignments ura
 join public.roles r on r.id = ura."roleId" and r."tenantId" = ura."tenantId"
-where ura."isActive" = true and r.code = 'TENANT_OWNER';
+where ura."isActive" = true and r.code = 'PRINCIPAL';
 ```
 
 Do not select `passwordHash`, `tokenHash`, `otpHash`, session cookies, or raw credentials during verification.

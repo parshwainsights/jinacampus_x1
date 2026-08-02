@@ -53,7 +53,8 @@ const ctx: TenantContext = {
   userType: "STAFF",
   activeBranchId: branchId,
   accessibleBranchIds: [branchId],
-  activeAcademicYearId: "00000000-0000-0000-0000-000000000007"
+  activeAcademicYearId: "00000000-0000-0000-0000-000000000007",
+  roleCodes: ["PRINCIPAL"]
 };
 
 function resetMocks() {
@@ -137,7 +138,11 @@ describe("CampusCore tenant isolation", () => {
       })
     }));
     expect(mocks.tx.role.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { tenantId, isActive: true },
+      where: {
+        tenantId,
+        isActive: true,
+        code: { in: ["PRINCIPAL", "OFFICE_STAFF", "TEACHER", "STAFF"] }
+      },
       select: expect.objectContaining({
         rolePermissions: expect.objectContaining({
           where: { tenantId },
@@ -158,7 +163,7 @@ describe("CampusCore tenant isolation", () => {
 
   it("creates users and role assignments with tenantId from context, ignoring client-like tenant fields", async () => {
     mocks.tx.branch.count.mockResolvedValue(1);
-    mocks.tx.role.findMany.mockResolvedValue([{ id: roleId, code: "TEACHER" }]);
+    mocks.tx.role.findMany.mockResolvedValue([{ id: roleId, code: "PRINCIPAL" }]);
     mocks.tx.user.create.mockResolvedValue({ id: newUserId, tenantId });
 
     const unsafeInput = {
@@ -167,16 +172,16 @@ describe("CampusCore tenant isolation", () => {
       email: "office@example.com",
       firstName: "Office",
       branchIds: [branchId],
-      roleCodes: ["TEACHER"]
+      roleCodes: ["PRINCIPAL"]
     } as unknown as Parameters<typeof createUserService>[1];
 
-    await createUserService(ctx, unsafeInput);
+    await createUserService({ ...ctx, roleCodes: ["ADMINISTRATOR"] }, unsafeInput);
 
     expect(mocks.tx.branch.count).toHaveBeenCalledWith({
       where: { tenantId, id: { in: [branchId] }, status: { not: "ARCHIVED" } }
     });
     expect(mocks.tx.role.findMany).toHaveBeenCalledWith({
-      where: { tenantId, code: { in: ["TEACHER"] }, isActive: true }
+      where: { tenantId, code: { in: ["PRINCIPAL"] }, isActive: true }
     });
     expect(mocks.tx.user.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({

@@ -38,7 +38,7 @@ describe("app shell PWA and brand assets", () => {
     expect(layoutSource).toContain('/favicon-48x48.png');
     expect(layoutSource).toContain('/favicon-96x96.png');
     expect(layoutSource).toContain('/apple-touch-icon.png');
-    expect(layoutSource).toContain('themeColor: "#12324A"');
+    expect(layoutSource).toContain("themeColor: JINACAMPUS_BRAND.colors.deepInk");
     expect(layoutSource).not.toContain('/favicon.svg');
   });
 
@@ -46,21 +46,18 @@ describe("app shell PWA and brand assets", () => {
     const manifest = JSON.parse(source("public/site.webmanifest")) as WebManifest;
     const iconSources = manifest.icons.map((icon) => icon.src);
 
-    expect(manifest.name).toBe("JinaCampus");
+    expect(manifest.name).toBe("JinaCampus - The Complete School OS");
     expect(manifest.short_name).toBe("JinaCampus");
-    expect(manifest.theme_color).toBe("#12324A");
-    expect(manifest.background_color).toBe("#F8FAFC");
+    expect(manifest.theme_color).toBe("#0B1638");
+    expect(manifest.background_color).toBe("#F6F8FF");
     expect(iconSources).toEqual(
       expect.arrayContaining([
-        "/icons/pwa-icon-48x48.png",
-        "/icons/pwa-icon-192x192.png",
-        "/icons/pwa-icon-512x512.png",
-        "/icons/pwa-icon-1024x1024.png",
-        "/icons/pwa-icon-maskable-192x192.png",
-        "/icons/pwa-icon-maskable-512x512.png"
+        "/icons/icon-192x192.png",
+        "/icons/icon-512x512.png",
+        "/icons/icon-1024x1024.png"
       ])
     );
-    expect(manifest.icons.some((icon) => icon.purpose === "maskable")).toBe(true);
+    expect(manifest.icons.some((icon) => icon.purpose?.split(" ").includes("maskable"))).toBe(true);
 
     for (const icon of manifest.icons) {
       expect(icon.type).toBe("image/png");
@@ -70,9 +67,11 @@ describe("app shell PWA and brand assets", () => {
 
   it("keeps brand logo assets available under public/brand", () => {
     for (const path of [
-      "public/brand/jinacampus-horizontal-on-light.png",
-      "public/brand/jinacampus-horizontal-transparent.png",
-      "public/brand/jinacampus-mark-transparent.png"
+      "public/brand/jinacampus-logo-primary-light.png",
+      "public/brand/jinacampus-logo-primary-transparent.png",
+      "public/brand/jinacampus-logo-inverse-dark.png",
+      "public/brand/jinacampus-mark-transparent.png",
+      "public/brand/jinacampus-app-icon-master.png"
     ]) {
       expect(existsSync(projectFile(path))).toBe(true);
     }
@@ -87,8 +86,8 @@ describe("app shell PWA and brand assets", () => {
 
     expect(snippets).toContain("/site.webmanifest");
     expect(snippets).toContain("/apple-touch-icon.png");
-    expect(snippets).toContain("/icons/pwa-icon-144x144.png");
-    expect(snippets).toContain("/icons/pwa-icon-maskable-512x512.png");
+    expect(snippets).toContain("/icons/icon-144x144.png");
+    expect(snippets).toContain("/icons/icon-512x512.png");
     expect(snippets).not.toMatch(/passwordHash|tokenHash|rawToken|secret|bearer/i);
   });
 });

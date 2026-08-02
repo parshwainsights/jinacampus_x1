@@ -1,24 +1,21 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { DEFAULT_ROLE_CODES, DEFAULT_ROLE_PERMISSION_MAP } from "../../src/lib/rbac/roles";
+import {
+  ROLE_PERMISSION_MAP,
+  SCHOOL_OPERATIONAL_ROLE_CODES,
+  type SchoolOperationalRoleCode
+} from "../../src/lib/rbac/roles";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
-const ROLE_DISPLAY_NAMES: Partial<Record<(typeof DEFAULT_ROLE_CODES)[number], string>> = {
-  TENANT_OWNER: "Tenant Owner",
-  SUPER_ADMIN: "Super Admin",
-  ADMINISTRATOR: "Administrator",
-  ADMIN: "Super Admin",
+const ROLE_DISPLAY_NAMES: Record<SchoolOperationalRoleCode, string> = {
   PRINCIPAL: "Principal",
-  OFFICE_STAFF: "Office Staff",
-  CLASS_TEACHER: "Class Teacher",
+  OFFICE_STAFF: "Office Operator",
   TEACHER: "Teacher",
-  STAFF: "Staff",
-  PARENT: "Parent",
-  STUDENT: "Student"
+  STAFF: "Staff"
 };
 
 export async function seedDefaultRolesForTenant(db: DbClient, tenantId: string) {
-  for (const roleCode of DEFAULT_ROLE_CODES) {
+  for (const roleCode of SCHOOL_OPERATIONAL_ROLE_CODES) {
     const name = ROLE_DISPLAY_NAMES[roleCode] ?? roleCode.replaceAll("_", " ");
     const role = await db.role.upsert({
       where: { tenantId_code: { tenantId, code: roleCode } },
@@ -27,17 +24,17 @@ export async function seedDefaultRolesForTenant(db: DbClient, tenantId: string) 
         code: roleCode,
         name,
         isSystem: true,
-        isMutable: roleCode !== "TENANT_OWNER"
+        isMutable: false
       },
       update: {
         name,
         isSystem: true,
-        isMutable: roleCode !== "TENANT_OWNER",
+        isMutable: false,
         isActive: true
       }
     });
 
-    for (const permissionCode of DEFAULT_ROLE_PERMISSION_MAP[roleCode]) {
+    for (const permissionCode of ROLE_PERMISSION_MAP[roleCode]) {
       const permission = await db.permission.findUnique({ where: { code: permissionCode } });
       if (!permission) continue;
       await db.rolePermission.upsert({

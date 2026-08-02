@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { PasswordInput } from "@/components/forms/password-input";
 import { FormField } from "@/components/ui/form-primitives";
 import { ADMINISTRATOR_LOGIN_ERROR_MESSAGE } from "@/modules/campus-core/tenant-login-policy";
@@ -72,20 +73,26 @@ export function AdministratorLoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="premium-glass-panel box-border min-w-0 w-[calc(100vw-2rem)] max-w-72 overflow-hidden p-5 sm:w-full sm:max-w-md sm:p-8">
+    <form
+      onSubmit={onSubmit}
+      className="auth-form-panel min-w-0 p-5 sm:p-8 lg:p-9"
+      aria-busy={isSubmitting}
+      data-auth-pending={isSubmitting ? "true" : "false"}
+    >
+      <BrandLogo className="mx-auto mb-7 hidden w-[17rem] lg:block" priority />
       <div className="space-y-2">
-        <span className="inline-flex min-h-9 items-center rounded-full border border-cyan-200 bg-cyan-50/90 px-3 text-xs font-semibold uppercase tracking-wide text-cyan-700">
+        <span className="inline-flex min-h-8 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-800">
           Platform Portal
         </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-950">JinaCampus Administrator</h1>
-        <p className="text-sm leading-6 text-slate-500">Platform administration portal for authorized JinaCampus Super Admin users.</p>
+        <h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl">JinaCampus Administrator</h1>
+        <p className="text-sm leading-6 text-slate-500">Authorized platform operators only. School users should use School Login.</p>
       </div>
 
       <div className="mt-8 space-y-4">
         <FormField id="administrator-email" label="Email" required>
           <input
             id="administrator-email"
-            className="min-h-11 w-full"
+            className="auth-field-input w-full outline-none transition"
             name="email"
             type="email"
             inputMode="email"
@@ -102,7 +109,7 @@ export function AdministratorLoginForm() {
         <FormField id="administrator-password" label="Password" required>
           <PasswordInput
             id="administrator-password"
-            className="min-h-11 w-full"
+            className="auth-field-input w-full outline-none transition"
             name="password"
             autoComplete="current-password"
             autoCapitalize="none"
@@ -115,12 +122,12 @@ export function AdministratorLoginForm() {
           />
         </FormField>
         <p className="text-xs leading-5 text-slate-500">Password is case-sensitive. If you pasted it, remove any spaces before or after the password.</p>
-        {error ? <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 shadow-sm">{error}</p> : null}
-        <button type="submit" disabled={isSubmitting} className="premium-primary-button w-full gap-2 premium-focus" aria-live="polite">
+        {error ? <p role="alert" className="rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 shadow-sm">{error}</p> : null}
+        <button type="submit" disabled={isSubmitting} className="auth-action-button auth-action-primary premium-focus" aria-live="polite">
           {isSubmitting ? <><LoadingSpinner /> Signing in...</> : "Sign in to Administrator Portal"}
         </button>
         <div className="flex justify-center">
-          <Link href="/login" className="text-sm font-semibold text-slate-600 transition hover:text-brand-700 premium-focus">
+          <Link href="/" className="inline-flex min-h-12 items-center text-sm font-semibold text-slate-600 transition hover:text-brand-700 premium-focus">
             Back to School Login
           </Link>
         </div>

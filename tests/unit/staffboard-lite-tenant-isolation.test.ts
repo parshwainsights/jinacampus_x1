@@ -165,9 +165,9 @@ describe("StaffBoard Lite tenant isolation", () => {
       designation: "Senior Teacher"
     })).rejects.toMatchObject({ code: "STAFF_PROFILE_NOT_FOUND" });
 
-    expect(mocks.tx.staffProfile.findFirst).toHaveBeenCalledWith({
+    expect(mocks.tx.staffProfile.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: staffId, tenantId }
-    });
+    }));
     expect(mocks.tx.staffProfile.update).not.toHaveBeenCalled();
   });
 

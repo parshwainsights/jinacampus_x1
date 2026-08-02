@@ -17,6 +17,7 @@ import { CardLink, ComingSoonPill, PageHeader } from "@/modules/academia/compone
 
 const icons: Record<AcademiaModuleKey, typeof School> = {
   overview: School,
+  setup: Layers3,
   classes: School,
   sections: Layers3,
   "class-sections": GraduationCap,
@@ -39,7 +40,7 @@ export default async function AcademiaOverviewPage() {
     <div className="space-y-6">
       <PageHeader
         title="Academia"
-        description="Manage academic setup, student records, guardian contacts, and enrollment readiness for the active school year."
+        description="Complete academic setup, register students with primary guardians and class assignments, and manage daily attendance."
       />
 
       <section aria-label="Academia modules" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

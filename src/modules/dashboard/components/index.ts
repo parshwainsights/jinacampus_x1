@@ -6,3 +6,4 @@ export * from "./dashboard-page-header";
 export * from "./dashboard-quick-actions";
 export * from "./dashboard-section";
 export * from "./dashboard-state";
+export * from "./dashboard-visualizations";

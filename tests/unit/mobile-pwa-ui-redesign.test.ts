@@ -3,28 +3,35 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { PermissionCode } from "@/lib/rbac/permissions";
-import { getMobileBottomNavigationItems } from "@/components/app-shell/navigation";
+import {
+  getMobileBottomNavigationItems,
+  getNavigationAudience
+} from "@/components/app-shell/navigation";
+import { canViewDashboardSection } from "@/modules/dashboard/components/dashboard-state";
 
 function source(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
 describe("mobile web/PWA UI redesign", () => {
-  it("adds separate desktop and mobile app shell chrome", () => {
+  it("keeps mobile chrome separate from the desktop-only bottom dock", () => {
     const layout = source("src/app/(dashboard)/layout.tsx");
-    const mobileShell = source("src/components/app-shell/mobile-shell.tsx");
-    const mobileTopbar = source("src/components/app-shell/mobile-topbar.tsx");
+    const appChrome = source("src/components/app-shell/app-chrome.tsx");
+    const appNavbar = source("src/components/app-shell/app-navbar.tsx");
+    const desktopDock = source("src/components/app-shell/desktop-navigation-dock.tsx");
+    const mobileDrawer = source("src/components/app-shell/mobile-navigation-drawer.tsx");
     const mobileBottomNav = source("src/components/app-shell/mobile-bottom-nav.tsx");
-    const sidebar = source("src/components/app-shell/sidebar-nav.tsx");
 
-    expect(layout).toContain("DesktopShell");
-    expect(layout).toContain("MobileShell");
-    expect(layout).toContain("hidden lg:block");
-    expect(mobileShell).toContain('data-mobile-shell="true"');
-    expect(mobileTopbar).toContain('data-mobile-topbar="true"');
+    expect(layout).not.toContain("DesktopShell");
+    expect(layout).toContain("AppChrome");
+    expect(appChrome).toContain("AppNavbar");
+    expect(appChrome).toContain("DesktopNavigationDock");
+    expect(appNavbar).toContain('data-app-navbar="true"');
+    expect(desktopDock).toContain("hidden justify-center");
+    expect(desktopDock).toContain("lg:flex");
+    expect(mobileDrawer).toContain('data-mobile-navigation-drawer="true"');
     expect(mobileBottomNav).toContain('data-mobile-navigation="true"');
     expect(mobileBottomNav).toContain("pb-[env(safe-area-inset-bottom)]");
-    expect(sidebar).toContain("lg:flex");
   });
 
   it("keeps mobile bottom navigation role and permission aware", () => {
@@ -44,7 +51,15 @@ describe("mobile web/PWA UI redesign", () => {
     const staffPermissions = new Set<PermissionCode>([
       "campuscore.tenant.view",
       "staffboard.attendance.self_scan",
+      "staffboard.attendance.self_view",
+    ]);
+    const officePermissions = new Set<PermissionCode>([
+      "campuscore.tenant.view",
+      "staffboard.staff.view",
       "staffboard.attendance.view",
+      "staffboard.attendance.report",
+      "staffboard.attendance.self_scan",
+      "staffboard.attendance.self_view",
     ]);
 
     expect(getMobileBottomNavigationItems(adminPermissions).map((item) => item.title)).toEqual([
@@ -68,6 +83,25 @@ describe("mobile web/PWA UI redesign", () => {
       "Profile",
       "More",
     ]);
+    expect(getNavigationAudience(officePermissions, ["OFFICE_STAFF"])).toBe("office");
+    expect(getMobileBottomNavigationItems(officePermissions, ["OFFICE_STAFF"]).map((item) => item.title)).toEqual([
+      "Home",
+      "Attendance",
+      "Scan QR",
+      "My Attendance",
+      "More",
+    ]);
+  });
+
+  it("keeps self-only staff permissions out of branch-wide attendance metrics", () => {
+    const selfOnlyPermissions = new Set<PermissionCode>([
+      "campuscore.tenant.view",
+      "staffboard.attendance.self_scan",
+      "staffboard.attendance.self_view",
+    ]);
+
+    expect(canViewDashboardSection(selfOnlyPermissions, "staffAttendance")).toBe(false);
+    expect(source("src/app/(dashboard)/dashboard/page.tsx")).toContain("getMobileStaffAttendanceStatus(ctx)");
   });
 
   it("adds mobile dashboard and reusable mobile cards without replacing desktop dashboard", () => {
@@ -82,8 +116,8 @@ describe("mobile web/PWA UI redesign", () => {
     expect(dashboardPage).toContain("MobileDashboard");
     expect(dashboardPage).toContain('data-desktop-dashboard="true"');
     expect(mobileDashboard).toContain('data-mobile-dashboard="true"');
-    expect(mobileDashboard).toContain("Today's primary actions");
-    expect(`${actionCard}\n${statCard}\n${listCard}\n${emptyState}\n${stickyAction}`).toContain("rounded-2xl");
+    expect(mobileDashboard).toContain("Today's Operations");
+    expect(`${actionCard}\n${statCard}\n${listCard}\n${emptyState}\n${stickyAction}`).toContain("rounded-lg");
     expect(stickyAction).toContain("env(safe-area-inset-bottom)");
   });
 

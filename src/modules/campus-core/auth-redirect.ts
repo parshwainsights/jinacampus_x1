@@ -1,11 +1,26 @@
-import { hasPlatformAdminRole } from "@/lib/rbac/roles";
+import {
+  hasPlatformAdminRole,
+  hasPrincipalRole,
+  hasTeacherRole
+} from "@/lib/rbac/roles";
+
+function schoolWorkspaceCount(roleCodes: readonly string[]) {
+  return [
+    hasPrincipalRole(roleCodes),
+    roleCodes.includes("OFFICE_STAFF"),
+    hasTeacherRole(roleCodes),
+    roleCodes.includes("STAFF")
+  ].filter(Boolean).length;
+}
 
 export function getPostLoginRedirectPath(roleCodes: readonly string[] = []) {
-  if (hasPlatformAdminRole(roleCodes)) return "/dashboard";
-  if (roleCodes.includes("PRINCIPAL")) return "/dashboard";
+  if (hasPlatformAdminRole(roleCodes)) return "/administrator";
+  if (schoolWorkspaceCount(roleCodes) > 1) return "/account/workspaces";
+  if (hasPrincipalRole(roleCodes)) return "/dashboard";
   if (roleCodes.includes("OFFICE_STAFF")) return "/dashboard";
-  if (roleCodes.includes("CLASS_TEACHER")) return "/academia/attendance/mark";
-  if (roleCodes.includes("TEACHER")) return "/dashboard";
+  if (hasTeacherRole(roleCodes)) {
+    return "/academia/attendance/mark";
+  }
   if (roleCodes.includes("STAFF")) return "/staffboard/attendance/scan";
   return "/dashboard";
 }

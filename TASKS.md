@@ -106,24 +106,24 @@ Acceptance criteria:
 - Permission strings are centralized.
 - Permission names match `PRD.md`.
 
-### 1.4 Default Role Seed Plan
-Create seed mapping for:
+### 1.4 Canonical Role Seed Plan
+Create explicit mappings for the approved five-role model:
 
-- [ ] `TENANT_OWNER`
-- [ ] `SUPER_ADMIN`
-- [ ] `ADMINISTRATOR`
-- [ ] `PRINCIPAL`
-- [ ] `ADMIN`
-- [ ] `CLASS_TEACHER`
-- [ ] `TEACHER`
-- [ ] `STAFF`
-- [ ] `PARENT`
-- [ ] `STUDENT`
+- [x] `ADMINISTRATOR` as a separately provisioned JinaCampus platform operator
+- [x] `PRINCIPAL`
+- [x] `OFFICE_STAFF`
+- [x] `TEACHER`
+- [x] `STAFF`
+- [x] Preserve old role codes only as migration aliases for existing assignments
+- [x] Exclude legacy aliases and deferred parent/student roles from new tenant seeds
 
 Acceptance criteria:
 
 - Roles are tenant-scoped where appropriate.
 - Role-permission mappings are explicit.
+- Principals can assign only Office Staff, Teacher, and Staff.
+- School user-management screens do not expose platform or legacy role aliases.
+- One user can hold multiple assignments without needing duplicate login accounts.
 
 ### 1.5 Tenant Context Resolver
 Implement tenant context utilities:
@@ -1092,6 +1092,81 @@ Acceptance criteria:
 - Full SchoolCast remains deferred.
 
 Checks to run: `npx prisma format`, `npx prisma validate`, `npx prisma generate`, `npm run typecheck`, `npm test`, `npm run build`, `git diff --check`, and `npm pkg get scripts.lint`; run DB migration/seed smoke when PostgreSQL is reachable.
+
+## Phase 10.8 — Five-Role Governance and Fast Login
+
+Goal: reduce role sprawl and give staff/teachers a secure fast-login path without weakening tenant or permission enforcement.
+
+Implementation:
+
+- [x] Canonical Administrator, Principal, Office Staff, Teacher, and Staff roles
+- [x] Legacy school-role compatibility aliases hidden from new assignments
+- [x] Principal assignment boundary limited to Office Staff, Teacher, and Staff
+- [x] One human/one user model with additive server-side permission merging
+- [x] School ID plus employee-code/email identity resolution
+- [x] Passkey-first login with permanent password fallback
+- [x] Current-password verification for passkey enrollment/removal
+- [x] Forced temporary-password change before protected workflows or passkey enrollment
+- [x] Teacher assigned-class scoping and Staff own-attendance permission
+- [x] Tenant-scoped, expiring, replay-resistant WebAuthn challenge persistence
+- [x] Retired public phone-OTP login and public OTP reset routes; recovery is administrator-assisted
+- [x] Prisma schema, migration, source tests, full tests, and build
+- [x] Apply migration to the isolated local QA database
+- [x] Run local HTTPS Chrome passkey registration/login/replay/password-fallback QA
+- [x] Consolidate Office Staff, Teacher, and Staff account creation under Staff Profiles
+- [x] Preserve StaffProfile/User linkage through login disable/reactivation
+- [x] Deactivate linked login and revoke sessions with non-active employment
+- [x] Add tenant-safe personal attendance dashboard and corrected Office Staff navigation
+- [x] Add `/attendance-login` passkey-first path with password fallback
+- [x] Add permission-derived `/account/workspaces` manual selection
+- [x] Add tenant-scoped `/campus-core/readiness` setup checks
+- [x] Add focused lifecycle, navigation, workspace, and readiness tests
+- [ ] Apply migration to the intended database through the approved deployment process
+- [ ] Configure exact production `WEBAUTHN_ORIGIN` and `WEBAUTHN_RP_ID`
+- [ ] Run HTTPS passkey registration/login QA on supported pilot devices
+- [x] Run DB-backed browser QA for the consolidated staff lifecycle and readiness gate
+- [ ] Run physical Android Chrome and iOS Safari attendance-login/passkey QA
+
+Acceptance criteria:
+
+- Client input cannot select or grant a role.
+- Cross-tenant role assignments do not affect login routing or permissions.
+- Password login remains available after passkey enrollment.
+- Biometric data, passwords, challenges, and credential internals are not exposed.
+- Administrator remains an operator-only role and Principal remains school-scoped.
+
+## Phase 10.9 - Institution Boundary and Academia Setup Repair
+
+Goal: make core academic configuration and student class readiness operational
+without expanding the Base MVP module scope.
+
+Implementation:
+
+- [x] Restrict new institution provisioning to the Administrator Portal.
+- [x] Scope school institution/profile reads and mutations through assigned branches.
+- [x] Add one guided Academic Setup workflow for Classes, Sections, Class Sections, and Subjects.
+- [x] Add audited Class, Section, Subject, and Class Section create actions.
+- [x] Add Class Section edit and lifecycle handling.
+- [x] Hide technical Guardian, Enrollment, Class, Section, Class Section, and Subject menus where embedded workflows replace them.
+- [x] Create and link the primary Guardian during student registration.
+- [x] Support optional initial class assignment during student registration.
+- [x] Add server-derived Assign Class workflow to the student profile.
+- [x] Keep Subjects as simple CRUD for future academic modules.
+- [x] Add focused source and service regression tests.
+- [x] Run DB-backed Principal Academic Setup create browser QA.
+- [x] Run DB-backed Academic Setup update/deactivate browser QA.
+- [x] Run embedded Student, primary Guardian, and initial Enrollment browser QA.
+- [x] Run Teacher assigned-class attendance browser QA.
+- [x] Run second-institution and wrong-branch negative browser QA.
+
+Acceptance criteria:
+
+- Principal cannot provision a new institution from the school workspace.
+- Principal institution, branch, and academic-year operations stay within assigned institution scope.
+- Academic Setup creates valid active records for the selected branch and year.
+- Student registration writes Student, Guardian, link, and optional Enrollment atomically.
+- Assign Class does not accept tenant, branch, or academic-year identifiers from the client.
+- Teacher attendance continues to expose only assigned class-sections and active enrolled students.
 
 ## Final Delivery Checklist
 

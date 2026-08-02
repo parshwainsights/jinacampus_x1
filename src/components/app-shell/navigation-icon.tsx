@@ -1,0 +1,62 @@
+import {
+  BookOpenCheck,
+  Building2,
+  CalendarCheck2,
+  ClipboardCheck,
+  ClipboardList,
+  FileClock,
+  Gauge,
+  GraduationCap,
+  KeyRound,
+  Landmark,
+  LayoutDashboard,
+  LayoutGrid,
+  ListChecks,
+  QrCode,
+  ScanLine,
+  ScrollText,
+  Settings,
+  ShieldCheck,
+  UsersRound,
+  type LucideIcon
+} from "lucide-react";
+
+const navigationIconsByHref: Record<string, LucideIcon> = {
+  "/dashboard": LayoutDashboard,
+  "/campus-core": Building2,
+  "/campus-core/institutions": Landmark,
+  "/campus-core/branches": Building2,
+  "/campus-core/academic-years": CalendarCheck2,
+  "/campus-core/users": UsersRound,
+  "/campus-core/roles": ShieldCheck,
+  "/campus-core/settings": Settings,
+  "/campus-core/readiness": ClipboardCheck,
+  "/campus-core/audit-logs": FileClock,
+  "/academia": GraduationCap,
+  "/academia/setup": BookOpenCheck,
+  "/academia/students": UsersRound,
+  "/academia/guardians": UsersRound,
+  "/academia/enrollments": BookOpenCheck,
+  "/academia/classes": BookOpenCheck,
+  "/academia/sections": ListChecks,
+  "/academia/class-sections": ClipboardList,
+  "/academia/subjects": BookOpenCheck,
+  "/academia/attendance": CalendarCheck2,
+  "/academia/attendance/mark": ClipboardCheck,
+  "/academia/attendance/reports": ScrollText,
+  "/staffboard": ClipboardList,
+  "/staffboard/staff": UsersRound,
+  "/staffboard/categories": ListChecks,
+  "/staffboard/attendance": CalendarCheck2,
+  "/staffboard/attendance/qr": QrCode,
+  "/staffboard/attendance/scan": ScanLine,
+  "/staffboard/attendance/me": CalendarCheck2,
+  "/staffboard/attendance/reports": ScrollText,
+  "/account/change-password": KeyRound,
+  "/account/workspaces": LayoutGrid
+};
+
+export function NavigationIcon({ href, className = "h-4 w-4" }: { href: string; className?: string }) {
+  const Icon = navigationIconsByHref[href] ?? Gauge;
+  return <Icon aria-hidden="true" className={className} />;
+}

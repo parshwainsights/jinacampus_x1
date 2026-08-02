@@ -5,7 +5,7 @@ import type { TenantContext } from "@/lib/tenant/context";
 
 const mocks = vi.hoisted(() => {
   const createClass = vi.fn();
-  const createStudent = vi.fn();
+  const createStudentRegistration = vi.fn();
   const getTenantContext = vi.fn();
   const revalidatePath = vi.fn();
   const updateClass = vi.fn();
@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     createClass,
-    createStudent,
+    createStudentRegistration,
     getTenantContext,
     revalidatePath,
     updateClass,
@@ -45,8 +45,10 @@ vi.mock("@/modules/academia/services/section.service", () => ({
   updateSection: mocks.updateSection
 }));
 vi.mock("@/modules/academia/services/student.service", () => ({
-  createStudent: mocks.createStudent,
   updateStudent: mocks.updateStudent
+}));
+vi.mock("@/modules/academia/services/student-registration.service", () => ({
+  createStudentRegistration: mocks.createStudentRegistration
 }));
 vi.mock("@/modules/academia/services/subject.service", () => ({
   updateSubject: mocks.updateSubject
@@ -84,12 +86,15 @@ function studentFormData() {
   formData.set("state", "Gujarat");
   formData.set("gender", "NOT_SPECIFIED");
   formData.set("status", "ACTIVE");
+  formData.set("primaryGuardianRelation", "FATHER");
+  formData.set("primaryGuardianEmergencyContact", "on");
+  formData.set("primaryGuardianPickupPermission", "on");
   return formData;
 }
 
 beforeEach(() => {
   mocks.createClass.mockReset();
-  mocks.createStudent.mockReset();
+  mocks.createStudentRegistration.mockReset();
   mocks.getTenantContext.mockReset();
   mocks.getTenantContext.mockResolvedValue(ctx);
   mocks.revalidatePath.mockReset();
@@ -103,7 +108,7 @@ beforeEach(() => {
 
 describe("profile server actions", () => {
   it("returns a safe field-level error when a duplicate student admission number is submitted", async () => {
-    mocks.createStudent.mockRejectedValueOnce(new AppError("STUDENT_ADMISSION_NUMBER_EXISTS"));
+    mocks.createStudentRegistration.mockRejectedValueOnce(new AppError("STUDENT_ADMISSION_NUMBER_EXISTS"));
 
     const result = await createStudentAction({ ok: false }, studentFormData());
 
@@ -115,16 +120,19 @@ describe("profile server actions", () => {
         admissionNo: [duplicateAdmissionMessage]
       }
     });
-    expect(mocks.createStudent).toHaveBeenCalledWith(ctx, expect.objectContaining({
-      admissionNumber: "ADM-001",
-      branchId
+    expect(mocks.createStudentRegistration).toHaveBeenCalledWith(ctx, expect.objectContaining({
+      student: expect.objectContaining({
+        admissionNumber: "ADM-001",
+        branchId
+      }),
+      primaryGuardian: expect.objectContaining({ relation: "FATHER" })
     }));
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain("STUDENT_ADMISSION_NUMBER_EXISTS");
   });
 
   it("does not throw the duplicate admission AppError to the page runtime", async () => {
-    mocks.createStudent.mockRejectedValueOnce(new AppError("STUDENT_ADMISSION_NUMBER_EXISTS"));
+    mocks.createStudentRegistration.mockRejectedValueOnce(new AppError("STUDENT_ADMISSION_NUMBER_EXISTS"));
 
     await expect(createStudentAction({ ok: false }, studentFormData())).resolves.toMatchObject({
       ok: false,
@@ -133,7 +141,7 @@ describe("profile server actions", () => {
   });
 
   it("maps unknown create student failures to the generic safe form message", async () => {
-    mocks.createStudent.mockRejectedValueOnce(
+    mocks.createStudentRegistration.mockRejectedValueOnce(
       new Error("Prisma failed for tenantId=00000000-0000-0000-0000-000000000001")
     );
 

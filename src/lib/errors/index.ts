@@ -86,6 +86,10 @@ export function getUserSafeErrorMessage(errorOrCode: unknown, fallback = DEFAULT
       return "This school account is not active. Please contact support.";
     case "USER_INACTIVE":
       return "Your account is not active. Please contact an administrator.";
+    case "PASSWORD_CHANGE_REQUIRED":
+      return "Change your temporary password before continuing.";
+    case "SCHOOL_LOGIN_REQUIRED":
+      return "Use the correct sign-in portal for this account.";
     case "FORBIDDEN":
       return "You do not have permission to perform this action.";
     case "BRANCH_ACCESS_DENIED":
@@ -122,6 +126,18 @@ export function getUserSafeErrorMessage(errorOrCode: unknown, fallback = DEFAULT
       return "Please check in before checking out.";
     case "ACTIVE_STAFF_PROFILE_NOT_FOUND":
       return "An active staff profile was not found for your account.";
+    case "STAFF_PROFILE_INACTIVE":
+      return "Reactivate the staff profile before enabling login access.";
+    case "STAFF_LOGIN_ACCESS_ALREADY_DISABLED":
+      return "Login access is already disabled for this staff member.";
+    case "STAFF_LOGIN_BRANCH_ACCESS_REQUIRED":
+      return "Assign this staff member to their branch before reactivating login access.";
+    case "STAFF_LOGIN_ROLE_REQUIRED":
+      return "Assign an approved school role before reactivating login access.";
+    case "STAFF_PROFILE_CREATION_REQUIRED":
+      return "Create Teachers, Office Staff, and Staff from Staff Profiles so their employee and login records stay linked.";
+    case "STAFF_PROFILE_REQUIRED_FOR_ROLE":
+      return "Link this user to a staff profile before assigning this role.";
     case "STAFF_BRANCH_INACTIVE":
       return "Your assigned branch is not active for staff attendance.";
     case "STAFF_QR_ATTENDANCE_DISABLED":

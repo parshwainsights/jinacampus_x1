@@ -184,7 +184,11 @@ describe("StaffBoard Lite RBAC", () => {
 
   it("does not let staff update permission deactivate staff unless deactivate permission is present", async () => {
     mocks.tx.staffProfile.findFirst.mockResolvedValue(staffProfile());
-    mocks.requirePermission.mockRejectedValue(new Error("FORBIDDEN_PERMISSION:staffboard.staff.deactivate"));
+    mocks.requirePermission.mockImplementation(
+      ({ permission }: { permission: string }) => permission === "staffboard.staff.deactivate"
+        ? Promise.reject(new Error("FORBIDDEN_PERMISSION:staffboard.staff.deactivate"))
+        : Promise.resolve()
+    );
 
     await expect(deactivateStaffProfile(ctx, staffId)).rejects.toThrow(
       "FORBIDDEN_PERMISSION:staffboard.staff.deactivate"

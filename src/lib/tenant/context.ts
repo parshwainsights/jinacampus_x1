@@ -6,6 +6,8 @@ import { hashSessionToken } from "@/lib/auth/session";
 export type TenantContext = {
   tenantId: string;
   tenantName?: string;
+  tenantSlug?: string;
+  sessionId?: string;
   userId: string;
   userEmail: string;
   userName?: string;
@@ -21,11 +23,22 @@ export type TenantContext = {
   institutionLogoUrl?: string | null;
   roleLabels?: string[];
   roleCodes?: string[];
+  passwordChangeRequired?: boolean;
   ipAddress?: string;
   userAgent?: string;
 };
 
-export async function getTenantContext(): Promise<TenantContext> {
+type TenantContextOptions = {
+  allowPasswordChangeRequired?: boolean;
+};
+
+export function isPasswordChangeRequiredError(error: unknown) {
+  return error instanceof Error && error.message === "PASSWORD_CHANGE_REQUIRED";
+}
+
+export async function getTenantContext(
+  options: TenantContextOptions = {}
+): Promise<TenantContext> {
   const cookieStore = await cookies();
   const headerStore = await headers();
   const rawToken = cookieStore.get(env.SESSION_COOKIE_NAME)?.value;
@@ -38,26 +51,29 @@ export async function getTenantContext(): Promise<TenantContext> {
       tenant: true,
       user: {
         include: {
+          passwordCredential: {
+            select: { mustChange: true }
+          },
           branchAccesses: {
             where: { isActive: true },
             select: {
               tenantId: true,
               branchId: true,
               isPrimary: true,
-          branch: {
-            select: {
-              tenantId: true,
-              institutionId: true,
-              name: true,
-              code: true,
-              status: true,
-              institution: {
+              branch: {
                 select: {
-                  id: true,
+                  tenantId: true,
+                  institutionId: true,
                   name: true,
-                  displayName: true,
-                  logoUrl: true,
-                  status: true
+                  code: true,
+                  status: true,
+                  institution: {
+                    select: {
+                      id: true,
+                      name: true,
+                      displayName: true,
+                      logoUrl: true,
+                      status: true
                     }
                   }
                 }
@@ -144,9 +160,11 @@ export async function getTenantContext(): Promise<TenantContext> {
     ))
     .map((assignment) => assignment.role.code)));
 
-  return {
+  const ctx: TenantContext = {
     tenantId: session.tenantId,
     tenantName: session.tenant.name,
+    tenantSlug: session.tenant.slug,
+    sessionId: session.id,
     userId: session.userId,
     userEmail: session.user.email,
     userName: session.user.displayName ?? [session.user.firstName, session.user.lastName].filter(Boolean).join(" "),
@@ -162,7 +180,12 @@ export async function getTenantContext(): Promise<TenantContext> {
     institutionLogoUrl: institution?.logoUrl ?? null,
     roleLabels,
     roleCodes,
+    passwordChangeRequired: session.user.passwordCredential?.mustChange ?? false,
     ipAddress: headerStore.get("x-forwarded-for") ?? undefined,
     userAgent: headerStore.get("user-agent") ?? undefined
   };
+  if (ctx.passwordChangeRequired && !options.allowPasswordChangeRequired) {
+    throw new Error("PASSWORD_CHANGE_REQUIRED");
+  }
+  return ctx;
 }

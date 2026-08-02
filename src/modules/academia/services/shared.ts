@@ -29,7 +29,7 @@ export async function requireBranchPermission(ctx: TenantContext, permission: Pe
 export async function ensureActiveBranch(client: AcademiaDbClient, ctx: TenantContext, branchId: string) {
   const branch = await client.branch.findFirst({
     where: { id: branchId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } },
-    select: { id: true }
+    select: { id: true, institutionId: true }
   });
   if (!branch) throw notFound("BRANCH_NOT_FOUND");
   return branch;
@@ -38,7 +38,7 @@ export async function ensureActiveBranch(client: AcademiaDbClient, ctx: TenantCo
 export async function ensureAcademicYear(client: AcademiaDbClient, ctx: TenantContext, academicYearId: string) {
   const academicYear = await client.academicYear.findFirst({
     where: { id: academicYearId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } },
-    select: { id: true }
+    select: { id: true, institutionId: true, isActive: true, status: true }
   });
   if (!academicYear) throw notFound("ACADEMIC_YEAR_NOT_FOUND");
   return academicYear;

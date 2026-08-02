@@ -77,13 +77,15 @@ describe("mobile browser QA pass", () => {
   });
 
   it("keeps login mobile width constrained and form controls shrinkable", () => {
-    const loginSource = readProjectFile("src/app/(auth)/login/page.tsx");
+    const loginSource = readProjectFile("src/app/page.tsx");
+    const authShellSource = readProjectFile("src/components/auth/auth-shell.tsx");
     const loginFormSource = readProjectFile("src/components/auth/login-form.tsx");
     const globalsSource = readProjectFile("src/app/globals.css");
 
-    expect(loginSource).toContain("overflow-x-hidden");
-    expect(loginFormSource).toContain("w-[calc(100vw-2rem)]");
-    expect(loginFormSource).toContain("break-words");
+    expect(authShellSource).toContain("overflow-x-hidden");
+    expect(loginFormSource).toContain("auth-form-panel");
+    expect(loginSource).toContain('<AuthShell variant="school">');
+    expect(authShellSource).toContain("env(safe-area-inset-bottom)");
     expect(globalsSource).toContain("min-w-0 max-w-full");
   });
 });

@@ -38,8 +38,8 @@ const platformUser = {
   userType: "OWNER",
   status: "ACTIVE",
   tenant: { id: "platform-tenant-id", name: "JinaCampus Platform", status: "ACTIVE" },
-  passwordCredential: { passwordHash: "stored-admin-hash" },
-  roleAssignments: [{ role: { code: "SUPER_ADMIN", isActive: true } }]
+  passwordCredential: { passwordHash: "stored-admin-hash", mustChange: false },
+  roleAssignments: [{ role: { code: "ADMINISTRATOR", isActive: true } }]
 };
 
 function source(path: string) {
@@ -95,7 +95,7 @@ describe("administrator portal and School ID login", () => {
     });
 
     expect(result).toEqual({ status: 200, body: { ok: true, redirectTo: "/administrator" } });
-    expect(mocks.db.user.findMany.mock.calls[0][0].where.roleAssignments.some.role.code.in).toEqual(expect.arrayContaining(["SUPER_ADMIN", "ADMINISTRATOR"]));
+    expect(mocks.db.user.findMany.mock.calls[0][0].where.roleAssignments.some.role.code.in).toEqual(["ADMINISTRATOR"]);
     expect(mocks.db.session.create.mock.calls[0][0].data).toEqual(expect.objectContaining({
       tenantId: platformUser.tenantId,
       userId: platformUser.id,
@@ -115,6 +115,23 @@ describe("administrator portal and School ID login", () => {
 
     expect(result).toEqual({ status: 401, body: { error: ADMINISTRATOR_LOGIN_ERROR_MESSAGE } });
     expect(JSON.stringify(result.body)).not.toMatch(/role|tenant|passwordHash|tokenHash|principal|teacher|staff/i);
+  });
+
+  it("routes platform administrators with temporary credentials through forced password change", async () => {
+    mocks.db.user.findMany.mockResolvedValue([{
+      ...platformUser,
+      passwordCredential: { ...platformUser.passwordCredential, mustChange: true }
+    }]);
+
+    const result = await postAdminLogin({
+      email: platformUser.email,
+      password: "correct-password"
+    });
+
+    expect(result).toEqual({
+      status: 200,
+      body: { ok: true, redirectTo: "/account/change-password?required=1" }
+    });
   });
 
   it("keeps school login and administrator login separated in routes and UI", () => {
@@ -149,7 +166,7 @@ describe("administrator portal and School ID login", () => {
     const services = source("src/modules/campus-core/administrator-services.ts");
     const actions = source("src/modules/campus-core/administrator-actions.ts");
     const auditEvents = source("src/modules/campus-core/audit-events.ts");
-    const middleware = source("middleware.ts");
+    const middleware = source("proxy.ts");
 
     for (const route of [
       "src/app/administrator/page.tsx",
@@ -186,9 +203,11 @@ describe("administrator portal and School ID login", () => {
     const appNavigation = source("src/components/app-shell/navigation.ts");
     const auditEvents = source("src/modules/campus-core/audit-events.ts");
 
-    expect(shell).toContain('{ href: "/administrator", label: "Dashboard" }');
-    expect(shell).toContain('{ href: "/administrator/schools", label: "Schools" }');
+    expect(shell).toContain('{ href: "/administrator", label: "Dashboard", Icon: LayoutDashboard }');
+    expect(shell).toContain('{ href: "/administrator/schools", label: "Schools", Icon: School }');
     expect(shell).toContain("activeHref");
+    expect(shell).toContain('data-administrator-desktop-dock="true"');
+    expect(shell).toContain('aria-label="Administrator primary navigation"');
     expect(shell).not.toContain('href="/dashboard"');
     expect(appNavigation).not.toMatch(/administrator/i);
 

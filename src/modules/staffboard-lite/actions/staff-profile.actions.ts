@@ -7,6 +7,7 @@ import {
   createStaffLoginAccessSchema,
   createStaffProfileSchema,
   disableStaffLoginAccessSchema,
+  reactivateStaffLoginAccessSchema,
   updateStaffProfileSchema
 } from "@/modules/staffboard-lite/schemas";
 import {
@@ -14,6 +15,7 @@ import {
   createStaffProfile,
   deactivateStaffProfile,
   disableStaffLoginAccess,
+  reactivateStaffLoginAccess,
   updateStaffProfile
 } from "@/modules/staffboard-lite/services/staff-profile.service";
 
@@ -41,6 +43,11 @@ function requiredStringValue(formData: FormData, key: string) {
   const value = stringValue(formData, key);
   if (!value) throw new Error(`Missing field: ${key}`);
   return value;
+}
+
+function passwordValue(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function staffProfileFormError(error: unknown, fallbackMessage: string): StaffProfileFormActionState {
@@ -114,8 +121,8 @@ export async function createStaffProfileAction(
       employmentStatus: stringValue(formData, "employmentStatus"),
       createLoginAccess: formData.get("createLoginAccess") === "on",
       loginRoleCode: stringValue(formData, "loginRoleCode"),
-      initialPassword: stringValue(formData, "initialPassword"),
-      confirmInitialPassword: stringValue(formData, "confirmInitialPassword")
+      initialPassword: passwordValue(formData, "initialPassword"),
+      confirmInitialPassword: passwordValue(formData, "confirmInitialPassword")
     });
     const ctx = await getTenantContext();
     await createStaffProfile(ctx, input);
@@ -140,8 +147,8 @@ export async function createStaffLoginAccessAction(
       email: stringValue(formData, "email"),
       phone: stringValue(formData, "phone"),
       loginRoleCode: stringValue(formData, "loginRoleCode"),
-      initialPassword: stringValue(formData, "initialPassword"),
-      confirmInitialPassword: stringValue(formData, "confirmInitialPassword")
+      initialPassword: passwordValue(formData, "initialPassword"),
+      confirmInitialPassword: passwordValue(formData, "confirmInitialPassword")
     });
     const ctx = await getTenantContext();
     await createStaffLoginAccess(ctx, input);
@@ -175,6 +182,28 @@ export async function disableStaffLoginAccessAction(
     return { ok: true, message: "Login access disabled. Existing sessions were revoked." };
   } catch (error) {
     return staffProfileFormError(error, "Unable to disable staff login access. Please try again.");
+  }
+}
+
+export async function reactivateStaffLoginAccessAction(
+  _state: StaffProfileFormActionState,
+  formData: FormData
+): Promise<StaffProfileFormActionState> {
+  try {
+    const input = reactivateStaffLoginAccessSchema.parse({
+      staffId: requiredStringValue(formData, "staffId"),
+      confirmReactivateLoginAccess: formData.get("confirmReactivateLoginAccess") === "on"
+    });
+    const ctx = await getTenantContext();
+    await reactivateStaffLoginAccess(ctx, input);
+    revalidatePath("/staffboard");
+    revalidatePath("/staffboard/staff");
+    revalidatePath(`/staffboard/staff/${input.staffId}/edit`);
+    revalidatePath("/campus-core/users");
+    revalidatePath("/dashboard");
+    return { ok: true, message: "Login access reactivated. Existing role and branch assignments were preserved." };
+  } catch (error) {
+    return staffProfileFormError(error, "Unable to reactivate staff login access. Please try again.");
   }
 }
 

@@ -50,7 +50,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ) : null}
       <form action={updateTenantSettingsAction} className="premium-card grid gap-3 p-5 md:grid-cols-4">
         <input name="brandName" defaultValue={settings?.brandName ?? "JinaCampus"} />
-        <input name="brandByline" defaultValue={settings?.brandByline ?? "powered by Parshav Insights"} />
+        <input name="brandByline" defaultValue={settings?.brandByline ?? "powered by Parshwa Insights"} />
         <input name="timezone" defaultValue={settings?.timezone ?? "Asia/Kolkata"} />
         <button className="bg-brand-700 px-4 py-2 text-sm font-medium text-white">Save</button>
       </form>

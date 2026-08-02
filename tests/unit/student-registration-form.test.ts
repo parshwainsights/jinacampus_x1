@@ -22,6 +22,10 @@ describe("student registration admission-sheet upgrade", () => {
     expect(form).toContain("Admission Details");
     expect(form).toContain("Student Personal Details");
     expect(form).toContain("Parent / Guardian Details");
+    expect(form).toContain("Initial Class Assignment");
+    expect(form).toContain("name=\"initialClassSectionId\"");
+    expect(form).toContain("name=\"primaryGuardianRelation\"");
+    expect(form).toContain("name=\"primaryGuardianPhone\"");
     expect(form).toContain("Identity Documents");
     expect(form).toContain("Social / Demographic");
     expect(form).toContain("Address Details");

@@ -61,7 +61,7 @@ export async function getMobileStaffAttendanceStatus(ctx: TenantContext, input: 
   if (!staffProfile) throw new AppError("ACTIVE_STAFF_PROFILE_NOT_FOUND", "ACTIVE_STAFF_PROFILE_NOT_FOUND", 400);
   if (staffProfile.branch.status !== "ACTIVE") throw new AppError("STAFF_BRANCH_INACTIVE", "STAFF_BRANCH_INACTIVE", 400);
 
-  await requirePermission({ ctx, permission: "staffboard.attendance.self_scan", branchId: staffProfile.branchId });
+  await requirePermission({ ctx, permission: "staffboard.attendance.self_view", branchId: staffProfile.branchId });
 
   const attendanceDate = params.date
     ? normalizeDateOnly(params.date)

@@ -16,7 +16,7 @@ import {
 const password = z.string().min(8, "Password must be at least 8 characters.").max(200);
 const requiredLoginEmail = z.string().trim().toLowerCase().email("Enter a valid email address.").max(180);
 
-export const staffLoginRoleCodeSchema = z.enum(["STAFF", "TEACHER", "CLASS_TEACHER", "OFFICE_STAFF"]);
+export const staffLoginRoleCodeSchema = z.enum(["STAFF", "TEACHER", "OFFICE_STAFF"]);
 
 const staffProfileBaseSchema = z.object({
   branchId: idSchema,
@@ -83,6 +83,13 @@ export const disableStaffLoginAccessSchema = z.object({
   })
 }).strict();
 
+export const reactivateStaffLoginAccessSchema = z.object({
+  staffId: idSchema,
+  confirmReactivateLoginAccess: z.boolean().refine((value) => value, {
+    message: "Confirm that login access should be reactivated."
+  })
+}).strict();
+
 export const updateStaffProfileSchema = staffProfileBaseSchema.partial().extend({
   staffId: idSchema
 }).strict().refine(({ staffId: _staffId, ...value }) => hasAtLeastOneUpdateValue(value), {
@@ -100,5 +107,6 @@ export const listStaffProfilesSchema = z.object({
 export type CreateStaffProfileInput = z.infer<typeof createStaffProfileSchema>;
 export type CreateStaffLoginAccessInput = z.infer<typeof createStaffLoginAccessSchema>;
 export type DisableStaffLoginAccessInput = z.infer<typeof disableStaffLoginAccessSchema>;
+export type ReactivateStaffLoginAccessInput = z.infer<typeof reactivateStaffLoginAccessSchema>;
 export type UpdateStaffProfileInput = z.infer<typeof updateStaffProfileSchema>;
 export type ListStaffProfilesInput = z.infer<typeof listStaffProfilesSchema>;

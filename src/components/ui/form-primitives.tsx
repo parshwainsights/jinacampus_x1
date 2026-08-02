@@ -14,7 +14,7 @@ export function getFieldError(fieldErrors: FieldErrors | undefined, name: string
 
 export function RequiredMark() {
   return (
-    <span className="ml-2 rounded-full border border-brand-100 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-700">
+    <span className="ml-2 rounded-full border border-brand-100 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
       Required
     </span>
   );
@@ -59,7 +59,7 @@ export function FormField({
 }) {
   return (
     <div className={className}>
-      <label htmlFor={id} className="text-sm font-semibold text-slate-700">
+      <label htmlFor={id} className="text-sm font-semibold text-ink">
         {label}
         {required ? <RequiredMark /> : null}
       </label>

@@ -195,6 +195,12 @@ export const changeOwnPasswordSchema = z.object({
 });
 
 export const forgotPasswordSchema = z.object({
+  tenantSlug: z.string()
+    .trim()
+    .min(3, "Enter your School ID.")
+    .max(50)
+    .transform((value) => value.toLowerCase())
+    .refine((value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value), "Enter a valid School ID."),
   email: z.string().trim().email("Enter a valid email address.").max(180).transform((value) => value.toLowerCase())
 }).strict();
 

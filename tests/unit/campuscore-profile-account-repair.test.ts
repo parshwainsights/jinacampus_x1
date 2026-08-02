@@ -14,9 +14,11 @@ const mocks = vi.hoisted(() => {
   const tx = {
     branch: { findFirst: vi.fn(), update: vi.fn() },
     institution: { findFirst: vi.fn(), update: vi.fn() },
+    passkeyCredential: { deleteMany: vi.fn() },
     passwordCredential: { findUnique: vi.fn(), update: vi.fn(), upsert: vi.fn() },
     session: { updateMany: vi.fn() },
-    user: { findFirst: vi.fn(), update: vi.fn() },
+    tenant: { findUnique: vi.fn() },
+    user: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     userRoleAssignment: { findMany: vi.fn() }
   };
   const db = {
@@ -91,7 +93,18 @@ describe("CampusCore institution/profile and account repair", () => {
 
     expect(mocks.requirePermission).toHaveBeenCalledWith({ ctx, permission: "campuscore.institution.manage" });
     expect(mocks.tx.institution.findFirst).toHaveBeenCalledWith({
-      where: { id: institutionId, tenantId, status: { not: "ARCHIVED" } }
+      where: {
+        id: institutionId,
+        tenantId,
+        status: { not: "ARCHIVED" },
+        branches: {
+          some: {
+            tenantId,
+            id: { in: [branchId] },
+            status: { not: "ARCHIVED" }
+          }
+        }
+      }
     });
     expect(mocks.tx.institution.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: institutionId },
@@ -172,8 +185,18 @@ describe("CampusCore institution/profile and account repair", () => {
       where: { id: branchId, tenantId, status: { not: "ARCHIVED" } }
     });
     expect(mocks.tx.institution.findFirst).toHaveBeenCalledWith({
-      where: { id: institutionId, tenantId, status: { not: "ARCHIVED" } },
-      select: { id: true }
+      where: {
+        id: institutionId,
+        tenantId,
+        status: { not: "ARCHIVED" },
+        branches: {
+          some: {
+            tenantId,
+            id: { in: [branchId] },
+            status: { not: "ARCHIVED" }
+          }
+        }
+      }
     });
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
       action: "campuscore.branch.updated",
@@ -270,6 +293,8 @@ describe("CampusCore institution/profile and account repair", () => {
   it("admin reset password is permissioned, tenant scoped, hashed, and audit-safe", async () => {
     mocks.tx.user.findFirst.mockResolvedValue({ id: userId, tenantId, email: "teacher@example.test", status: "INVITED" });
     mocks.tx.passwordCredential.upsert.mockResolvedValue({ id: "credential-id" });
+    mocks.tx.session.updateMany.mockResolvedValue({ count: 2 });
+    mocks.tx.passkeyCredential.deleteMany.mockResolvedValue({ count: 1 });
     mocks.tx.user.update.mockResolvedValue({ id: userId, status: "ACTIVE" });
 
     await adminResetUserPasswordService(ctx, {
@@ -289,17 +314,31 @@ describe("CampusCore institution/profile and account repair", () => {
       create: expect.objectContaining({ userId, passwordHash: "hashed-password" }),
       update: expect.objectContaining({ passwordHash: "hashed-password", mustChange: true })
     }));
+    expect(mocks.tx.session.updateMany).toHaveBeenCalledWith({
+      where: { tenantId, userId, revokedAt: null },
+      data: { revokedAt: expect.any(Date) }
+    });
+    expect(mocks.tx.passkeyCredential.deleteMany).toHaveBeenCalledWith({
+      where: { tenantId, userId }
+    });
     expect(JSON.stringify(mocks.writeAuditLog.mock.calls)).not.toContain("new-password");
     expect(JSON.stringify(mocks.writeAuditLog.mock.calls)).not.toContain("hashed-password");
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
       action: "campuscore.user.password_reset",
-      metadata: { targetUserId: userId, passwordUpdated: true }
+      metadata: expect.objectContaining({
+        targetUserId: userId,
+        passwordUpdated: true,
+        sessionsRevoked: 2,
+        passkeysRemoved: 1,
+        mustChange: true
+      })
     }), mocks.tx);
   });
 
   it("change own password verifies the current password before hashing the replacement", async () => {
     mocks.tx.passwordCredential.findUnique.mockResolvedValue({ userId: actorUserId, passwordHash: "stored-hash" });
     mocks.tx.passwordCredential.update.mockResolvedValue({ userId: actorUserId });
+    mocks.tx.session.updateMany.mockResolvedValue({ count: 1 });
 
     await changeOwnPasswordService(ctx, {
       currentPassword: "old-password",
@@ -313,6 +352,14 @@ describe("CampusCore institution/profile and account repair", () => {
       where: { userId: actorUserId },
       data: expect.objectContaining({ passwordHash: "hashed-password", mustChange: false })
     }));
+    expect(mocks.tx.session.updateMany).toHaveBeenCalledWith({
+      where: {
+        tenantId,
+        userId: actorUserId,
+        revokedAt: null
+      },
+      data: { revokedAt: expect.any(Date) }
+    });
     expect(JSON.stringify(mocks.writeAuditLog.mock.calls)).not.toMatch(/old-password|new-password|stored-hash|hashed-password/);
   });
 
@@ -331,45 +378,64 @@ describe("CampusCore institution/profile and account repair", () => {
   });
 
   it("records public password recovery requests only for existing users without selecting password hashes", async () => {
-    mocks.tx.user.findFirst.mockResolvedValue({
+    mocks.tx.tenant.findUnique.mockResolvedValue({
+      id: tenantId,
+      name: "Demo Tenant",
+      status: "ACTIVE"
+    });
+    mocks.tx.user.findUnique.mockResolvedValue({
       id: userId,
       tenantId,
       email: "teacher@example.test",
+      status: "ACTIVE",
       userType: "STAFF",
-      tenant: { name: "Demo Tenant" },
       branchAccesses: [{ branchId, isPrimary: true }]
     });
 
     const result = await requestPasswordRecoveryService(
-      { email: "teacher@example.test" },
+      { tenantSlug: "school-a", email: "teacher@example.test" },
       { ipAddress: "127.0.0.1", userAgent: "vitest" }
     );
 
     expect(result).toEqual({ requested: true });
-    expect(mocks.tx.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.tx.tenant.findUnique).toHaveBeenCalledWith({
+      where: { slug: "school-a" },
+      select: { id: true, name: true, status: true }
+    });
+    expect(mocks.tx.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: {
-        email: "teacher@example.test",
-        status: { not: "DEACTIVATED" },
-        tenant: { status: "ACTIVE" }
+        tenantId_email: {
+          tenantId,
+          email: "teacher@example.test"
+        }
       }
     }));
-    expect(JSON.stringify(mocks.tx.user.findFirst.mock.calls[0][0].select)).not.toContain("passwordHash");
+    expect(JSON.stringify(mocks.tx.user.findUnique.mock.calls[0][0].select)).not.toContain("passwordHash");
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
       action: "auth.password_recovery_requested",
       entityType: "User",
       entityId: userId,
       metadata: {
         recoveryMode: "administrator_assisted",
-        emailDeliveryConfigured: false
+        emailDeliveryConfigured: false,
+        publicResetEnabled: false
       }
     }));
     expect(JSON.stringify(mocks.writeAuditLog.mock.calls)).not.toMatch(/passwordHash|reset token|raw password/i);
   });
 
   it("does not audit unknown public password recovery emails", async () => {
-    mocks.tx.user.findFirst.mockResolvedValue(null);
+    mocks.tx.tenant.findUnique.mockResolvedValue({
+      id: tenantId,
+      name: "Demo Tenant",
+      status: "ACTIVE"
+    });
+    mocks.tx.user.findUnique.mockResolvedValue(null);
 
-    const result = await requestPasswordRecoveryService({ email: "unknown@example.test" });
+    const result = await requestPasswordRecoveryService({
+      tenantSlug: "school-a",
+      email: "unknown@example.test"
+    });
 
     expect(result).toEqual({ requested: true });
     expect(mocks.writeAuditLog).not.toHaveBeenCalled();

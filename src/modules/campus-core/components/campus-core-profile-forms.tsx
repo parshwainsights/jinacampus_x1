@@ -581,12 +581,18 @@ export function AdminResetPasswordForm({ user }: { user: Pick<UserRecord, "id" |
   );
 }
 
-export function ChangeOwnPasswordForm({ userEmail }: { userEmail: string }) {
+export function ChangeOwnPasswordForm({
+  userEmail,
+  backHref = "/dashboard"
+}: {
+  userEmail: string;
+  backHref?: string;
+}) {
   const [state, formAction, pending] = useActionState(changeOwnPasswordAction, initialState);
 
   return (
     <form action={formAction}>
-      <FormShell title="Change Password" description="Update your own account password. Your current password is required." backHref="/dashboard" state={state} pending={pending} submitLabel="Update Password" pendingLabel="Updating...">
+      <FormShell title="Change Password" description="Update your own account password. Your current password is required." backHref={backHref} state={state} pending={pending} submitLabel="Update Password" pendingLabel="Updating...">
         <input type="email" name="username" value={userEmail} autoComplete="username" readOnly tabIndex={-1} className="sr-only" />
         <div className="grid gap-4 md:grid-cols-2">
           <FormField id="current-password" label="Current Password" required error={fieldError(state, "currentPassword")}>

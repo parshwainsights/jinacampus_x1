@@ -15,6 +15,7 @@ import {
 import { hashPassword } from "@/lib/auth/password";
 import { createRawSessionToken, getSessionExpiresAt, hashSessionToken } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { hasPlatformAdminRole, hasPrincipalRole } from "@/lib/rbac/roles";
 import type { TenantContext } from "@/lib/tenant/context";
 import { CAMPUS_CORE_AUDIT_EVENTS } from "@/modules/campus-core/audit-events";
 import { getPostLoginRedirectPath } from "@/modules/campus-core/auth-redirect";
@@ -28,7 +29,7 @@ import { validateSchoolId } from "@/modules/campus-core/tenant-login-policy";
 
 export const OTP_REQUEST_PUBLIC_MESSAGE = "If the number is registered, an OTP has been sent.";
 export const PASSWORD_RESET_REQUEST_PUBLIC_MESSAGE =
-  "If the account is registered and eligible, an OTP has been sent to the linked contact number.";
+  "If this account is eligible for password recovery, instructions will be provided.";
 export const OTP_VERIFY_ERROR_MESSAGE = "The OTP is invalid, expired, or has reached the attempt limit.";
 
 export class OtpAuthError extends Error {
@@ -86,7 +87,7 @@ function roleCodes(user: AuthUser, now: Date) {
 
 function canUseAdminOtp(user: AuthUser, now: Date) {
   const roles = roleCodes(user, now);
-  return roles.includes("TENANT_OWNER") || roles.includes("ADMIN");
+  return hasPrincipalRole(roles) && !hasPlatformAdminRole(roles);
 }
 
 function auditContext(
@@ -251,7 +252,7 @@ export async function requestAdminLoginOtp(input: AdminOtpRequestInput, metadata
 
 export async function requestForgotPasswordOtp(input: ForgotPasswordRequestInput, metadata: RequestMetadata = {}) {
   const resolved = await findActiveTenantAndUserByIdentifier(db, input);
-  if (!resolved) return { requested: true };
+  if (!resolved || !canUseAdminOtp(resolved.user, new Date())) return { requested: true };
 
   await createOtpForUser({
     ...resolved,
@@ -366,7 +367,7 @@ export async function resetPasswordWithOtp(input: ForgotPasswordResetInput, meta
 
   const result = await db.$transaction(async (tx) => {
     const resolved = await findActiveTenantAndUserByIdentifier(tx, input);
-    if (!resolved) return null;
+    if (!resolved || !canUseAdminOtp(resolved.user, now)) return null;
 
     const otpRecord = await tx.loginOtp.findFirst({
       where: {

@@ -2,31 +2,13 @@
 
 import type { FocusEvent } from "react";
 import { useState } from "react";
-import {
-  BookOpenCheck,
-  Building2,
-  CalendarCheck2,
-  ChevronLeft,
-  ChevronRight,
-  ClipboardList,
-  FileClock,
-  Gauge,
-  GraduationCap,
-  Landmark,
-  LayoutDashboard,
-  ListChecks,
-  NotebookTabs,
-  QrCode,
-  ScanLine,
-  ScrollText,
-  Settings,
-  ShieldCheck,
-  UsersRound,
-  type LucideIcon
-} from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { brandingInitials, type AppShellBranding } from "./branding";
+import { AppMark } from "@/components/brand/app-mark";
+import { BrandLogo } from "@/components/brand/brand-logo";
+import type { AppShellBranding } from "./branding";
+import { NavigationIcon } from "./navigation-icon";
 import { getActiveNavHref, isNavItemActive, type MobileNavShortcut, type NavGroup } from "./navigation";
 
 type SidebarNavProps = {
@@ -36,50 +18,19 @@ type SidebarNavProps = {
   branding?: AppShellBranding;
 };
 
-const navIconsByHref: Record<string, LucideIcon> = {
-  "/dashboard": LayoutDashboard,
-  "/campus-core/institutions": Landmark,
-  "/campus-core/branches": Building2,
-  "/campus-core/academic-years": CalendarCheck2,
-  "/campus-core/users": UsersRound,
-  "/campus-core/roles": ShieldCheck,
-  "/campus-core/settings": Settings,
-  "/campus-core/audit-logs": FileClock,
-  "/academia": GraduationCap,
-  "/academia/students": UsersRound,
-  "/academia/guardians": UsersRound,
-  "/academia/enrollments": NotebookTabs,
-  "/academia/classes": BookOpenCheck,
-  "/academia/sections": ListChecks,
-  "/academia/class-sections": ClipboardList,
-  "/academia/subjects": BookOpenCheck,
-  "/academia/attendance": CalendarCheck2,
-  "/academia/attendance/reports": ScrollText,
-  "/staffboard": ClipboardList,
-  "/staffboard/staff": UsersRound,
-  "/staffboard/categories": ListChecks,
-  "/staffboard/attendance": CalendarCheck2,
-  "/staffboard/attendance/qr": QrCode,
-  "/staffboard/attendance/scan": ScanLine,
-  "/staffboard/attendance/reports": ScrollText
-};
-
-function IconForHref({ href, className }: { href: string; className?: string }) {
-  const Icon = navIconsByHref[href] ?? Gauge;
-  return <Icon aria-hidden="true" className={className ?? "h-4 w-4"} />;
-}
-
 function navItemClass(isActive: boolean, variant: SidebarNavProps["variant"], collapsed = false) {
-  const base =
-    "relative rounded-xl border text-sm font-semibold transition premium-focus";
-  const state = isActive
-    ? "border-brand-100 bg-brand-50/90 text-brand-800 shadow-sm shadow-brand-900/5 ring-1 ring-brand-100 before:absolute before:bottom-2 before:left-1.5 before:top-2 before:w-1 before:rounded-full before:bg-gradient-to-b before:from-brand-500 before:to-cyan-400"
-    : "border-transparent text-slate-600 hover:border-white/70 hover:bg-white/80 hover:text-slate-950";
+  const base = "relative rounded-lg border text-sm font-semibold transition premium-focus";
 
   if (variant === "mobile") {
+    const state = isActive
+      ? "border-brand-100 bg-brand-50 text-brand-800"
+      : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-ink";
     return `${base} ${state} flex min-h-11 w-full items-center gap-2 px-4 py-2.5`;
   }
 
+  const state = isActive
+    ? "border-white/15 bg-white/10 text-white before:absolute before:bottom-2 before:left-1.5 before:top-2 before:w-1 before:rounded-full before:bg-campus-teal"
+    : "border-transparent text-slate-300 hover:border-white/10 hover:bg-white/[0.07] hover:text-white";
   return `${base} ${state} flex min-h-11 items-center gap-3 py-2 ${collapsed ? "justify-center px-2" : "px-3"}`;
 }
 
@@ -100,7 +51,7 @@ export function SidebarNav({ groups, variant, primaryItems = [], branding }: Sid
   if (variant === "mobile") {
     const activeItem = groups.flatMap((group) => group.items).find((item) => item.href === activeHref);
     return (
-      <div className="border-b border-white/70 bg-white/80 px-3 py-3 shadow-sm shadow-slate-950/5 backdrop-blur-xl lg:hidden" data-mobile-navigation="true">
+      <div className="border-b border-campus-border bg-white px-3 py-3 shadow-sm lg:hidden" data-mobile-navigation="true">
         {primaryItems.length > 0 ? (
           <nav
             aria-label="Primary mobile shortcuts"
@@ -116,14 +67,14 @@ export function SidebarNav({ groups, variant, primaryItems = [], branding }: Sid
                   aria-current={isActive ? "page" : undefined}
                   className={`${navItemClass(isActive, "mobile")} justify-center text-center`}
                 >
-                  <IconForHref href={item.href} />
+                  <NavigationIcon href={item.href} />
                   <span>{item.title}</span>
                 </Link>
               );
             })}
           </nav>
         ) : null}
-        <details className="rounded-2xl border border-white/70 bg-white/80 shadow-sm backdrop-blur">
+        <details className="rounded-lg border border-campus-border bg-white shadow-sm">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-slate-900 premium-focus [&::-webkit-details-marker]:hidden">
             <span>Menu</span>
             <span className="min-w-0 truncate text-xs font-medium text-slate-500">{activeItem?.title ?? "Dashboard"}</span>
@@ -146,7 +97,7 @@ export function SidebarNav({ groups, variant, primaryItems = [], branding }: Sid
                         aria-current={isActive ? "page" : undefined}
                         className={navItemClass(isActive, "mobile")}
                       >
-                        <IconForHref href={item.href} />
+                        <NavigationIcon href={item.href} />
                         <span>{item.title}</span>
                       </Link>
                     );
@@ -163,7 +114,7 @@ export function SidebarNav({ groups, variant, primaryItems = [], branding }: Sid
   return (
     <aside
       aria-label="Dashboard navigation"
-      className={`sticky top-0 hidden h-screen max-h-screen shrink-0 flex-col overflow-hidden border-r border-white/70 bg-white/[0.72] py-5 shadow-[12px_0_40px_rgba(15,23,42,0.05)] backdrop-blur-xl transition-[width,padding] duration-200 ease-out motion-reduce:transition-none lg:flex ${isCollapsed ? "w-[5.25rem] px-3" : "w-72 px-4"}`}
+      className={`sticky top-0 hidden h-screen max-h-screen shrink-0 flex-col overflow-hidden border-r border-white/10 bg-sidebar py-5 shadow-[10px_0_28px_rgba(11,22,56,0.10)] transition-[width,padding] duration-200 ease-out motion-reduce:transition-none lg:flex ${isCollapsed ? "w-[5.25rem] px-3" : "w-72 px-4"}`}
       data-sidebar-collapsible="true"
       data-sidebar-state={isCollapsed ? "collapsed" : "expanded"}
       onBlur={(event) => handleSidebarBlur(event, () => setIsRailActive(false))}
@@ -178,25 +129,23 @@ export function SidebarNav({ groups, variant, primaryItems = [], branding }: Sid
       }}
     >
       <div className="shrink-0 pb-5">
-        <div className={`flex min-w-0 items-center rounded-2xl border border-white/70 bg-white/[0.58] px-3 py-3 shadow-sm shadow-slate-950/5 transition-all duration-200 ${isCollapsed ? "justify-center" : "gap-3"}`}>
-          {branding?.logoUrl ? (
-            <img src={branding.logoUrl} alt={`${brandName} logo`} className="h-10 w-10 shrink-0 rounded-2xl border border-white/80 object-cover shadow-sm" />
+        <div className={`flex min-h-16 min-w-0 items-center transition-all duration-200 ${isCollapsed ? "justify-center" : "px-1"}`}>
+          {isCollapsed ? (
+            <AppMark className="h-11 w-11" priority />
           ) : (
-            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-600 to-cyan-500 text-sm font-semibold text-white shadow-sm shadow-brand-900/20 ring-1 ring-white/70">
-              {brandingInitials(brandName)}
-            </span>
+            <BrandLogo variant="inverse" className="w-full max-w-[13rem]" priority />
           )}
-          <div className={isCollapsed ? "sr-only" : "min-w-0 transition-opacity duration-200"}>
-            <div className="truncate text-lg font-semibold tracking-tight text-slate-950">{brandName}</div>
-            <div className="truncate text-xs font-medium text-slate-500">JinaCampus School OS</div>
-          </div>
+        </div>
+        <div className={isCollapsed ? "sr-only" : "mt-4 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-3"}>
+          <p className="text-[11px] font-semibold uppercase text-slate-400">Institution</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white">{brandName}</p>
         </div>
         <button
           type="button"
           aria-expanded={!isCollapsed}
           aria-label={isPinnedOpen ? "Collapse sidebar" : "Pin sidebar open"}
           aria-pressed={isPinnedOpen}
-          className="mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/70 bg-white/70 px-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-white hover:text-brand-700 premium-focus"
+          className="mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white premium-focus"
           data-sidebar-collapse-toggle="true"
           onClick={() => {
             setIsPinnedOpen((current) => !current);
@@ -214,7 +163,7 @@ export function SidebarNav({ groups, variant, primaryItems = [], branding }: Sid
       >
         {groups.map((group) => (
           <div key={group.title}>
-            <p className={isCollapsed ? "sr-only" : "px-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400"}>{group.title}</p>
+            <p className={isCollapsed ? "sr-only" : "px-3 text-[11px] font-bold uppercase text-slate-500"}>{group.title}</p>
             <div className="mt-2 space-y-1">
               {group.items.map((item) => {
                 const isActive = isNavItemActive(item, pathname, activeHref);
@@ -227,8 +176,8 @@ export function SidebarNav({ groups, variant, primaryItems = [], branding }: Sid
                     className={navItemClass(isActive, "desktop", isCollapsed)}
                     title={isCollapsed ? item.title : undefined}
                   >
-                    <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${isActive ? "bg-white/90 text-brand-700 shadow-sm" : "bg-white/60 text-slate-500"}`}>
-                      <IconForHref href={item.href} />
+                    <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${isActive ? "bg-white text-brand-700" : "bg-white/[0.07] text-slate-400"}`}>
+                      <NavigationIcon href={item.href} />
                     </span>
                     <span className={isCollapsed ? "sr-only" : "min-w-0 truncate"}>{item.title}</span>
                   </Link>

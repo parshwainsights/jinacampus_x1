@@ -7,15 +7,21 @@ function source(path: string) {
 }
 
 describe("profile create UI and actions", () => {
-  it("wires the class create form to the audited Academia service", () => {
-    const pageSource = source("src/app/(dashboard)/academia/classes/page.tsx");
+  it("wires the guided Academic Setup forms to audited Academia services", () => {
+    const pageSource = source("src/app/(dashboard)/academia/setup/page.tsx");
+    const formSource = source("src/modules/academia/components/academic-setup-forms.tsx");
     const actionSource = source("src/modules/academia/actions/profile.actions.ts");
 
-    expect(pageSource).toContain("createClassAction");
-    expect(pageSource).toContain("name=\"code\"");
-    expect(pageSource).toContain("name=\"name\"");
-    expect(pageSource).toContain("Add Class");
+    expect(pageSource).toContain("Academic Setup");
+    expect(formSource).toContain("createClassAction");
+    expect(formSource).toContain("createSectionAction");
+    expect(formSource).toContain("createClassSectionAction");
+    expect(formSource).toContain("createSubjectAction");
+    expect(formSource).toContain("Create Class Section");
     expect(actionSource).toContain("createClass(ctx, input)");
+    expect(actionSource).toContain("createSection(ctx, input)");
+    expect(actionSource).toContain("createClassSection(ctx, input)");
+    expect(actionSource).toContain("createSubject(ctx, input)");
     expect(actionSource).toContain("getTenantContext()");
   });
 
@@ -38,9 +44,11 @@ describe("profile create UI and actions", () => {
     expect(registrationFormSource).toContain("name=\"admissionNumber\"");
     expect(registrationFormSource).toContain("name=\"fullName\"");
     expect(registrationFormSource).toContain("name=\"aadhaarNumber\"");
+    expect(registrationFormSource).toContain("name=\"primaryGuardianRelation\"");
+    expect(registrationFormSource).toContain("name=\"initialClassSectionId\"");
     expect(registrationFormSource).toContain("Register Student");
     expect(registrationFormSource).toContain("error={admissionNumberError}");
-    expect(actionSource).toContain("createStudent(ctx, input)");
+    expect(actionSource).toContain("createStudentRegistration(ctx, input)");
     expect(actionSource).not.toContain("tenantId:");
   });
 
@@ -71,8 +79,19 @@ describe("profile create UI and actions", () => {
     expect(formSource).toContain("Create Login Access");
     expect(formSource).toContain("Reset Password");
     expect(formSource).toContain("Disable Login Access");
+    expect(formSource).toContain("Reactivate Login Access");
     expect(formSource).toContain("createStaffLoginAccessAction");
     expect(formSource).toContain("disableStaffLoginAccessAction");
+    expect(formSource).toContain("reactivateStaffLoginAccessAction");
     expect(formSource).not.toMatch(/passwordHash|tokenHash/);
+  });
+
+  it("consolidates school staff account creation under Staff Profiles", () => {
+    const usersPageSource = source("src/app/(dashboard)/campus-core/users/page.tsx");
+
+    expect(usersPageSource).toContain("Create staff and login access together");
+    expect(usersPageSource).toContain("Open Staff Profiles");
+    expect(usersPageSource).toContain("/staffboard/staff");
+    expect(usersPageSource).not.toContain("<UserCreateForm");
   });
 });

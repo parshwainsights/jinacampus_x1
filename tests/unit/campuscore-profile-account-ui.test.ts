@@ -20,7 +20,7 @@ const userRoutes = [
   "src/app/(dashboard)/campus-core/users/[userId]/page.tsx",
   "src/app/(dashboard)/campus-core/users/[userId]/edit/page.tsx",
   "src/app/(dashboard)/campus-core/users/[userId]/reset-password/page.tsx",
-  "src/app/(dashboard)/account/change-password/page.tsx"
+  "src/app/(account)/account/change-password/page.tsx"
 ] as const;
 
 describe("CampusCore profile and account UI repair", () => {
@@ -79,7 +79,7 @@ describe("CampusCore profile and account UI repair", () => {
 
   it("adds browser-friendly autocomplete hints on login and password forms", () => {
     const loginSource = source("src/components/auth/login-form.tsx");
-    const changePasswordSource = source("src/app/(dashboard)/account/change-password/page.tsx");
+    const changePasswordSource = source("src/app/(account)/account/change-password/page.tsx");
     const formSource = source("src/modules/campus-core/components/campus-core-profile-forms.tsx");
 
     expect(loginSource).toContain("autoComplete=\"username\"");
@@ -120,12 +120,12 @@ describe("CampusCore profile and account UI repair", () => {
     expect(source("src/app/(dashboard)/campus-core/branches/[branchId]/edit/page.tsx")).toContain("PermissionState");
   });
 
-  it("adds list-page profile/edit links and a topbar change-password link", () => {
+  it("adds list-page profile/edit links and navbar account actions", () => {
     expect(source("src/app/(dashboard)/campus-core/institutions/page.tsx")).toContain("/campus-core/institutions/${i.id}/edit");
     expect(source("src/app/(dashboard)/campus-core/branches/page.tsx")).toContain("/campus-core/branches/${b.id}/edit");
     expect(source("src/app/(dashboard)/campus-core/users/page.tsx")).toContain("/campus-core/users/${u.id}/reset-password");
-    expect(source("src/components/app-shell/topbar.tsx")).toContain("/account/change-password");
-    expect(source("src/components/app-shell/topbar.tsx")).toContain("/api/auth/logout");
+    expect(source("src/components/app-shell/navbar-user-menu.tsx")).toContain("/account/change-password");
+    expect(source("src/components/app-shell/navbar-user-menu.tsx")).toContain("/api/auth/logout");
   });
 
   it("keeps profile and account forms mobile-safe", () => {

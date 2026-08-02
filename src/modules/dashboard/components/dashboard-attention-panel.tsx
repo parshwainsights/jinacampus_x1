@@ -12,10 +12,10 @@ type DashboardAttentionPanelProps = {
 };
 
 const toneClasses: Record<DashboardAttentionTone, string> = {
-  amber: "border-amber-200 bg-amber-50/90 text-amber-900",
-  rose: "border-rose-200 bg-rose-50/90 text-rose-900",
-  sky: "border-cyan-200 bg-cyan-50/90 text-cyan-900",
-  slate: "border-slate-200 bg-white/90 text-slate-800"
+  amber: "border-amber-200 bg-amber-50 text-amber-900",
+  rose: "border-rose-200 bg-rose-50 text-rose-900",
+  sky: "border-teal-200 bg-teal-50 text-teal-900",
+  slate: "border-campus-border bg-white text-slate-800"
 };
 
 export function DashboardAttentionPanel({ items }: DashboardAttentionPanelProps) {
@@ -26,7 +26,7 @@ export function DashboardAttentionPanel({ items }: DashboardAttentionPanelProps)
       {items.map((item) => (
         <div
           key={`${item.label}-${item.value}`}
-          className={`min-w-0 rounded-2xl border px-4 py-3 shadow-sm backdrop-blur ${toneClasses[item.tone ?? "slate"]}`}
+          className={`motion-soft-hover min-w-0 rounded-lg border px-4 py-3 shadow-sm ${toneClasses[item.tone ?? "slate"]}`}
           data-dashboard-attention-item="true"
         >
           <div className="flex items-start justify-between gap-3">

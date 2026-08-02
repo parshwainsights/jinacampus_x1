@@ -1,6 +1,12 @@
 import type { StudentAttendanceStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { hasPlatformAdminRole, hasPrincipalRole, hasTeacherRole } from "@/lib/rbac/roles";
 import type { TenantContext } from "@/lib/tenant/context";
+import {
+  buildAttendanceTrendPoints,
+  getDashboardTrendDates,
+  type DashboardAttendanceTrendPoint
+} from "./attendance-trend";
 import { activeBranchFilter, resolveDashboardScope } from "./shared";
 
 export type StudentAttendanceDashboardMetrics = {
@@ -10,7 +16,10 @@ export type StudentAttendanceDashboardMetrics = {
   absent: number;
   late: number;
   halfDay: number;
+  eligibleClassSections: number;
+  classesMarked: number;
   classesNotMarked: number;
+  markingRate: number | null;
 };
 
 function statusCount(
@@ -20,12 +29,23 @@ function statusCount(
   return groups.find((group) => group.status === status)?._count._all ?? 0;
 }
 
+function isAssignedTeacherScope(ctx: TenantContext) {
+  const roleCodes = ctx.roleCodes ?? [];
+  return hasTeacherRole(roleCodes) &&
+    !hasPrincipalRole(roleCodes) &&
+    !hasPlatformAdminRole(roleCodes);
+}
+
 export async function getStudentAttendanceDashboardMetrics(
   ctx: TenantContext,
   input: unknown = {}
 ): Promise<StudentAttendanceDashboardMetrics> {
   const scope = await resolveDashboardScope(ctx, input);
   const branchFilter = activeBranchFilter(scope);
+  const teacherScope = isAssignedTeacherScope(ctx);
+  const assignedClassSection = teacherScope
+    ? { classTeacherUserId: ctx.userId }
+    : {};
   if (!scope.activeAcademicYearId) {
     return {
       date: scope.dateString,
@@ -34,7 +54,10 @@ export async function getStudentAttendanceDashboardMetrics(
       absent: 0,
       late: 0,
       halfDay: 0,
-      classesNotMarked: 0
+      eligibleClassSections: 0,
+      classesMarked: 0,
+      classesNotMarked: 0,
+      markingRate: null
     };
   }
 
@@ -46,7 +69,8 @@ export async function getStudentAttendanceDashboardMetrics(
         branchId: branchFilter,
         academicYearId: scope.activeAcademicYearId,
         attendanceDate: scope.date,
-        sessionType: "FULL_DAY"
+        sessionType: "FULL_DAY",
+        ...(teacherScope ? { classSection: assignedClassSection } : {})
       },
       _count: { _all: true }
     }),
@@ -55,7 +79,8 @@ export async function getStudentAttendanceDashboardMetrics(
         tenantId: ctx.tenantId,
         branchId: branchFilter,
         academicYearId: scope.activeAcademicYearId,
-        status: "ACTIVE"
+        status: "ACTIVE",
+        ...assignedClassSection
       },
       select: {
         id: true,
@@ -90,9 +115,11 @@ export async function getStudentAttendanceDashboardMetrics(
   ]);
 
   const marked = statusGroups.reduce((total, group) => total + group._count._all, 0);
-  const classesNotMarked = classSections.filter(
+  const eligibleClassSections = classSections.filter((classSection) => classSection.enrollments.length > 0);
+  const classesNotMarked = eligibleClassSections.filter(
     (classSection) => classSection.enrollments.length > 0 && classSection.studentAttendanceRecords.length === 0
   ).length;
+  const classesMarked = eligibleClassSections.length - classesNotMarked;
 
   return {
     date: scope.dateString,
@@ -101,6 +128,38 @@ export async function getStudentAttendanceDashboardMetrics(
     absent: statusCount(statusGroups, "ABSENT"),
     late: statusCount(statusGroups, "LATE"),
     halfDay: statusCount(statusGroups, "HALF_DAY"),
-    classesNotMarked
+    eligibleClassSections: eligibleClassSections.length,
+    classesMarked,
+    classesNotMarked,
+    markingRate: eligibleClassSections.length > 0
+      ? Math.round((classesMarked / eligibleClassSections.length) * 100)
+      : null
   };
+}
+
+export async function getStudentAttendanceDashboardTrend(
+  ctx: TenantContext,
+  input: unknown = {}
+): Promise<DashboardAttendanceTrendPoint[]> {
+  const scope = await resolveDashboardScope(ctx, input);
+  const dates = getDashboardTrendDates(scope.date);
+  if (!scope.activeAcademicYearId) return buildAttendanceTrendPoints(dates, []);
+
+  const branchFilter = activeBranchFilter(scope);
+  const teacherScope = isAssignedTeacherScope(ctx);
+  const groups = await db.studentAttendanceRecord.groupBy({
+    by: ["attendanceDate", "status"],
+    where: {
+      tenantId: ctx.tenantId,
+      branchId: branchFilter,
+      academicYearId: scope.activeAcademicYearId,
+      attendanceDate: { gte: dates[0], lte: scope.date },
+      sessionType: "FULL_DAY",
+      ...(teacherScope ? { classSection: { classTeacherUserId: ctx.userId } } : {})
+    },
+    _count: { _all: true },
+    orderBy: { attendanceDate: "asc" }
+  });
+
+  return buildAttendanceTrendPoints(dates, groups);
 }

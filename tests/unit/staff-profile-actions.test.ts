@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@/lib/errors";
 import {
   createStaffProfileAction,
+  reactivateStaffLoginAccessAction,
   updateStaffProfileAction
 } from "@/modules/staffboard-lite/actions/staff-profile.actions";
 import type { TenantContext } from "@/lib/tenant/context";
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => {
   const createStaffProfile = vi.fn();
   const deactivateStaffProfile = vi.fn();
   const disableStaffLoginAccess = vi.fn();
+  const reactivateStaffLoginAccess = vi.fn();
   const updateStaffProfile = vi.fn();
 
   return {
@@ -22,6 +24,7 @@ const mocks = vi.hoisted(() => {
     createStaffProfile,
     deactivateStaffProfile,
     disableStaffLoginAccess,
+    reactivateStaffLoginAccess,
     updateStaffProfile
   };
 });
@@ -33,6 +36,7 @@ vi.mock("@/modules/staffboard-lite/services/staff-profile.service", () => ({
   createStaffProfile: mocks.createStaffProfile,
   deactivateStaffProfile: mocks.deactivateStaffProfile,
   disableStaffLoginAccess: mocks.disableStaffLoginAccess,
+  reactivateStaffLoginAccess: mocks.reactivateStaffLoginAccess,
   updateStaffProfile: mocks.updateStaffProfile
 }));
 
@@ -82,6 +86,7 @@ beforeEach(() => {
   mocks.createStaffProfile.mockReset();
   mocks.deactivateStaffProfile.mockReset();
   mocks.disableStaffLoginAccess.mockReset();
+  mocks.reactivateStaffLoginAccess.mockReset();
   mocks.updateStaffProfile.mockReset();
 });
 
@@ -125,6 +130,39 @@ describe("staff profile server actions", () => {
       initialPassword: "temporary-123",
       confirmInitialPassword: "temporary-123"
     }));
+  });
+
+  it("preserves the exact temporary password value for server-side hashing", async () => {
+    await createStaffProfileAction({ ok: false }, staffFormData({
+      email: "staff-login@example.test",
+      createLoginAccess: "on",
+      loginRoleCode: "STAFF",
+      initialPassword: " Temporary-123 ",
+      confirmInitialPassword: " Temporary-123 "
+    }));
+
+    expect(mocks.createStaffProfile).toHaveBeenCalledWith(ctx, expect.objectContaining({
+      initialPassword: " Temporary-123 ",
+      confirmInitialPassword: " Temporary-123 "
+    }));
+  });
+
+  it("reactivates a disabled linked login without creating another user", async () => {
+    const formData = new FormData();
+    formData.set("staffId", staffId);
+    formData.set("confirmReactivateLoginAccess", "on");
+
+    const result = await reactivateStaffLoginAccessAction({ ok: false }, formData);
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Login access reactivated. Existing role and branch assignments were preserved."
+    });
+    expect(mocks.reactivateStaffLoginAccess).toHaveBeenCalledWith(ctx, {
+      staffId,
+      confirmReactivateLoginAccess: true
+    });
+    expect(mocks.createStaffLoginAccess).not.toHaveBeenCalled();
   });
 
   it("returns a safe field-level error for duplicate staff login emails", async () => {

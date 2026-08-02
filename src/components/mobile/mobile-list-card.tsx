@@ -16,7 +16,7 @@ type MobileListCardProps = {
 export function MobileListCard({ title, subtitle, status, meta = [], actions }: MobileListCardProps) {
   return (
     <article
-      className="rounded-2xl border border-white/80 bg-white/92 p-4 shadow-sm shadow-slate-950/6"
+      className="dashboard-glass-panel p-4"
       data-mobile-list-card="true"
     >
       <div className="flex items-start justify-between gap-3">
@@ -29,7 +29,7 @@ export function MobileListCard({ title, subtitle, status, meta = [], actions }: 
       {meta.length > 0 ? (
         <dl className="mt-4 grid gap-2 text-xs">
           {meta.map((item) => (
-            <div key={item.label} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+            <div key={item.label} className="flex items-start justify-between gap-3 rounded-lg bg-surface-muted px-3 py-2">
               <dt className="font-medium text-slate-500">{item.label}</dt>
               <dd className="min-w-0 text-right font-semibold text-slate-800">{item.value}</dd>
             </div>

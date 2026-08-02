@@ -10,8 +10,8 @@ Schools, institutions, branches, and roles do not log in. Users log in.
 
 There are now two login experiences:
 
-- School users use `/login` with School ID, email, and password.
-- JinaCampus Super Admin / Administrator users use `/administrator/login` with email and password.
+- School users use `/login` with School ID, employee code or email, and a passkey or password.
+- JinaCampus Administrator users use `/administrator/login` with email and password.
 
 The public term is **School ID**. The database can continue to store this value in `Tenant.slug` to avoid an unnecessary migration.
 
@@ -42,8 +42,8 @@ The selected-school dashboard route is an Administrator View inspection page. It
 School login accepts:
 
 - School ID
-- email
-- password
+- employee code or email
+- passkey when registered, or a case-sensitive password fallback
 
 Supported URLs:
 
@@ -86,12 +86,10 @@ Platform permissions:
 - `platform.user.manage`
 - `platform.audit.view`
 
-Platform roles:
-
-- `TENANT_OWNER`
-- `SUPER_ADMIN`
-- `ADMINISTRATOR`
-- existing `ADMIN` remains platform-capable for Base MVP compatibility
+The only canonical platform role is `ADMINISTRATOR`. It is provisioned through
+an approved operator process and is not assignable from school user management.
+Legacy school-admin roles are Principal compatibility aliases and do not grant
+platform access.
 
 Principal remains a school role and is not the same as JinaCampus Administrator.
 

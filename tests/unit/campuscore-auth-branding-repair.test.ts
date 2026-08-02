@@ -16,7 +16,7 @@ describe("CampusCore auth context and institution branding repair", () => {
     expect(route).toContain("db.session.updateMany");
     expect(route).toContain("revokedAt");
     expect(route).toContain("response.cookies.delete(env.SESSION_COOKIE_NAME)");
-    expect(route).toContain("new URL(\"/login\", request.url)");
+    expect(route).toContain("new URL(\"/\", request.url)");
     expect(route).toContain("CAMPUS_CORE_AUDIT_EVENTS.AUTH_LOGOUT");
     expect(source("src/modules/campus-core/audit-events.ts")).toContain("campuscore.auth.logout");
     expect(route).not.toContain("passwordHash");
@@ -32,22 +32,22 @@ describe("CampusCore auth context and institution branding repair", () => {
     expect(route).toContain("SCHOOL_LOGIN_ERROR_MESSAGE");
     expect(source("src/modules/campus-core/tenant-login-policy.ts")).toContain("Invalid School ID, email, or password.");
     expect(source("src/components/auth/login-form.tsx")).toContain("Login failed. Please check your credentials.");
-    expect(route).toContain("setSessionCookie(rawToken, expiresAt)");
-    expect(route).toContain("getPostLoginRedirectPath(roleCodes)");
-    expect(route).toContain("return NextResponse.json({ ok: true, redirectTo");
+    expect(route).toContain("setSessionCookie(session.rawToken, session.expiresAt)");
+    expect(route).toContain("createLoginSession");
+    expect(route).toContain("redirectTo: session.redirectTo");
     expect(loginForm).toContain("result.redirectTo");
     expect(route).not.toMatch(/NextResponse\.json\([^)]*passwordHash/);
     expect(route).not.toMatch(/NextResponse\.json\([^)]*tokenHash/);
   });
 
   it("protects dashboard route families including Academia and account pages", () => {
-    const middleware = source("middleware.ts");
+    const middleware = source("proxy.ts");
 
     expect(middleware).toContain("\"/campus-core\"");
     expect(middleware).toContain("\"/academia\"");
     expect(middleware).toContain("\"/staffboard\"");
     expect(middleware).toContain("\"/account\"");
-    expect(middleware).toContain("new URL(\"/login\", request.url)");
+    expect(middleware).toContain("new URL(\"/\", request.url)");
   });
 
   it("resolves tenant-scoped role labels and institution branding server-side", () => {

@@ -4,13 +4,20 @@ import { writeAuditLog } from "@/lib/audit/audit-log";
 import type { TenantContext } from "@/lib/tenant/context";
 import { ACADEMIA_AUDIT_EVENTS } from "@/modules/academia/audit-events";
 import {
+  type CreateStudentInput,
   createStudentSchema,
   maskAadhaarNumber,
   maskBankAccountNumber,
   updateStudentSchema
 } from "@/modules/academia/schemas";
 import { idSchema, studentStatusSchema } from "@/modules/academia/schemas/shared";
-import { conflict, displayName, ensureActiveBranch, requireBranchPermission } from "./shared";
+import {
+  type AcademiaDbClient,
+  conflict,
+  displayName,
+  ensureActiveBranch,
+  requireBranchPermission
+} from "./shared";
 
 function lastFourDigits(value: string) {
   return value.replace(/\D/g, "").slice(-4);
@@ -32,55 +39,61 @@ function resolveStudentNames(data: {
   };
 }
 
+export async function createStudentRecord(
+  tx: AcademiaDbClient,
+  ctx: TenantContext,
+  data: CreateStudentInput
+) {
+  await ensureActiveBranch(tx, ctx, data.branchId);
+
+  const existing = await tx.student.findFirst({
+    where: { tenantId: ctx.tenantId, admissionNumber: data.admissionNumber },
+    select: { id: true }
+  });
+  if (existing) throw conflict("STUDENT_ADMISSION_NUMBER_EXISTS");
+
+  const {
+    aadhaarNumber,
+    bankAccountNumber,
+    firstName: _firstName,
+    fullName: _fullName,
+    displayName: _displayName,
+    joinedAt,
+    ...studentData
+  } = data;
+  const names = resolveStudentNames(data);
+
+  const student = await tx.student.create({
+    data: {
+      ...studentData,
+      tenantId: ctx.tenantId,
+      firstName: names.firstName,
+      fullName: names.fullName,
+      displayName: names.displayName,
+      joinedAt: joinedAt ?? data.admissionDate,
+      aadhaarMasked: maskAadhaarNumber(aadhaarNumber),
+      aadhaarLast4: lastFourDigits(aadhaarNumber),
+      bankAccountMasked: bankAccountNumber ? maskBankAccountNumber(bankAccountNumber) : undefined,
+      bankAccountLast4: bankAccountNumber ? lastFourDigits(bankAccountNumber) : undefined,
+      createdById: ctx.userId
+    }
+  });
+  await writeAuditLog({
+    ctx,
+    action: ACADEMIA_AUDIT_EVENTS.STUDENT_CREATED,
+    entityType: "Student",
+    entityId: student.id,
+    branchId: student.branchId,
+    after: student
+  }, tx);
+  return student;
+}
+
 export async function createStudent(ctx: TenantContext, input: unknown) {
   const data = createStudentSchema.parse(input);
   await requireBranchPermission(ctx, "academia.student.create", data.branchId);
 
-  return db.$transaction(async (tx) => {
-    await ensureActiveBranch(tx, ctx, data.branchId);
-
-    const existing = await tx.student.findFirst({
-      where: { tenantId: ctx.tenantId, admissionNumber: data.admissionNumber },
-      select: { id: true }
-    });
-    if (existing) throw conflict("STUDENT_ADMISSION_NUMBER_EXISTS");
-
-    const {
-      aadhaarNumber,
-      bankAccountNumber,
-      firstName: _firstName,
-      fullName: _fullName,
-      displayName: _displayName,
-      joinedAt,
-      ...studentData
-    } = data;
-    const names = resolveStudentNames(data);
-
-    const student = await tx.student.create({
-      data: {
-        ...studentData,
-        tenantId: ctx.tenantId,
-        firstName: names.firstName,
-        fullName: names.fullName,
-        displayName: names.displayName,
-        joinedAt: joinedAt ?? data.admissionDate,
-        aadhaarMasked: maskAadhaarNumber(aadhaarNumber),
-        aadhaarLast4: lastFourDigits(aadhaarNumber),
-        bankAccountMasked: bankAccountNumber ? maskBankAccountNumber(bankAccountNumber) : undefined,
-        bankAccountLast4: bankAccountNumber ? lastFourDigits(bankAccountNumber) : undefined,
-        createdById: ctx.userId
-      }
-    });
-    await writeAuditLog({
-      ctx,
-      action: ACADEMIA_AUDIT_EVENTS.STUDENT_CREATED,
-      entityType: "Student",
-      entityId: student.id,
-      branchId: student.branchId,
-      after: student
-    }, tx);
-    return student;
-  });
+  return db.$transaction((tx) => createStudentRecord(tx, ctx, data));
 }
 
 export async function updateStudent(ctx: TenantContext, input: unknown) {

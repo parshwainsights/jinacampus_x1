@@ -4,21 +4,36 @@ import { revalidatePath } from "next/cache";
 import { mapActionError } from "@/lib/errors";
 import { getTenantContext } from "@/lib/tenant/context";
 import {
+  assignStudentClassSchema,
   createClassSchema,
-  createStudentSchema,
+  createClassSectionSchema,
+  createSectionSchema,
+  createStudentRegistrationSchema,
+  createSubjectSchema,
   updateEnrollmentSchema,
   updateClassSchema,
+  updateClassSectionSchema,
   updateGuardianSchema,
   updateSectionSchema,
   updateStudentSchema,
   updateSubjectSchema
 } from "@/modules/academia/schemas";
 import { createClass, deactivateClass, updateClass } from "@/modules/academia/services/class.service";
-import { cancelEnrollment, updateEnrollment } from "@/modules/academia/services/enrollment.service";
+import {
+  createClassSection,
+  deactivateClassSection,
+  updateClassSection
+} from "@/modules/academia/services/class-section.service";
+import {
+  assignStudentToClass,
+  cancelEnrollment,
+  updateEnrollment
+} from "@/modules/academia/services/enrollment.service";
 import { updateGuardian } from "@/modules/academia/services/guardian.service";
-import { deactivateSection, updateSection } from "@/modules/academia/services/section.service";
-import { createStudent, deactivateStudent, updateStudent } from "@/modules/academia/services/student.service";
-import { deactivateSubject, updateSubject } from "@/modules/academia/services/subject.service";
+import { createSection, deactivateSection, updateSection } from "@/modules/academia/services/section.service";
+import { deactivateStudent, updateStudent } from "@/modules/academia/services/student.service";
+import { createStudentRegistration } from "@/modules/academia/services/student-registration.service";
+import { createSubject, deactivateSubject, updateSubject } from "@/modules/academia/services/subject.service";
 
 export type ProfileFormActionState = {
   ok: boolean;
@@ -44,6 +59,10 @@ function requiredStringValue(formData: FormData, key: string) {
 function numberValue(formData: FormData, key: string) {
   const value = stringValue(formData, key);
   return value ? Number(value) : undefined;
+}
+
+function checkboxValue(formData: FormData, key: string) {
+  return formData.get(key) === "on";
 }
 
 function confirmedLifecycleAction(formData: FormData, label: string): ProfileFormActionState | null {
@@ -95,19 +114,149 @@ function createStudentFormError(error: unknown): ProfileFormActionState {
   };
 }
 
-export async function createClassAction(formData: FormData) {
-  const input = createClassSchema.parse({
-    code: requiredStringValue(formData, "code"),
-    name: requiredStringValue(formData, "name"),
-    description: stringValue(formData, "description"),
-    sortOrder: numberValue(formData, "sortOrder"),
-    status: stringValue(formData, "status")
-  });
-  const ctx = await getTenantContext();
-  await createClass(ctx, input);
+function revalidateAcademicSetup() {
   revalidatePath("/academia");
+  revalidatePath("/academia/setup");
   revalidatePath("/academia/classes");
+  revalidatePath("/academia/sections");
+  revalidatePath("/academia/subjects");
+  revalidatePath("/academia/class-sections");
   revalidatePath("/dashboard");
+}
+
+export async function createClassAction(
+  _state: ProfileFormActionState,
+  formData: FormData
+): Promise<ProfileFormActionState> {
+  try {
+    const input = createClassSchema.parse({
+      code: requiredStringValue(formData, "code").toUpperCase(),
+      name: requiredStringValue(formData, "name"),
+      description: stringValue(formData, "description"),
+      sortOrder: numberValue(formData, "sortOrder"),
+      status: stringValue(formData, "status")
+    });
+    const ctx = await getTenantContext();
+    await createClass(ctx, input);
+    revalidateAcademicSetup();
+    return { ok: true, message: "Class created." };
+  } catch (error) {
+    return profileFormError(error, "Unable to create class. Please try again.");
+  }
+}
+
+export async function createSectionAction(
+  _state: ProfileFormActionState,
+  formData: FormData
+): Promise<ProfileFormActionState> {
+  try {
+    const input = createSectionSchema.parse({
+      code: requiredStringValue(formData, "code").toUpperCase(),
+      name: requiredStringValue(formData, "name"),
+      description: stringValue(formData, "description"),
+      sortOrder: numberValue(formData, "sortOrder"),
+      status: stringValue(formData, "status")
+    });
+    const ctx = await getTenantContext();
+    await createSection(ctx, input);
+    revalidateAcademicSetup();
+    return { ok: true, message: "Section created." };
+  } catch (error) {
+    return profileFormError(error, "Unable to create section. Please try again.");
+  }
+}
+
+export async function createSubjectAction(
+  _state: ProfileFormActionState,
+  formData: FormData
+): Promise<ProfileFormActionState> {
+  try {
+    const input = createSubjectSchema.parse({
+      code: requiredStringValue(formData, "code").toUpperCase(),
+      name: requiredStringValue(formData, "name"),
+      type: stringValue(formData, "type"),
+      description: stringValue(formData, "description"),
+      status: stringValue(formData, "status")
+    });
+    const ctx = await getTenantContext();
+    await createSubject(ctx, input);
+    revalidateAcademicSetup();
+    return { ok: true, message: "Subject created." };
+  } catch (error) {
+    return profileFormError(error, "Unable to create subject. Please try again.");
+  }
+}
+
+export async function createClassSectionAction(
+  _state: ProfileFormActionState,
+  formData: FormData
+): Promise<ProfileFormActionState> {
+  try {
+    const ctx = await getTenantContext();
+    if (!ctx.activeBranchId || !ctx.activeAcademicYearId) {
+      return {
+        ok: false,
+        error: "Select an active branch and academic year before creating a class section."
+      };
+    }
+    const input = createClassSectionSchema.parse({
+      branchId: ctx.activeBranchId,
+      academicYearId: ctx.activeAcademicYearId,
+      classId: requiredStringValue(formData, "classId"),
+      sectionId: requiredStringValue(formData, "sectionId"),
+      classTeacherUserId: stringValue(formData, "classTeacherUserId"),
+      displayName: requiredStringValue(formData, "displayName"),
+      capacity: numberValue(formData, "capacity"),
+      status: stringValue(formData, "status")
+    });
+    await createClassSection(ctx, input);
+    revalidateAcademicSetup();
+    return { ok: true, message: "Class section created." };
+  } catch (error) {
+    return profileFormError(error, "Unable to create class section. Please try again.");
+  }
+}
+
+export async function updateClassSectionAction(
+  _state: ProfileFormActionState,
+  formData: FormData
+): Promise<ProfileFormActionState> {
+  try {
+    const input = updateClassSectionSchema.parse({
+      classSectionId: requiredStringValue(formData, "classSectionId"),
+      classId: requiredStringValue(formData, "classId"),
+      sectionId: requiredStringValue(formData, "sectionId"),
+      classTeacherUserId: stringValue(formData, "classTeacherUserId"),
+      displayName: requiredStringValue(formData, "displayName"),
+      capacity: numberValue(formData, "capacity"),
+      status: stringValue(formData, "status")
+    });
+    const ctx = await getTenantContext();
+    await updateClassSection(ctx, input);
+    revalidateAcademicSetup();
+    revalidatePath(`/academia/class-sections/${input.classSectionId}/edit`);
+    return { ok: true, message: "Class section updated." };
+  } catch (error) {
+    return profileFormError(error, "Unable to update class section. Please try again.");
+  }
+}
+
+export async function deactivateClassSectionAction(
+  _state: ProfileFormActionState,
+  formData: FormData
+): Promise<ProfileFormActionState> {
+  try {
+    const confirmationError = confirmedLifecycleAction(formData, "class section");
+    if (confirmationError) return confirmationError;
+    const classSectionId = requiredStringValue(formData, "classSectionId");
+    const ctx = await getTenantContext();
+    await deactivateClassSection(ctx, classSectionId);
+    revalidateAcademicSetup();
+    revalidatePath(`/academia/class-sections/${classSectionId}/edit`);
+    return { ok: true, message: "Class section deactivated." };
+  } catch (error) {
+    return profileFormError(error, "Unable to deactivate class section. Please try again.");
+  }
 }
 
 export async function updateClassAction(
@@ -250,50 +399,92 @@ export async function createStudentAction(
   formData: FormData
 ): Promise<ProfileFormActionState> {
   try {
-    const input = createStudentSchema.parse({
-      branchId: requiredStringValue(formData, "branchId"),
-      admissionNumber: requiredStringValue(formData, "admissionNumber"),
-      admissionDate: requiredStringValue(formData, "admissionDate"),
-      fullName: requiredStringValue(formData, "fullName"),
-      firstName: stringValue(formData, "firstName"),
-      middleName: stringValue(formData, "middleName"),
-      lastName: stringValue(formData, "lastName"),
-      displayName: stringValue(formData, "displayName"),
-      dateOfBirth: requiredStringValue(formData, "dateOfBirth"),
-      gender: stringValue(formData, "gender"),
-      bloodGroup: stringValue(formData, "bloodGroup"),
-      fatherName: requiredStringValue(formData, "fatherName"),
-      fatherOccupation: stringValue(formData, "fatherOccupation"),
-      motherName: requiredStringValue(formData, "motherName"),
-      guardianName: stringValue(formData, "guardianName"),
-      aadhaarNumber: requiredStringValue(formData, "aadhaarNumber"),
-      familyIdNumber: stringValue(formData, "familyIdNumber"),
-      sssmIdNumber: stringValue(formData, "sssmIdNumber"),
-      apaarIdNumber: stringValue(formData, "apaarIdNumber"),
-      religion: requiredStringValue(formData, "religion"),
-      caste: requiredStringValue(formData, "caste"),
-      category: requiredStringValue(formData, "category"),
-      nationality: requiredStringValue(formData, "nationality"),
-      currentAddress: stringValue(formData, "currentAddress"),
-      permanentAddress: stringValue(formData, "permanentAddress"),
-      city: requiredStringValue(formData, "city"),
-      state: requiredStringValue(formData, "state"),
-      pincode: stringValue(formData, "pincode"),
-      bankAccountNumber: stringValue(formData, "bankAccountNumber"),
-      bankBranchName: stringValue(formData, "bankBranchName"),
-      ifscCode: stringValue(formData, "ifscCode"),
-      status: stringValue(formData, "status"),
-      joinedAt: stringValue(formData, "joinedAt"),
-      leftAt: stringValue(formData, "leftAt")
+    const initialClassSectionId = stringValue(formData, "initialClassSectionId");
+    const input = createStudentRegistrationSchema.parse({
+      student: {
+        branchId: requiredStringValue(formData, "branchId"),
+        admissionNumber: requiredStringValue(formData, "admissionNumber"),
+        admissionDate: requiredStringValue(formData, "admissionDate"),
+        fullName: requiredStringValue(formData, "fullName"),
+        firstName: stringValue(formData, "firstName"),
+        middleName: stringValue(formData, "middleName"),
+        lastName: stringValue(formData, "lastName"),
+        displayName: stringValue(formData, "displayName"),
+        dateOfBirth: requiredStringValue(formData, "dateOfBirth"),
+        gender: stringValue(formData, "gender"),
+        bloodGroup: stringValue(formData, "bloodGroup"),
+        fatherName: requiredStringValue(formData, "fatherName"),
+        fatherOccupation: stringValue(formData, "fatherOccupation"),
+        motherName: requiredStringValue(formData, "motherName"),
+        guardianName: stringValue(formData, "guardianName"),
+        aadhaarNumber: requiredStringValue(formData, "aadhaarNumber"),
+        familyIdNumber: stringValue(formData, "familyIdNumber"),
+        sssmIdNumber: stringValue(formData, "sssmIdNumber"),
+        apaarIdNumber: stringValue(formData, "apaarIdNumber"),
+        religion: requiredStringValue(formData, "religion"),
+        caste: requiredStringValue(formData, "caste"),
+        category: requiredStringValue(formData, "category"),
+        nationality: requiredStringValue(formData, "nationality"),
+        currentAddress: stringValue(formData, "currentAddress"),
+        permanentAddress: stringValue(formData, "permanentAddress"),
+        city: requiredStringValue(formData, "city"),
+        state: requiredStringValue(formData, "state"),
+        pincode: stringValue(formData, "pincode"),
+        bankAccountNumber: stringValue(formData, "bankAccountNumber"),
+        bankBranchName: stringValue(formData, "bankBranchName"),
+        ifscCode: stringValue(formData, "ifscCode"),
+        status: stringValue(formData, "status"),
+        joinedAt: stringValue(formData, "joinedAt"),
+        leftAt: stringValue(formData, "leftAt")
+      },
+      primaryGuardian: {
+        relation: requiredStringValue(formData, "primaryGuardianRelation"),
+        phone: stringValue(formData, "primaryGuardianPhone"),
+        email: stringValue(formData, "primaryGuardianEmail"),
+        isEmergencyContact: checkboxValue(formData, "primaryGuardianEmergencyContact"),
+        hasPickupPermission: checkboxValue(formData, "primaryGuardianPickupPermission")
+      },
+      initialClassAssignment: initialClassSectionId
+        ? {
+            classSectionId: initialClassSectionId,
+            rollNumber: stringValue(formData, "initialRollNumber"),
+            enrolledOn: stringValue(formData, "initialEnrolledOn")
+          }
+        : undefined
     });
     const ctx = await getTenantContext();
-    await createStudent(ctx, input);
+    await createStudentRegistration(ctx, input);
     revalidatePath("/academia");
     revalidatePath("/academia/students");
     revalidatePath("/dashboard");
     return { ok: true, message: "Student created." };
   } catch (error) {
     return createStudentFormError(error);
+  }
+}
+
+export async function assignStudentClassAction(
+  _state: ProfileFormActionState,
+  formData: FormData
+): Promise<ProfileFormActionState> {
+  try {
+    const input = assignStudentClassSchema.parse({
+      studentId: requiredStringValue(formData, "studentId"),
+      classSectionId: requiredStringValue(formData, "classSectionId"),
+      rollNumber: stringValue(formData, "rollNumber"),
+      enrolledOn: requiredStringValue(formData, "enrolledOn")
+    });
+    const ctx = await getTenantContext();
+    await assignStudentToClass(ctx, input);
+    revalidatePath("/academia/students");
+    revalidatePath(`/academia/students/${input.studentId}`);
+    revalidatePath("/academia/enrollments");
+    revalidatePath("/academia/attendance");
+    revalidatePath("/academia/attendance/mark");
+    revalidatePath("/dashboard");
+    return { ok: true, message: "Student assigned to class." };
+  } catch (error) {
+    return profileFormError(error, "Unable to assign this student to a class. Please try again.");
   }
 }
 

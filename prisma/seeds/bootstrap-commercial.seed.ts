@@ -271,17 +271,17 @@ async function upsertCommercialBootstrap(
     });
   }
 
-  const ownerRole = await tx.role.findUnique({
-    where: { tenantId_code: { tenantId: tenant.id, code: "TENANT_OWNER" } },
+  const principalRole = await tx.role.findUnique({
+    where: { tenantId_code: { tenantId: tenant.id, code: "PRINCIPAL" } },
     select: { id: true }
   });
-  if (!ownerRole) throw new Error("TENANT_OWNER role could not be initialized.");
+  if (!principalRole) throw new Error("PRINCIPAL role could not be initialized.");
   await tx.userRoleAssignment.upsert({
     where: {
       tenantId_userId_roleId_scopeType_scopeId: {
         tenantId: tenant.id,
         userId: user.id,
-        roleId: ownerRole.id,
+        roleId: principalRole.id,
         scopeType: "TENANT",
         scopeId: "TENANT"
       }
@@ -289,7 +289,7 @@ async function upsertCommercialBootstrap(
     create: {
       tenantId: tenant.id,
       userId: user.id,
-      roleId: ownerRole.id,
+      roleId: principalRole.id,
       scopeType: "TENANT",
       scopeId: "TENANT"
     },

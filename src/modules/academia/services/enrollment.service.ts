@@ -3,7 +3,12 @@ import { notFound } from "@/lib/errors";
 import { writeAuditLog } from "@/lib/audit/audit-log";
 import type { TenantContext } from "@/lib/tenant/context";
 import { ACADEMIA_AUDIT_EVENTS } from "@/modules/academia/audit-events";
-import { createEnrollmentSchema, updateEnrollmentSchema } from "@/modules/academia/schemas";
+import {
+  assignStudentClassSchema,
+  type CreateEnrollmentInput,
+  createEnrollmentSchema,
+  updateEnrollmentSchema
+} from "@/modules/academia/schemas";
 import { enrollmentStatusSchema, idSchema } from "@/modules/academia/schemas/shared";
 import {
   type AcademiaDbClient,
@@ -44,48 +49,100 @@ async function ensureActiveClassSection(
   return classSection;
 }
 
+export async function createEnrollmentRecord(
+  tx: AcademiaDbClient,
+  ctx: TenantContext,
+  data: CreateEnrollmentInput
+) {
+  const branch = await ensureActiveBranch(tx, ctx, data.branchId);
+  const academicYear = await ensureAcademicYear(tx, ctx, data.academicYearId);
+  if (branch.institutionId !== academicYear.institutionId) {
+    throw validationError("ACADEMIC_YEAR_DOES_NOT_BELONG_TO_BRANCH_INSTITUTION");
+  }
+  await ensureActiveStudent(tx, ctx, data.studentId, data.branchId);
+  await ensureActiveClassSection(tx, ctx, data.classSectionId, data.branchId, data.academicYearId);
+
+  const existingEnrollment = await tx.enrollment.findFirst({
+    where: { tenantId: ctx.tenantId, academicYearId: data.academicYearId, studentId: data.studentId },
+    select: { id: true, status: true }
+  });
+  if (existingEnrollment) throw conflict("ENROLLMENT_ALREADY_EXISTS_FOR_ACADEMIC_YEAR");
+
+  if (data.rollNumber) {
+    const existingRollNumber = await tx.enrollment.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        academicYearId: data.academicYearId,
+        classSectionId: data.classSectionId,
+        rollNumber: data.rollNumber
+      },
+      select: { id: true }
+    });
+    if (existingRollNumber) throw conflict("ROLL_NUMBER_ALREADY_EXISTS");
+  }
+
+  const enrollment = await tx.enrollment.create({
+    data: { ...data, tenantId: ctx.tenantId, createdById: ctx.userId }
+  });
+  await writeAuditLog({
+    ctx,
+    action: ACADEMIA_AUDIT_EVENTS.ENROLLMENT_CREATED,
+    entityType: "Enrollment",
+    entityId: enrollment.id,
+    branchId: enrollment.branchId,
+    academicYearId: enrollment.academicYearId,
+    after: enrollment
+  }, tx);
+  return enrollment;
+}
+
 export async function createEnrollment(ctx: TenantContext, input: unknown) {
   const data = createEnrollmentSchema.parse(input);
   await requireBranchPermission(ctx, "academia.enrollment.manage", data.branchId);
 
+  return db.$transaction((tx) => createEnrollmentRecord(tx, ctx, data));
+}
+
+export async function assignStudentToClass(ctx: TenantContext, input: unknown) {
+  const data = assignStudentClassSchema.parse(input);
+
   return db.$transaction(async (tx) => {
-    await ensureActiveBranch(tx, ctx, data.branchId);
-    await ensureAcademicYear(tx, ctx, data.academicYearId);
-    await ensureActiveStudent(tx, ctx, data.studentId, data.branchId);
-    await ensureActiveClassSection(tx, ctx, data.classSectionId, data.branchId, data.academicYearId);
-
-    const existingEnrollment = await tx.enrollment.findFirst({
-      where: { tenantId: ctx.tenantId, academicYearId: data.academicYearId, studentId: data.studentId },
-      select: { id: true, status: true }
+    const student = await tx.student.findFirst({
+      where: {
+        id: data.studentId,
+        tenantId: ctx.tenantId,
+        branchId: { in: ctx.accessibleBranchIds },
+        status: "ACTIVE"
+      },
+      select: { id: true, branchId: true }
     });
-    if (existingEnrollment) throw conflict("ENROLLMENT_ALREADY_EXISTS_FOR_ACADEMIC_YEAR");
+    if (!student) throw notFound("ACTIVE_STUDENT_NOT_FOUND");
+    await requireBranchPermission(ctx, "academia.enrollment.manage", student.branchId);
 
-    if (data.rollNumber) {
-      const existingRollNumber = await tx.enrollment.findFirst({
-        where: {
+    const classSection = await tx.classSection.findFirst({
+      where: {
+        id: data.classSectionId,
+        tenantId: ctx.tenantId,
+        branchId: student.branchId,
+        status: "ACTIVE",
+        academicYear: {
           tenantId: ctx.tenantId,
-          academicYearId: data.academicYearId,
-          classSectionId: data.classSectionId,
-          rollNumber: data.rollNumber
-        },
-        select: { id: true }
-      });
-      if (existingRollNumber) throw conflict("ROLL_NUMBER_ALREADY_EXISTS");
-    }
-
-    const enrollment = await tx.enrollment.create({
-      data: { ...data, tenantId: ctx.tenantId, createdById: ctx.userId }
+          isActive: true,
+          status: "ACTIVE"
+        }
+      },
+      select: { id: true, branchId: true, academicYearId: true }
     });
-    await writeAuditLog({
-      ctx,
-      action: ACADEMIA_AUDIT_EVENTS.ENROLLMENT_CREATED,
-      entityType: "Enrollment",
-      entityId: enrollment.id,
-      branchId: enrollment.branchId,
-      academicYearId: enrollment.academicYearId,
-      after: enrollment
-    }, tx);
-    return enrollment;
+    if (!classSection) throw notFound("CLASS_SECTION_NOT_FOUND");
+
+    return createEnrollmentRecord(tx, ctx, {
+      branchId: classSection.branchId,
+      academicYearId: classSection.academicYearId,
+      studentId: student.id,
+      classSectionId: classSection.id,
+      rollNumber: data.rollNumber,
+      enrolledOn: data.enrolledOn
+    });
   });
 }
 

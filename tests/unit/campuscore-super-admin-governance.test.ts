@@ -9,7 +9,7 @@ import {
   hasPlatformAdminRole
 } from "@/lib/rbac/roles";
 
-describe("CampusCore Super Admin and user governance", () => {
+describe("CampusCore five-role user governance", () => {
   it("registers explicit platform governance permissions", () => {
     expect(CAMPUS_CORE_PERMISSIONS).toEqual(expect.arrayContaining([
       "platform.dashboard.view",
@@ -27,15 +27,15 @@ describe("CampusCore Super Admin and user governance", () => {
     ]));
   });
 
-  it("gives Super Admin platform access while keeping principal institution-scoped", () => {
-    expect(hasPlatformAdminRole(["SUPER_ADMIN"])).toBe(true);
+  it("reserves platform access for Administrator while keeping legacy school roles principal-scoped", () => {
+    expect(hasPlatformAdminRole(["SUPER_ADMIN"])).toBe(false);
     expect(hasPlatformAdminRole(["ADMINISTRATOR"])).toBe(true);
-    expect(hasPlatformAdminRole(["ADMIN"])).toBe(true);
+    expect(hasPlatformAdminRole(["ADMIN"])).toBe(false);
     expect(DEFAULT_ROLE_PERMISSION_MAP.SUPER_ADMIN).toEqual(expect.arrayContaining([
-      "platform.school.create",
-      "platform.school.update_school_id",
+      "campuscore.user.create",
       "campuscore.user.reset_password"
     ]));
+    expect(DEFAULT_ROLE_PERMISSION_MAP.SUPER_ADMIN).not.toContain("platform.school.create");
     expect(DEFAULT_ROLE_PERMISSION_MAP.ADMINISTRATOR).toEqual(expect.arrayContaining([
       "platform.dashboard.view",
       "platform.school.view",
@@ -47,15 +47,11 @@ describe("CampusCore Super Admin and user governance", () => {
       "platform.audit.view"
     ]));
     expect(DEFAULT_ROLE_PERMISSION_MAP.ADMIN).toEqual(expect.arrayContaining([
-      "platform.dashboard.view",
-      "platform.tenant.manage",
-      "platform.institution.manage",
-      "platform.school.create",
-      "platform.school.update_school_id",
-      "platform.user.manage",
-      "platform.audit.view",
+      "campuscore.user.create",
+      "campuscore.branch.manage",
       "campuscore.user.reset_password"
     ]));
+    expect(DEFAULT_ROLE_PERMISSION_MAP.ADMIN).not.toContain("platform.user.manage");
     expect(DEFAULT_ROLE_PERMISSION_MAP.PRINCIPAL).toEqual(expect.arrayContaining([
       "campuscore.user.create",
       "campuscore.user.update",
@@ -70,9 +66,11 @@ describe("CampusCore Super Admin and user governance", () => {
   });
 
   it("keeps principal, teacher, and staff role-assignment boundaries safe", () => {
-    expect(canAssignRole(["ADMIN"], "ADMIN")).toBe(true);
-    expect(canAssignRole(["SUPER_ADMIN"], "ADMINISTRATOR")).toBe(true);
-    expect(canAssignRole(["TENANT_OWNER"], "PRINCIPAL")).toBe(true);
+    expect(canAssignRole(["ADMINISTRATOR"], "PRINCIPAL")).toBe(true);
+    expect(canAssignRole(["ADMINISTRATOR"], "ADMINISTRATOR")).toBe(false);
+    expect(canAssignRole(["ADMIN"], "ADMIN")).toBe(false);
+    expect(canAssignRole(["SUPER_ADMIN"], "ADMINISTRATOR")).toBe(false);
+    expect(canAssignRole(["TENANT_OWNER"], "PRINCIPAL")).toBe(false);
     expect(canAssignRole(["PRINCIPAL"], "TEACHER")).toBe(true);
     expect(canAssignRole(["PRINCIPAL"], "STAFF")).toBe(true);
     expect(canAssignRole(["PRINCIPAL"], "ADMIN")).toBe(false);
@@ -87,7 +85,7 @@ describe("CampusCore Super Admin and user governance", () => {
     expect(getPostLoginRedirectPath(["ADMIN"])).toBe("/dashboard");
     expect(getPostLoginRedirectPath(["PRINCIPAL"])).toBe("/dashboard");
     expect(getPostLoginRedirectPath(["CLASS_TEACHER"])).toBe("/academia/attendance/mark");
-    expect(getPostLoginRedirectPath(["TEACHER"])).toBe("/dashboard");
+    expect(getPostLoginRedirectPath(["TEACHER"])).toBe("/academia/attendance/mark");
     expect(getPostLoginRedirectPath(["STAFF"])).toBe("/staffboard/attendance/scan");
   });
 

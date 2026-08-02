@@ -1,14 +1,17 @@
-import { DesktopShell } from "@/components/app-shell/desktop-shell";
-import { MobileShell } from "@/components/app-shell/mobile-shell";
-import { Topbar } from "@/components/app-shell/topbar";
+import { AppChrome } from "@/components/app-shell/app-chrome";
+import { getMobileBottomNavigationItems, getVisibleNavigationGroups } from "@/components/app-shell/navigation";
 import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
+import { hasPlatformAdminRole } from "@/lib/rbac/roles";
+import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireAuth();
+  if (hasPlatformAdminRole(ctx.roleCodes ?? [])) redirect("/administrator");
   const permissions = await getEffectivePermissions({ ctx, branchId: ctx.activeBranchId });
-  const topbarContext = {
+  const navbarContext = {
     userEmail: ctx.userEmail,
+    userName: ctx.userName,
     hasActiveBranch: Boolean(ctx.activeBranchId),
     hasActiveAcademicYear: Boolean(ctx.activeAcademicYearId)
   };
@@ -20,16 +23,21 @@ export default async function DashboardLayout({ children }: { children: React.Re
     academicYearName: ctx.activeAcademicYearName ?? null,
     roleLabels: ctx.roleLabels ?? []
   };
+  const navigationGroups = getVisibleNavigationGroups(permissions);
+  const mobileBottomItems = getMobileBottomNavigationItems(permissions, ctx.roleCodes ?? []);
 
   return (
-    <div className="flex min-h-dvh overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(79,70,229,0.10),transparent_32rem),linear-gradient(135deg,#f8fafc_0%,#eef6ff_48%,#f8fafc_100%)]">
-      <DesktopShell permissions={permissions} branding={branding} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="hidden lg:block">
-          <Topbar context={topbarContext} branding={branding} />
-        </div>
-        <MobileShell permissions={permissions} context={topbarContext} branding={branding} />
-        <main className="flex-1 px-3 pb-28 pt-4 sm:px-4 md:px-5 lg:p-6 xl:p-8">{children}</main>
+    <div className="min-h-dvh overflow-x-hidden bg-app-background">
+      <div className="flex min-h-dvh min-w-0 flex-col">
+        <AppChrome
+          context={navbarContext}
+          branding={branding}
+          navigationGroups={navigationGroups}
+          mobileBottomItems={mobileBottomItems}
+        />
+        <main className="mx-auto w-full max-w-[100rem] flex-1 px-3 pb-28 pt-4 sm:px-4 md:px-5 lg:px-7 lg:pb-40 lg:pt-6 xl:px-10 xl:pb-40 xl:pt-8">
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -16,3 +16,7 @@ tsconfig.tsbuildinfo
 # Local QA scratch files
 .tmp/
 .tmp-*
+
+# Local HTTPS development certificates
+certificates/
+.vercel/

@@ -71,7 +71,20 @@ describe("navigation polish", () => {
     expect(getActiveNavHref(groups, "/academia/attendance/mark")).toBe("/academia/attendance");
     expect(getActiveNavHref(groups, "/academia/attendance/reports")).toBe("/academia/attendance/reports");
     expect(getActiveNavHref(groups, "/academia/students/student-1/edit")).toBe("/academia/students");
-    expect(getActiveNavHref(groups, "/academia/classes/class-1/edit")).toBe("/academia/classes");
+    expect(getActiveNavHref(groups, "/academia/classes/class-1/edit")).toBe("/academia/setup");
+  });
+
+  it("uses one Academic Setup navigation entry instead of technical record menus", () => {
+    const academiaItems = NAVIGATION_GROUPS.find((group) => group.title === "Academia")?.items ?? [];
+
+    expect(academiaItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Academic Setup", href: "/academia/setup" })
+      ])
+    );
+    expect(academiaItems.map((item) => item.title)).not.toEqual(
+      expect.arrayContaining(["Classes", "Sections", "Class Sections", "Subjects", "Guardians", "Enrollments"])
+    );
   });
 
   it("uses the most specific active state for nested CampusCore user routes", () => {
@@ -111,7 +124,8 @@ describe("navigation polish", () => {
       "/staffboard/attendance",
       "/staffboard/attendance/reports",
       "/staffboard/staff",
-      "/staffboard/attendance/scan"
+      "/staffboard/attendance/scan",
+      "/staffboard/attendance/me"
     ]);
     expect(DASHBOARD_QUICK_ACTIONS.map((action) => action.label)).toEqual([
       "Manage Students",
@@ -121,7 +135,8 @@ describe("navigation polish", () => {
       "Staff Attendance",
       "Staff Reports",
       "Manage Staff",
-      "Scan QR"
+      "Scan QR",
+      "My Attendance"
     ]);
   });
 
@@ -244,48 +259,50 @@ describe("navigation polish", () => {
     ]);
   });
 
-  it("keeps desktop and mobile navigation scrollable for long role menus", () => {
-    const sidebarSource = readProjectFile("src/components/app-shell/sidebar-nav.tsx");
+  it("keeps the desktop launcher and mobile drawer scrollable for long role menus", () => {
+    const dockSource = readProjectFile("src/components/app-shell/desktop-navigation-dock.tsx");
+    const drawerSource = readProjectFile("src/components/app-shell/mobile-navigation-drawer.tsx");
     const globalStyles = readProjectFile("src/app/globals.css");
 
-    expect(sidebarSource).toContain("h-screen max-h-screen");
-    expect(sidebarSource).toContain("overflow-hidden");
-    expect(sidebarSource).toContain("min-h-0 flex-1");
-    expect(sidebarSource).toContain("overflow-y-auto overflow-x-hidden");
-    expect(sidebarSource).toContain('data-nav-scroll-area="desktop"');
-    expect(sidebarSource).toContain('data-nav-scroll-area="mobile"');
-    expect(sidebarSource).toContain("max-h-[min(70vh,34rem)]");
+    expect(dockSource).toContain('data-desktop-module-launcher="true"');
+    expect(dockSource).toContain("max-h-[min(30rem,calc(100vh-14rem))]");
+    expect(dockSource).toContain("overflow-y-auto");
+    expect(drawerSource).toContain("min-h-0 flex-1 overflow-y-auto");
     expect(globalStyles).toContain(".premium-nav-scroll");
     expect(globalStyles).toContain("scrollbar-width: thin");
   });
 
-  it("supports a compact desktop sidebar rail without dropping accessible labels", () => {
-    const sidebarSource = readProjectFile("src/components/app-shell/sidebar-nav.tsx");
+  it("supports an adaptive labelled desktop dock without a rendered sidebar", () => {
+    const dockSource = readProjectFile("src/components/app-shell/desktop-navigation-dock.tsx");
+    const layoutSource = readProjectFile("src/app/(dashboard)/layout.tsx");
 
-    expect(sidebarSource).toContain('data-sidebar-collapsible="true"');
-    expect(sidebarSource).toContain('data-sidebar-state={isCollapsed ? "collapsed" : "expanded"}');
-    expect(sidebarSource).toContain('data-sidebar-collapse-toggle="true"');
-    expect(sidebarSource).toContain("transition-[width,padding]");
-    expect(sidebarSource).toContain("w-[5.25rem]");
-    expect(sidebarSource).toContain("onMouseEnter");
-    expect(sidebarSource).toContain("onFocus");
-    expect(sidebarSource).toContain("aria-label={item.title}");
-    expect(sidebarSource).toContain("title={isCollapsed ? item.title : undefined}");
-    expect(sidebarSource).toContain("<IconForHref href={item.href}");
+    expect(dockSource).toContain("getDesktopDockNavigationItems(groups)");
+    expect(dockSource).toContain('w-[clamp(6rem,7.5vw,7.25rem)]');
+    expect(dockSource).toContain('max-w-[calc(100vw-2rem)]');
+    expect(dockSource).toContain("{item.title}");
+    expect(dockSource).toContain("<NavigationIcon href={item.iconHref}");
+    expect(layoutSource).not.toContain("DesktopShell");
+    expect(readProjectFile("src/components/app-shell/navigation-icon.tsx")).toContain("navigationIconsByHref");
   });
 
-  it("keeps the glass topbar account menu and session context available", () => {
-    const topbarSource = readProjectFile("src/components/app-shell/topbar.tsx");
+  it("keeps the contextual command bar account menu and workspace context available", () => {
+    const navbarSource = [
+      readProjectFile("src/components/app-shell/app-navbar.tsx"),
+      readProjectFile("src/components/app-shell/navbar-context-menu.tsx"),
+      readProjectFile("src/components/app-shell/navbar-user-menu.tsx"),
+      readProjectFile("src/components/app-shell/navbar-sign-out-button.tsx")
+    ].join("\n");
 
-    expect(topbarSource).toContain('data-topbar-glass="true"');
-    expect(topbarSource).toContain('data-topbar-account-menu="true"');
-    expect(topbarSource).toContain("Branch:");
-    expect(topbarSource).toContain("Academic Year:");
-    expect(topbarSource).toContain("Change Password");
-    expect(topbarSource).toContain("Sign out");
-    expect(topbarSource).toContain('action="/api/auth/logout"');
-    expect(topbarSource).toContain('role="menu"');
-    expect(topbarSource).not.toMatch(/passwordHash|tokenHash|rawToken/i);
+    expect(navbarSource).toContain('data-app-navbar="true"');
+    expect(navbarSource).toContain('dataAttribute="account"');
+    expect(navbarSource).toContain("Current workspace");
+    expect(navbarSource).toContain("Academic year");
+    expect(navbarSource).toContain("Account security");
+    expect(navbarSource).toContain("Sign out");
+    expect(navbarSource).toContain('action="/api/auth/logout"');
+    expect(navbarSource).toContain('panelRole="dialog"');
+    expect(navbarSource).not.toContain('panelRole="menu"');
+    expect(navbarSource).not.toMatch(/passwordHash|tokenHash|rawToken/i);
   });
 
   it("keeps bottom StaffBoard and settings navigation items reachable in the role-aware DOM", () => {
@@ -306,7 +323,7 @@ describe("navigation polish", () => {
   it("does not add out-of-scope module navigation or expose QR secrets", () => {
     const combinedSource = [
       "src/components/app-shell/navigation.ts",
-      "src/components/app-shell/sidebar-nav.tsx",
+      "src/components/app-shell/desktop-navigation-dock.tsx",
       "src/modules/dashboard/components/dashboard-state.ts"
     ].map(readProjectFile).join("\n");
 

@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { STAFFBOARD_LITE_AUDIT_EVENTS } from "@/modules/staffboard-lite/audit-events";
 import { STAFFBOARD_LITE_PERMISSIONS } from "@/modules/staffboard-lite/permissions";
+import { CAMPUS_CORE_AUDIT_EVENTS } from "@/modules/campus-core/audit-events";
 import { getStaffProfileById, listStaffProfiles } from "@/modules/staffboard-lite/queries/staff-profile.queries";
 import {
   createStaffProfile,
   deactivateStaffProfile,
+  disableStaffLoginAccess,
+  reactivateStaffLoginAccess,
   updateStaffProfile
 } from "@/modules/staffboard-lite/services/staff-profile.service";
 import type { TenantContext } from "@/lib/tenant/context";
@@ -16,10 +19,23 @@ const mocks = vi.hoisted(() => {
     passwordCredential: { create: vi.fn() },
     role: { findFirst: vi.fn() },
     session: { updateMany: vi.fn() },
-    staffProfile: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-    user: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-    userBranchAccess: { create: vi.fn() },
-    userRoleAssignment: { create: vi.fn() }
+    staffProfile: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn()
+    },
+    user: { create: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+    userBranchAccess: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn()
+    },
+    userRoleAssignment: { create: vi.fn(), findFirst: vi.fn() }
   };
   const db = {
     ...tx,
@@ -364,6 +380,126 @@ describe("StaffBoard Lite staff profile services and queries", () => {
       before,
       after,
       metadata: { previousStatus: "ACTIVE", newStatus: "INACTIVE" }
+    }), mocks.tx);
+  });
+
+  it("disables login while preserving the StaffProfile/User link", async () => {
+    const userId = "00000000-0000-0000-0000-000000000099";
+    const before = staffProfile({
+      userId,
+      user: {
+        id: userId,
+        tenantId: ctx.tenantId,
+        email: "meera@example.com",
+        status: "ACTIVE"
+      }
+    });
+    const after = staffProfile({ userId });
+    mocks.tx.staffProfile.findFirst.mockResolvedValue(before);
+    mocks.tx.user.update.mockResolvedValue({
+      id: userId,
+      tenantId: ctx.tenantId,
+      email: "meera@example.com",
+      status: "DEACTIVATED"
+    });
+    mocks.tx.staffProfile.findUniqueOrThrow.mockResolvedValue(after);
+
+    await disableStaffLoginAccess(ctx, {
+      staffId,
+      confirmDisableLoginAccess: true
+    });
+
+    expect(mocks.tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: userId },
+      data: expect.objectContaining({ status: "DEACTIVATED" })
+    }));
+    expect(mocks.tx.session.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ tenantId: ctx.tenantId, userId })
+    }));
+    expect(mocks.tx.staffProfile.update).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ userId: null })
+    }));
+    expect(after.userId).toBe(userId);
+  });
+
+  it("reactivates an eligible linked account without creating another user", async () => {
+    const userId = "00000000-0000-0000-0000-000000000099";
+    const before = staffProfile({
+      userId,
+      user: {
+        id: userId,
+        tenantId: ctx.tenantId,
+        email: "meera@example.com",
+        status: "DEACTIVATED",
+        deactivatedAt: new Date("2026-05-01T00:00:00.000Z")
+      }
+    });
+    const after = staffProfile({ userId });
+    mocks.tx.staffProfile.findFirst.mockResolvedValue(before);
+    mocks.tx.userBranchAccess.findFirst.mockResolvedValue({ id: "branch-access-id" });
+    mocks.tx.userRoleAssignment.findFirst.mockResolvedValue({ id: "role-assignment-id" });
+    mocks.tx.user.update.mockResolvedValue({
+      id: userId,
+      tenantId: ctx.tenantId,
+      email: "meera@example.com",
+      status: "ACTIVE"
+    });
+    mocks.tx.staffProfile.findUniqueOrThrow.mockResolvedValue(after);
+
+    await reactivateStaffLoginAccess(ctx, {
+      staffId,
+      confirmReactivateLoginAccess: true
+    });
+
+    expect(mocks.tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: userId },
+      data: expect.objectContaining({ status: "ACTIVE", deactivatedAt: null })
+    }));
+    expect(mocks.tx.user.create).not.toHaveBeenCalled();
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      action: STAFFBOARD_LITE_AUDIT_EVENTS.STAFF_LOGIN_ACCESS_REACTIVATED,
+      metadata: { userId }
+    }), mocks.tx);
+  });
+
+  it("deactivates the linked login and revokes sessions with employment", async () => {
+    const userId = "00000000-0000-0000-0000-000000000099";
+    const linkedUser = {
+      id: userId,
+      tenantId: ctx.tenantId,
+      email: "meera@example.com",
+      phone: "9876543210",
+      firstName: "Meera",
+      middleName: null,
+      lastName: "Sharma",
+      displayName: "Meera Sharma",
+      status: "ACTIVE"
+    };
+    const before = staffProfile({
+      userId,
+      user: linkedUser
+    });
+    const after = staffProfile({ userId, employmentStatus: "INACTIVE" });
+    mocks.tx.staffProfile.findFirst.mockResolvedValue(before);
+    mocks.tx.staffProfile.update.mockResolvedValue(after);
+    mocks.tx.user.update.mockResolvedValue({
+      ...linkedUser,
+      status: "DEACTIVATED",
+      deactivatedAt: new Date("2026-05-01T00:00:00.000Z")
+    });
+
+    await deactivateStaffProfile(ctx, staffId);
+
+    expect(mocks.tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: userId },
+      data: expect.objectContaining({ status: "DEACTIVATED" })
+    }));
+    expect(mocks.tx.session.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ tenantId: ctx.tenantId, userId, revokedAt: null })
+    }));
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
+      action: CAMPUS_CORE_AUDIT_EVENTS.USER_DEACTIVATED,
+      metadata: expect.objectContaining({ sessionsRevoked: true })
     }), mocks.tx);
   });
 

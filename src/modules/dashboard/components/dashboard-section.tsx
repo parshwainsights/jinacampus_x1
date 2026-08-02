@@ -10,9 +10,9 @@ export function DashboardSection({ title, description, children }: DashboardSect
   const headingId = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-title`;
 
   return (
-    <section aria-labelledby={headingId} className="space-y-4" data-dashboard-section="true">
-      <div className="flex min-w-0 flex-col gap-1">
-        <h2 id={headingId} className="text-base font-semibold tracking-tight text-slate-950">
+    <section aria-labelledby={headingId} className="min-w-0 space-y-4" data-dashboard-section="true">
+      <div className="flex min-w-0 flex-col gap-1 border-b border-campus-border/80 pb-3">
+        <h2 id={headingId} className="text-lg font-semibold text-slate-950">
           {title}
         </h2>
         {description ? <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p> : null}

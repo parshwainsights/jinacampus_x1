@@ -3,9 +3,9 @@ import { listClassSections } from "@/modules/academia/queries";
 import { academiaListPageConfigs } from "@/modules/academia/ui-config";
 import {
   ListPageShell,
-  ReadOnlyAction,
   resolveSearchParam,
   StatusPill,
+  TableActionLink,
   type RouteSearchParams
 } from "@/modules/academia/components/academia-page-shell";
 
@@ -25,7 +25,14 @@ export default async function ClassSectionsPage({ searchParams }: { searchParams
           <td className="whitespace-nowrap px-4 py-3">{classSection.classTeacherUser?.displayName ?? classSection.classTeacherUser?.email ?? "-"}</td>
           <td className="whitespace-nowrap px-4 py-3">{classSection.capacity ?? "-"}</td>
           <td className="whitespace-nowrap px-4 py-3"><StatusPill value={classSection.status} /></td>
-          <td className="whitespace-nowrap px-4 py-3"><ReadOnlyAction /></td>
+          <td className="whitespace-nowrap px-4 py-3">
+            <TableActionLink
+              href={`/academia/class-sections/${classSection.id}/edit`}
+              ariaLabel={`Edit class section ${classSection.displayName}`}
+            >
+              Edit
+            </TableActionLink>
+          </td>
         </tr>
       ))}
     </ListPageShell>

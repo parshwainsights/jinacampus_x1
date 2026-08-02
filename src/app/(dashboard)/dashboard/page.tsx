@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   BookOpen,
   BriefcaseBusiness,
   Building2,
@@ -22,6 +21,7 @@ import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
 import type { TenantContext } from "@/lib/tenant/context";
 import { getNavigationAudience } from "@/components/app-shell/navigation";
+import { getMobileStaffAttendanceStatus } from "@/lib/mobile-api/staff-attendance";
 import {
   DashboardAttentionPanel,
   DashboardEmptyState,
@@ -30,6 +30,8 @@ import {
   DashboardPageHeader,
   DashboardQuickActions,
   DashboardSection,
+  DashboardStatusMix,
+  DashboardTrendChart,
   canViewDashboard,
   canViewDashboardSection,
   formatDashboardDate,
@@ -43,10 +45,13 @@ import {
   getAcademiaDashboardMetrics,
   getCampusCoreDashboardMetrics,
   getStaffAttendanceDashboardMetrics,
+  getStaffAttendanceDashboardTrend,
   getStaffBoardDashboardMetrics,
   getStudentAttendanceDashboardMetrics,
+  getStudentAttendanceDashboardTrend,
   type AcademiaDashboardMetrics,
   type CampusCoreDashboardMetrics,
+  type DashboardAttendanceTrendPoint,
   type StaffAttendanceDashboardMetrics,
   type StaffBoardDashboardMetrics,
   type StudentAttendanceDashboardMetrics
@@ -67,6 +72,9 @@ function settledValue<T>(result: PromiseSettledResult<T | null>) {
 }
 
 function branchContextLabel(ctx: TenantContext) {
+  if (ctx.activeBranchName) {
+    return `${ctx.activeBranchName}${ctx.activeBranchCode ? ` (${ctx.activeBranchCode})` : ""}`;
+  }
   if (ctx.activeBranchId) return "Current branch";
   if (ctx.accessibleBranchIds.length > 0) return `${ctx.accessibleBranchIds.length} accessible branches`;
   return "No branch access";
@@ -74,6 +82,19 @@ function branchContextLabel(ctx: TenantContext) {
 
 function hasQueryFailure(results: readonly PromiseSettledResult<unknown>[]) {
   return results.some((result) => result.status === "rejected");
+}
+
+function formatDashboardTime(value: string | null) {
+  if (!value) return "Not recorded";
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata"
+  }).format(new Date(value));
+}
+
+function percentage(value: number, total: number) {
+  return total > 0 ? Math.min(Math.round((value / total) * 100), 100) : null;
 }
 
 function buildAttendanceAttentionItems(
@@ -164,29 +185,61 @@ export default async function DashboardPage() {
     staffBoard: canViewDashboardSection(permissions, "staffBoard"),
     staffAttendance: canViewDashboardSection(permissions, "staffAttendance")
   };
+  const canViewSelfAttendance = permissions.has("staffboard.attendance.self_view");
 
-  const [campusCoreResult, academiaResult, studentAttendanceResult, staffBoardResult, staffAttendanceResult] =
+  const [
+    campusCoreResult,
+    academiaResult,
+    studentAttendanceResult,
+    staffBoardResult,
+    staffAttendanceResult,
+    studentAttendanceTrendResult,
+    staffAttendanceTrendResult,
+    selfAttendanceResult
+  ] =
     await Promise.all([
       safeLoad(access.campusCore, () => getCampusCoreDashboardMetrics(ctx)),
       safeLoad(access.academia, () => getAcademiaDashboardMetrics(ctx)),
       safeLoad(access.studentAttendance, () => getStudentAttendanceDashboardMetrics(ctx)),
       safeLoad(access.staffBoard, () => getStaffBoardDashboardMetrics(ctx)),
-      safeLoad(access.staffAttendance, () => getStaffAttendanceDashboardMetrics(ctx))
+      safeLoad(access.staffAttendance, () => getStaffAttendanceDashboardMetrics(ctx)),
+      safeLoad(access.studentAttendance, () => getStudentAttendanceDashboardTrend(ctx)),
+      safeLoad(access.staffAttendance, () => getStaffAttendanceDashboardTrend(ctx)),
+      safeLoad(canViewSelfAttendance, () => getMobileStaffAttendanceStatus(ctx))
     ]);
 
-  const results = [campusCoreResult, academiaResult, studentAttendanceResult, staffBoardResult, staffAttendanceResult];
+  const results = [
+    campusCoreResult,
+    academiaResult,
+    studentAttendanceResult,
+    staffBoardResult,
+    staffAttendanceResult,
+    studentAttendanceTrendResult,
+    staffAttendanceTrendResult,
+    selfAttendanceResult
+  ];
   const campusCore = settledValue<CampusCoreDashboardMetrics>(campusCoreResult);
   const academia = settledValue<AcademiaDashboardMetrics>(academiaResult);
   const studentAttendance = settledValue<StudentAttendanceDashboardMetrics>(studentAttendanceResult);
   const staffBoard = settledValue<StaffBoardDashboardMetrics>(staffBoardResult);
   const staffAttendance = settledValue<StaffAttendanceDashboardMetrics>(staffAttendanceResult);
-  const quickActions = getVisibleDashboardQuickActions(permissions);
-  const navigationAudience = getNavigationAudience(permissions);
+  const studentAttendanceTrend = settledValue<DashboardAttendanceTrendPoint[]>(studentAttendanceTrendResult);
+  const staffAttendanceTrend = settledValue<DashboardAttendanceTrendPoint[]>(staffAttendanceTrendResult);
+  const selfAttendance = settledValue<Awaited<ReturnType<typeof getMobileStaffAttendanceStatus>>>(selfAttendanceResult);
+  const quickActions = getVisibleDashboardQuickActions(permissions, ctx.roleCodes ?? []);
+  const navigationAudience = getNavigationAudience(permissions, ctx.roleCodes ?? []);
   const adminOperations = getVisibleAdminMobileActions(permissions, ADMIN_MOBILE_OPERATIONS);
   const adminTools = getVisibleAdminMobileActions(permissions, ADMIN_MOBILE_TOOLS);
   const resolvedDateLabel = formatDashboardDate(studentAttendance?.date ?? staffAttendance?.date ?? new Date());
   const attentionItems = buildAttendanceAttentionItems(studentAttendance, staffAttendance);
   const queryFailure = hasQueryFailure(results);
+  const studentPresenceCount = studentAttendance
+    ? studentAttendance.present + studentAttendance.late + studentAttendance.halfDay
+    : 0;
+  const studentPresenceRate = studentAttendance ? percentage(studentPresenceCount, studentAttendance.marked) : null;
+  const staffCheckInRate = staffAttendance && staffBoard
+    ? percentage(staffAttendance.checkedIn, staffBoard.totalActiveStaff)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -200,8 +253,12 @@ export default async function DashboardPage() {
         campusCore={campusCore}
         academia={academia}
         studentAttendance={studentAttendance}
+        studentAttendanceTrend={studentAttendanceTrend}
         staffBoard={staffBoard}
         staffAttendance={staffAttendance}
+        staffAttendanceTrend={staffAttendanceTrend}
+        canViewSelfAttendance={canViewSelfAttendance}
+        selfAttendance={selfAttendance?.attendance ?? null}
         dateLabel={resolvedDateLabel}
         hasActiveAcademicYear={Boolean(ctx.activeAcademicYearId)}
         hasBranchAccess={ctx.accessibleBranchIds.length > 0}
@@ -212,6 +269,7 @@ export default async function DashboardPage() {
 
       <div className="hidden space-y-6 lg:block" data-desktop-dashboard="true">
         <DashboardPageHeader
+          userName={ctx.userName ?? ctx.userEmail}
           activeAcademicYearName={campusCore?.activeAcademicYearName ?? null}
           branchLabel={branchLabel}
           dateLabel={resolvedDateLabel}
@@ -238,86 +296,153 @@ export default async function DashboardPage() {
           />
         ) : null}
 
-        {studentAttendance || staffAttendance ? (
-          <DashboardSection title="Today's Attendance" description="The first place to check what is happening across students and staff today.">
-            <DashboardAttentionPanel items={attentionItems} />
-            {studentAttendance ? (
-              <DashboardMetricGroup
-                title="Student Attendance"
-                description="Daily full-day class-section attendance from existing records only."
-                columnsClassName="xl:grid-cols-5"
-              >
-                <DashboardMetricCard label="Students Marked Today" value={studentAttendance.marked} icon={ClipboardCheck} />
-                <DashboardMetricCard label="Present" value={studentAttendance.present} icon={CheckCircle2} tone="emerald" />
+        {studentAttendance || staffAttendance || academia || staffBoard ? (
+          <DashboardSection title="Today's Attendance" description="A concise operational pulse using verified records from the active school context.">
+            <DashboardMetricGroup
+              title="Operational Pulse"
+              description="Rates use recorded attendance only and keep missing records visible as pending work."
+              columnsClassName="xl:grid-cols-3 2xl:grid-cols-6"
+            >
+              {studentAttendance ? (
                 <DashboardMetricCard
-                  label="Absent"
-                  value={studentAttendance.absent}
-                  icon={AlertTriangle}
-                  tone="rose"
-                  emphasis={studentAttendance.absent > 0 ? "attention" : "normal"}
+                  label="Student Presence"
+                  value={studentPresenceRate === null ? "No data" : `${studentPresenceRate}%`}
+                  description={`${studentPresenceCount} on-site of ${studentAttendance.marked} marked.`}
+                  icon={CheckCircle2}
+                  tone="emerald"
+                  progress={studentPresenceRate}
+                  supportingValue="Recorded presence"
                 />
+              ) : null}
+              {staffAttendance && staffBoard ? (
                 <DashboardMetricCard
-                  label="Late"
-                  value={studentAttendance.late}
-                  icon={Clock3}
-                  tone="amber"
-                  emphasis={studentAttendance.late > 0 ? "attention" : "normal"}
+                  label="Staff Checked In"
+                  value={staffAttendance.checkedIn}
+                  description={`${staffAttendance.checkedIn} of ${staffBoard.totalActiveStaff} active staff.`}
+                  icon={LogIn}
+                  tone="sky"
+                  progress={staffCheckInRate}
+                  supportingValue="Check-in coverage"
                 />
+              ) : null}
+              {studentAttendance ? (
+                <DashboardMetricCard
+                  label="Students Marked Today"
+                  value={studentAttendance.marked}
+                  description="Full-day attendance records submitted today."
+                  icon={ClipboardCheck}
+                />
+              ) : null}
+              {studentAttendance ? (
                 <DashboardMetricCard
                   label="Classes Not Marked"
                   value={studentAttendance.classesNotMarked}
+                  description={`${studentAttendance.classesMarked} of ${studentAttendance.eligibleClassSections} eligible classes complete.`}
                   icon={ListX}
                   tone="amber"
                   emphasis={studentAttendance.classesNotMarked > 0 ? "attention" : "normal"}
+                  progress={studentAttendance.markingRate}
+                  supportingValue="Marking completion"
                 />
-              </DashboardMetricGroup>
-            ) : null}
-            {studentAttendance && studentAttendance.marked === 0 ? (
-              <DashboardEmptyState
-                title="Attendance has not been marked yet today."
-                description="Use Mark Student Attendance when the selected class-section is ready. Missing student records are not counted as absent."
-              />
-            ) : null}
-            {staffAttendance ? (
-              <DashboardMetricGroup
-                title="Staff Attendance"
-                description="QR check-in/check-out status from existing staff attendance records."
-                columnsClassName="xl:grid-cols-5"
-              >
-                <DashboardMetricCard label="Staff Checked In" value={staffAttendance.checkedIn} icon={LogIn} />
-                <DashboardMetricCard label="Present" value={staffAttendance.present} icon={CheckCircle2} tone="emerald" />
-                <DashboardMetricCard
-                  label="Late"
-                  value={staffAttendance.late}
-                  icon={Clock3}
-                  tone="amber"
-                  emphasis={staffAttendance.late > 0 ? "attention" : "normal"}
-                />
-                <DashboardMetricCard label="Half Day" value={staffAttendance.halfDay} icon={CalendarCheck2} tone="sky" />
-                <DashboardMetricCard
-                  label="Not Marked"
-                  value={staffAttendance.notMarked}
-                  icon={ListX}
-                  tone="slate"
-                  emphasis={staffAttendance.notMarked > 0 ? "attention" : "normal"}
-                />
-              </DashboardMetricGroup>
-            ) : null}
-            {staffAttendance && staffAttendance.checkedIn === 0 ? (
-              <DashboardEmptyState
-                title="No staff check-ins recorded yet today."
-                description="Staff attendance cards use QR records only. Missing staff records stay separate as not marked when active staff exists."
-              />
-            ) : null}
+              ) : null}
+              {academia ? (
+                <DashboardMetricCard label="Active Students" value={academia.totalActiveStudents} description="Current branch-scoped student records." icon={GraduationCap} />
+              ) : null}
+              {staffBoard ? (
+                <DashboardMetricCard label="Active Staff" value={staffBoard.totalActiveStaff} description="Teaching and non-teaching profiles." icon={BriefcaseBusiness} tone="sky" />
+              ) : null}
+            </DashboardMetricGroup>
           </DashboardSection>
         ) : null}
 
-        {academia ? (
+        {studentAttendance || staffAttendance ? (
+          <div className="grid min-w-0 gap-5 xl:grid-cols-12" data-dashboard-visual-report="true">
+            <div className="min-w-0 xl:col-span-8">
+              <DashboardTrendChart
+                idPrefix="desktop-attendance-trend"
+                studentTrend={studentAttendanceTrend}
+                staffTrend={staffAttendanceTrend}
+              />
+            </div>
+            <div className="min-w-0 xl:col-span-4">
+              <DashboardStatusMix
+                studentAttendance={studentAttendance}
+                staffAttendance={staffAttendance}
+                staffBoard={staffBoard}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {studentAttendance && studentAttendance.marked === 0 ? (
+          <DashboardEmptyState
+            title="Attendance has not been marked yet today."
+            description="Use Mark Student Attendance when the selected class-section is ready. Missing student records are not counted as absent."
+          />
+        ) : null}
+
+        {staffAttendance && staffAttendance.checkedIn === 0 ? (
+          <DashboardEmptyState
+            title="No staff check-ins recorded yet today."
+            description="Staff attendance uses existing records only. Missing staff records remain visible as not marked."
+          />
+        ) : null}
+
+        {attentionItems.length > 0 ? (
+          <DashboardSection title="Needs Attention" description="Exceptions that may require an operational follow-up today.">
+            <DashboardAttentionPanel items={attentionItems} />
+          </DashboardSection>
+        ) : null}
+
+        {canViewSelfAttendance ? (
+          <DashboardSection title="My Attendance" description="Your own staff attendance record for today.">
+            {selfAttendance?.attendance ? (
+              <DashboardMetricGroup
+                title="Personal attendance"
+                description="This section never includes another staff member's record."
+                columnsClassName="xl:grid-cols-4"
+              >
+                <DashboardMetricCard
+                  label="Status"
+                  value={selfAttendance.attendance.status.replaceAll("_", " ")}
+                  icon={ClipboardCheck}
+                  tone="emerald"
+                />
+                <DashboardMetricCard
+                  label="Check in"
+                  value={formatDashboardTime(selfAttendance.attendance.checkInAt)}
+                  icon={LogIn}
+                  tone="sky"
+                />
+                <DashboardMetricCard
+                  label="Check out"
+                  value={formatDashboardTime(selfAttendance.attendance.checkOutAt)}
+                  icon={Clock3}
+                  tone="slate"
+                />
+                <DashboardMetricCard
+                  label="Working minutes"
+                  value={selfAttendance.attendance.workingMinutes ?? "Pending"}
+                  icon={CalendarCheck2}
+                  tone="amber"
+                />
+              </DashboardMetricGroup>
+            ) : (
+              <DashboardEmptyState
+                title="No attendance recorded yet today."
+                description="Use Scan QR when the school displays an active attendance code."
+              />
+            )}
+          </DashboardSection>
+        ) : null}
+
+        <div className="grid min-w-0 gap-6 2xl:grid-cols-2" data-dashboard-operational-summaries="true">
+          {academia ? (
           <DashboardSection title="Academics" description="Student records, enrollments, and academic setup readiness.">
             <DashboardMetricGroup
               title="Academia Summary"
               description="Core academic records for the active branch and academic year scope."
-              columnsClassName="xl:grid-cols-5"
+              columnsClassName="xl:grid-cols-3"
             >
               <DashboardMetricCard label="Active Students" value={academia.totalActiveStudents} icon={GraduationCap} />
               <DashboardMetricCard label="Active Enrollments" value={academia.totalActiveEnrollments} icon={UserRoundCheck} tone="emerald" />
@@ -326,9 +451,9 @@ export default async function DashboardPage() {
               <DashboardMetricCard label="Guardians" value={academia.totalGuardians} icon={UsersRound} tone="amber" />
             </DashboardMetricGroup>
           </DashboardSection>
-        ) : null}
+          ) : null}
 
-        {staffBoard ? (
+          {staffBoard ? (
           <DashboardSection title="StaffBoard Lite" description="Active staff profile coverage across teaching and non-teaching categories.">
             <DashboardMetricGroup
               title="StaffBoard Summary"
@@ -346,7 +471,8 @@ export default async function DashboardPage() {
               />
             ) : null}
           </DashboardSection>
-        ) : null}
+          ) : null}
+        </div>
 
         {campusCore ? (
           <DashboardSection title="School Setup" description="Platform setup and tenant administration at a glance.">

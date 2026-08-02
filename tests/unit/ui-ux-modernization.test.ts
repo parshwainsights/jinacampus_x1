@@ -7,13 +7,14 @@ function source(path: string) {
 }
 
 describe("Base MVP UI/UX modernization", () => {
-  it("defines the premium SaaS palette and reusable glass surface utilities", () => {
+  it("defines the approved brand palette and reusable operational surface utilities", () => {
     const tailwind = source("tailwind.config.ts");
     const globals = source("src/app/globals.css");
 
-    expect(tailwind).toContain("#0f172a");
-    expect(tailwind).toContain("#4f46e5");
-    expect(tailwind).toContain("#06b6d4");
+    expect(tailwind).toContain("#0b1638");
+    expect(tailwind).toContain("#2457e6");
+    expect(tailwind).toContain("#12b8a6");
+    expect(tailwind).toContain("#c8a44d");
     expect(tailwind).toContain("boxShadow");
     expect(tailwind).toContain("app-glass");
     expect(globals).toContain("premium-glass-panel");
@@ -23,34 +24,38 @@ describe("Base MVP UI/UX modernization", () => {
     expect(globals).toContain("premium-muted-chip");
     expect(globals).toContain("premium-primary-button");
     expect(globals).toContain("premium-secondary-button");
-    expect(globals).toContain("backdrop-blur");
+    expect(globals).toContain("--jc-color-app-bg");
+    expect(globals).toContain("rounded-lg");
   });
 
   it("modernizes the authenticated app shell without adding out-of-scope navigation", () => {
     const shell = [
       source("src/app/layout.tsx"),
       source("src/app/(dashboard)/layout.tsx"),
-      source("src/components/app-shell/topbar.tsx"),
-      source("src/components/app-shell/sidebar-nav.tsx"),
+      source("src/components/app-shell/app-navbar.tsx"),
+      source("src/components/app-shell/navbar-context-menu.tsx"),
+      source("src/components/app-shell/desktop-navigation-dock.tsx"),
+      source("src/components/app-shell/mobile-navigation-drawer.tsx"),
       source("src/components/app-shell/navigation.ts")
     ].join("\n");
     const manifest = JSON.parse(source("public/site.webmanifest")) as {
       icons: Array<{ src: string; purpose?: string }>;
     };
 
-    expect(shell).toContain("backdrop-blur-xl");
-    expect(shell).toContain("JinaCampus School OS");
+    expect(shell).toContain("bg-sidebar");
+    expect(shell).toContain("<BrandLogo");
+    expect(shell).toContain("Current workspace");
     expect(shell).toContain("data-mobile-navigation");
-    expect(shell).toContain("data-nav-scroll-area");
+    expect(shell).toContain("data-desktop-navigation-dock");
     expect(shell).toContain("premium-nav-scroll");
     expect(shell).toContain('manifest: "/site.webmanifest"');
     expect(shell).toContain('/favicon.ico');
     expect(shell).toContain('/apple-touch-icon.png');
     expect(manifest.icons.map((icon) => icon.src)).toEqual(
       expect.arrayContaining([
-        "/icons/pwa-icon-192x192.png",
-        "/icons/pwa-icon-512x512.png",
-        "/icons/pwa-icon-maskable-512x512.png"
+        "/icons/icon-192x192.png",
+        "/icons/icon-512x512.png",
+        "/icons/icon-1024x1024.png"
       ])
     );
     expect(shell).not.toMatch(/FeeDesk|GradeBook|SchoolCast|payroll|biometric/i);
@@ -65,8 +70,8 @@ describe("Base MVP UI/UX modernization", () => {
       source("src/components/forms/password-input.tsx")
     ].join("\n");
 
-    expect(auth).toContain("premium-glass-panel");
-    expect(auth).toContain("premium-primary-button");
+    expect(auth).toContain("auth-form-panel");
+    expect(auth).toContain("auth-action-primary");
     expect(auth).toContain("Forgot password?");
     expect(auth).toContain("aria-label={label}");
     expect(auth).toContain('type="button"');
@@ -84,10 +89,11 @@ describe("Base MVP UI/UX modernization", () => {
 
     expect(combined).toContain('data-responsive-table="true"');
     expect(combined).toContain("Scroll sideways to view all columns.");
-    expect(combined).toContain("rounded-2xl");
+    expect(combined).toContain("rounded-lg");
     expect(combined).toContain("premium-card");
     expect(combined).toContain("statusDotClassNames");
-    expect(combined).toContain("bg-gradient-to-r");
+    expect(combined).toContain("dashboard-glass-panel");
+    expect(combined).not.toContain("bg-gradient-to-r");
     expect(combined).not.toMatch(/passwordHash|tokenHash|rawToken|Prisma error/i);
   });
 

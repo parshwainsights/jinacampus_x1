@@ -21,7 +21,7 @@ When staff app access is enabled, the staff profile is linked to a CampusCore `U
 
 - tenant-scoped user record
 - branch access for the staff profile branch
-- a non-platform school role such as `STAFF`, `TEACHER`, `CLASS_TEACHER`, or `OFFICE_STAFF`
+- a canonical school role such as `STAFF`, `TEACHER`, or `OFFICE_STAFF`
 - a hashed password credential with first-change required for admin-created access
 
 Password hashes are never displayed in UI or docs.
