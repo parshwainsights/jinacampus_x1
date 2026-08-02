@@ -21,9 +21,9 @@ module or change tenant, RBAC, attendance, or audit behavior.
 | PostCSS | Pinned to `8.5.25` |
 | Sharp | Overridden to `0.35.3` |
 
-The package now requires Node.js `^20.19.0 || >=22.12.0`, matching the strictest
-framework/test dependency requirement. The verified workstation runtime was
-Node.js `24.18.0`.
+The package now pins Node.js to `24.x`, matching the verified workstation and
+Vercel project runtime while preventing an automatic future major upgrade. The
+verified workstation runtime was Node.js `24.18.0`.
 
 Next.js 16 uses the `proxy.ts` convention, so the prior `middleware.ts` entry
 point and source assertions were migrated. The TypeScript configuration uses
