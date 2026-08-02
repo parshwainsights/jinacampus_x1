@@ -32,8 +32,7 @@ const staffTypeOptions = [
 const loginRoleOptions = [
   { value: "STAFF", label: "Staff" },
   { value: "TEACHER", label: "Teacher" },
-  { value: "CLASS_TEACHER", label: "Class Teacher" },
-  { value: "OFFICE_STAFF", label: "Office Staff" }
+  { value: "OFFICE_STAFF", label: "Office Operator" }
 ] as const;
 
 function fieldError(state: StaffProfileFormActionState, name: string) {
@@ -106,7 +105,7 @@ export function StaffProfileCreateForm({
               Create login access
             </label>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              Login uses School ID, email, and password. Temporary passwords are hashed immediately and should be changed by the staff member after first login.
+              Login uses School ID plus employee code or email. A passkey can be added after the temporary password is changed.
             </p>
           </div>
           <span className="premium-muted-chip">Optional app access</span>

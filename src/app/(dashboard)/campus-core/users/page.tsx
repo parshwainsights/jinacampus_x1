@@ -1,7 +1,7 @@
+import Link from "next/link";
 import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
-import { listAccessibleBranches, listAssignableRoles, listUsers } from "@/modules/campus-core/queries";
-import { UserCreateForm } from "@/modules/campus-core/components/campus-core-profile-forms";
+import { listUsers } from "@/modules/campus-core/queries";
 import { EmptyState, PermissionState } from "@/components/ui/empty-state";
 import { ResponsiveTable, StatusBadge, TableActionLink } from "@/components/ui/table-primitives";
 import { MobileListCard } from "@/components/mobile/mobile-list-card";
@@ -11,19 +11,27 @@ export default async function UsersPage() {
   const permissions = await getEffectivePermissions({ ctx, branchId: ctx.activeBranchId });
   if (!permissions.has("campuscore.user.view")) return <PermissionState />;
   const users = await listUsers(ctx);
-  const canCreateUsers = permissions.has("campuscore.user.create");
   const canUpdateUsers = permissions.has("campuscore.user.update");
   const canResetPasswords = permissions.has("campuscore.user.reset_password");
-  const canAssignRoles = permissions.has("campuscore.user.manage");
-  const [branches, roles] = canCreateUsers
-    ? await Promise.all([listAccessibleBranches(ctx), canAssignRoles ? listAssignableRoles(ctx) : Promise.resolve([])])
-    : [[], []];
+  const canCreateStaffAccounts =
+    permissions.has("campuscore.user.create") &&
+    permissions.has("staffboard.staff.create");
 
   return (
     <div className="space-y-6">
       <div><h1 className="text-2xl font-semibold">Users</h1><p className="text-sm text-slate-500">Manage accounts, roles, and branch access.</p></div>
-      {canCreateUsers ? (
-        <UserCreateForm branches={branches.map((branch) => ({ id: branch.id, name: branch.name }))} roles={roles.map((role) => ({ id: role.id, code: role.code, name: role.name }))} />
+      {canCreateStaffAccounts ? (
+        <section className="premium-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-2xl">
+            <h2 className="text-base font-semibold text-slate-950">Create staff and login access together</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Add Teachers, Office Staff, and Staff from Staff Profiles so the employee code, branch, role, and login account stay linked.
+            </p>
+          </div>
+          <Link href="/staffboard/staff" className="premium-primary-button min-h-11 w-full sm:w-auto">
+            Open Staff Profiles
+          </Link>
+        </section>
       ) : null}
       {users.length ? (
         <>
@@ -79,7 +87,12 @@ export default async function UsersPage() {
           </div>
         </>
       ) : (
-        <EmptyState title="No users found" description="Create an invited user with branch and role access." />
+        <EmptyState
+          title="No users found"
+          description={canCreateStaffAccounts
+            ? "Create the first linked staff and user account from Staff Profiles."
+            : "No user accounts are available in your current institution and branch scope."}
+        />
       )}
     </div>
   );

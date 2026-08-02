@@ -24,7 +24,7 @@ const sectionPermissions = {
   academia: ["academia.student.view", "academia.enrollment.manage", "academia.class.manage", "academia.guardian.manage"],
   studentAttendance: ["academia.attendance.view", "academia.attendance.report", "academia.attendance.mark"],
   staffBoard: ["staffboard.staff.view"],
-  staffAttendance: ["staffboard.attendance.view", "staffboard.attendance.report", "staffboard.attendance.qr.generate", "staffboard.attendance.self_scan"]
+  staffAttendance: ["staffboard.attendance.view", "staffboard.attendance.report", "staffboard.attendance.qr.generate"]
 } satisfies Record<DashboardSectionKey, readonly PermissionCode[]>;
 
 export const DASHBOARD_QUICK_ACTIONS = [
@@ -54,21 +54,21 @@ export const DASHBOARD_QUICK_ACTIONS = [
     description: "Generate a time-bound QR code for staff check-in or check-out.",
     href: "/staffboard/attendance/qr",
     permissions: ["staffboard.attendance.qr.generate"],
-    audiences: ["admin"]
+    audiences: ["admin", "office"]
   },
   {
     label: "Staff Attendance",
     description: "Review daily staff attendance and correction entry points.",
     href: "/staffboard/attendance",
     permissions: ["staffboard.attendance.view"],
-    audiences: ["admin"]
+    audiences: ["admin", "office"]
   },
   {
     label: "Staff Reports",
     description: "Review staff attendance, late arrivals, and corrections.",
     href: "/staffboard/attendance/reports",
     permissions: ["staffboard.attendance.report"],
-    audiences: ["admin"]
+    audiences: ["admin", "office"]
   },
   {
     label: "Manage Staff",
@@ -82,7 +82,14 @@ export const DASHBOARD_QUICK_ACTIONS = [
     description: "Open the staff-facing QR scan page.",
     href: "/staffboard/attendance/scan",
     permissions: ["staffboard.attendance.self_scan"],
-    audiences: ["teacher", "staff"]
+    audiences: ["office", "teacher", "staff"]
+  },
+  {
+    label: "My Attendance",
+    description: "Review your own check-in, check-out, and working time.",
+    href: "/staffboard/attendance/me",
+    permissions: ["staffboard.attendance.self_view"],
+    audiences: ["office", "teacher", "staff"]
   }
 ] as const satisfies readonly DashboardQuickActionDefinition[];
 
@@ -113,8 +120,11 @@ export function canViewDashboardSection(
   return sectionPermissions[section].some((permission) => permissions.has(permission));
 }
 
-export function getVisibleDashboardQuickActions(permissions: ReadonlySet<PermissionCode>) {
-  const audience = getNavigationAudience(permissions);
+export function getVisibleDashboardQuickActions(
+  permissions: ReadonlySet<PermissionCode>,
+  roleCodes: readonly string[] = []
+) {
+  const audience = getNavigationAudience(permissions, roleCodes);
   return DASHBOARD_QUICK_ACTIONS.filter((action) =>
     action.audiences.some((actionAudience) => actionAudience === audience) &&
     action.permissions.every((permission) => permissions.has(permission))

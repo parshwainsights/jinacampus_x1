@@ -7,24 +7,31 @@ function source(path: string) {
 }
 
 describe("app shell context safety", () => {
-  it("passes only display-safe context into the top bar", () => {
+  it("passes only display-safe context into the application navbar", () => {
     const layout = source("src/app/(dashboard)/layout.tsx");
-    const topbar = source("src/components/app-shell/topbar.tsx");
+    const navbar = [
+      source("src/components/app-shell/app-navbar.tsx"),
+      source("src/components/app-shell/navbar-context-menu.tsx"),
+      source("src/components/app-shell/navbar-user-menu.tsx"),
+      source("src/components/app-shell/navbar-sign-out-button.tsx")
+    ].join("\n");
 
-    expect(layout).toContain("topbarContext");
+    expect(layout).toContain("navbarContext");
     expect(layout).toContain("userEmail: ctx.userEmail");
+    expect(layout).toContain("userName: ctx.userName");
     expect(layout).toContain("hasActiveBranch: Boolean(ctx.activeBranchId)");
     expect(layout).toContain("hasActiveAcademicYear: Boolean(ctx.activeAcademicYearId)");
     expect(layout).toContain("institutionName: ctx.institutionDisplayName ?? ctx.institutionName");
     expect(layout).toContain("roleLabels: ctx.roleLabels ?? []");
-    expect(layout).toContain("<Topbar context={topbarContext} branding={branding} />");
-    expect(layout).not.toContain("<Topbar ctx={ctx} />");
+    expect(layout).toContain("<AppChrome");
+    expect(layout).toContain("context={navbarContext}");
+    expect(layout).not.toContain("ctx={ctx}");
 
-    expect(topbar).toContain("TopbarContext");
-    expect(topbar).toContain("Sign out");
-    expect(topbar).toContain("/api/auth/logout");
-    expect(topbar).not.toContain("TenantContext");
-    expect(topbar).not.toMatch(/tenantId|activeBranchId|activeAcademicYearId|userId/);
+    expect(navbar).toContain("NavbarSessionContext");
+    expect(navbar).toContain("Sign out");
+    expect(navbar).toContain("/api/auth/logout");
+    expect(navbar).not.toContain("TenantContext");
+    expect(navbar).not.toMatch(/tenantId|activeBranchId|activeAcademicYearId|userId/);
   });
 
   it("keeps the auth-me route from returning raw internal context identifiers", () => {

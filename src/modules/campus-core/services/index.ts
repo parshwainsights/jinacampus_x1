@@ -3,7 +3,12 @@ import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
 import type { TenantContext } from "@/lib/tenant/context";
 import { getEffectivePermissions, requirePermission } from "@/lib/rbac/require-permission";
-import { canAssignRole, hasPlatformAdminRole, isPlatformAdminRoleCode } from "@/lib/rbac/roles";
+import {
+  canAssignRole,
+  hasPlatformAdminRole,
+  isPlatformAdminRoleCode,
+  roleRequiresStaffProfile
+} from "@/lib/rbac/roles";
 import { writeAuditLog } from "@/lib/audit/audit-log";
 import { CAMPUS_CORE_AUDIT_EVENTS } from "@/modules/campus-core/audit-events";
 import type {
@@ -59,6 +64,35 @@ function tenantRoleScope(input: { scopeType?: "TENANT" | "BRANCH" | "ACADEMIC_YE
 
 function isPlatformAdminContext(ctx: TenantContext) {
   return hasPlatformAdminRole(ctx.roleCodes ?? []);
+}
+
+type InstitutionScopeDbClient = Pick<typeof db, "institution">;
+
+async function requireAccessibleInstitution(
+  client: InstitutionScopeDbClient,
+  ctx: TenantContext,
+  institutionId: string
+) {
+  const institution = await client.institution.findFirst({
+    where: {
+      id: institutionId,
+      tenantId: ctx.tenantId,
+      status: { not: "ARCHIVED" },
+      ...(isPlatformAdminContext(ctx)
+        ? {}
+        : {
+            branches: {
+              some: {
+                tenantId: ctx.tenantId,
+                id: { in: ctx.accessibleBranchIds },
+                status: { not: "ARCHIVED" }
+              }
+            }
+          })
+    }
+  });
+  if (!institution) throw notFound("INSTITUTION_NOT_FOUND");
+  return institution;
 }
 
 function targetUserGovernanceWhere(ctx: TenantContext, userId: string) {
@@ -137,7 +171,7 @@ async function assertCanDeactivateTargetUser(
 }
 
 export async function createInstitutionService(ctx: TenantContext, input: z.infer<typeof createInstitutionSchema>) {
-  await requirePermission({ ctx, permission: "campuscore.institution.manage" });
+  await requirePermission({ ctx, permission: "platform.institution.manage" });
   return db.$transaction(async (tx) => {
     const institution = await tx.institution.create({
       data: {
@@ -167,10 +201,7 @@ export async function updateInstitutionService(ctx: TenantContext, input: z.infe
   await requirePermission({ ctx, permission: "campuscore.institution.manage" });
   return db.$transaction(async (tx) => {
     const { institutionId } = input;
-    const before = await tx.institution.findFirst({
-      where: { id: institutionId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } }
-    });
-    if (!before) throw notFound("INSTITUTION_NOT_FOUND");
+    const before = await requireAccessibleInstitution(tx, ctx, institutionId);
 
     const after = await tx.institution.update({
       where: { id: institutionId },
@@ -230,8 +261,7 @@ export async function updateInstitutionService(ctx: TenantContext, input: z.infe
 export async function createBranchService(ctx: TenantContext, input: z.infer<typeof createBranchSchema>) {
   await requirePermission({ ctx, permission: "campuscore.branch.manage" });
   return db.$transaction(async (tx) => {
-    const institution = await tx.institution.findFirst({ where: { id: input.institutionId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } } });
-    if (!institution) throw new Error("INSTITUTION_NOT_FOUND");
+    await requireAccessibleInstitution(tx, ctx, input.institutionId);
 
     const branch = await tx.branch.create({
       data: {
@@ -273,11 +303,7 @@ export async function updateBranchService(ctx: TenantContext, input: z.infer<typ
     if (!before) throw notFound("BRANCH_NOT_FOUND");
 
     if (institutionId) {
-      const institution = await tx.institution.findFirst({
-        where: { id: institutionId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } },
-        select: { id: true }
-      });
-      if (!institution) throw notFound("INSTITUTION_NOT_FOUND");
+      await requireAccessibleInstitution(tx, ctx, institutionId);
     }
 
     const after = await tx.branch.update({
@@ -314,10 +340,7 @@ export async function updateBranchService(ctx: TenantContext, input: z.infer<typ
 export async function createAcademicYearService(ctx: TenantContext, input: z.infer<typeof createAcademicYearSchema>) {
   await requirePermission({ ctx, permission: "campuscore.academic_year.manage" });
   return db.$transaction(async (tx) => {
-    const institution = await tx.institution.findFirst({
-      where: { id: input.institutionId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } }
-    });
-    if (!institution) throw new Error("INSTITUTION_NOT_FOUND");
+    await requireAccessibleInstitution(tx, ctx, input.institutionId);
 
     const year = await tx.academicYear.create({ data: { ...input, tenantId: ctx.tenantId, createdById: ctx.userId } });
     await writeAuditLog({ ctx, action: CAMPUS_CORE_AUDIT_EVENTS.ACADEMIC_YEAR_CREATED, entityType: "AcademicYear", entityId: year.id, academicYearId: year.id, after: year }, tx);
@@ -330,6 +353,7 @@ export async function activateAcademicYearService(ctx: TenantContext, input: z.i
   return db.$transaction(async (tx) => {
     const target = await tx.academicYear.findFirst({ where: { id: input.academicYearId, tenantId: ctx.tenantId } });
     if (!target) throw new Error("ACADEMIC_YEAR_NOT_FOUND");
+    await requireAccessibleInstitution(tx, ctx, target.institutionId);
 
     const settings = await tx.tenantSettings.findUnique({ where: { tenantId: ctx.tenantId } });
     if (!settings?.allowMultipleActiveAcademicYears) {
@@ -377,6 +401,9 @@ export async function createUserService(ctx: TenantContext, input: z.infer<typeo
       : [];
     if (roles.length !== roleCodes.length) throw new Error("ROLE_NOT_FOUND");
     for (const role of roles) assertRoleAssignable(ctx, role.code);
+    if (roles.some((role) => roleRequiresStaffProfile(role.code))) {
+      throw new AppError("STAFF_PROFILE_CREATION_REQUIRED", "STAFF_PROFILE_CREATION_REQUIRED", 400);
+    }
     const passwordHash = input.initialPassword ? await hashAccountPassword(input.initialPassword) : null;
 
     const user = await tx.user.create({
@@ -540,7 +567,11 @@ export async function assignUserRoleService(ctx: TenantContext, input: z.infer<t
 
     const user = await tx.user.findFirst({
       where: targetUserGovernanceWhere(ctx, input.userId),
-      select: { id: true, email: true }
+      select: {
+        id: true,
+        email: true,
+        staffProfile: { select: { id: true, tenantId: true } }
+      }
     });
     if (!user) throw notFound("USER_NOT_FOUND");
 
@@ -550,6 +581,12 @@ export async function assignUserRoleService(ctx: TenantContext, input: z.infer<t
     });
     if (!role) throw notFound("ROLE_NOT_FOUND");
     assertRoleAssignable(ctx, role.code);
+    if (
+      roleRequiresStaffProfile(role.code) &&
+      (!user.staffProfile || user.staffProfile.tenantId !== ctx.tenantId)
+    ) {
+      throw new AppError("STAFF_PROFILE_REQUIRED_FOR_ROLE", "STAFF_PROFILE_REQUIRED_FOR_ROLE", 400);
+    }
 
     const uniqueWhere = {
       tenantId: ctx.tenantId,
@@ -765,6 +802,15 @@ export async function adminResetUserPasswordService(ctx: TenantContext, input: z
       create: { userId: user.id, passwordHash, mustChange: true },
       update: { passwordHash, passwordUpdatedAt: new Date(), mustChange: true }
     });
+    const [revokedSessions, removedPasskeys] = await Promise.all([
+      tx.session.updateMany({
+        where: { tenantId: ctx.tenantId, userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() }
+      }),
+      tx.passkeyCredential.deleteMany({
+        where: { tenantId: ctx.tenantId, userId: user.id }
+      })
+    ]);
     if (user.status === "INVITED") {
       await tx.user.update({
         where: { id: user.id },
@@ -777,7 +823,12 @@ export async function adminResetUserPasswordService(ctx: TenantContext, input: z
       action: CAMPUS_CORE_AUDIT_EVENTS.USER_PASSWORD_RESET,
       entityType: "User",
       entityId: user.id,
-      metadata: passwordMetadata(user.id)
+      metadata: {
+        ...passwordMetadata(user.id),
+        sessionsRevoked: revokedSessions.count,
+        passkeysRemoved: removedPasskeys.count,
+        mustChange: true
+      }
     }, tx);
     return { userId: user.id };
   });
@@ -799,12 +850,25 @@ export async function changeOwnPasswordService(ctx: TenantContext, input: z.infe
       where: { userId: ctx.userId },
       data: { passwordHash, passwordUpdatedAt: new Date(), mustChange: false }
     });
+    const revokedSessions = await tx.session.updateMany({
+      where: {
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        revokedAt: null,
+        ...(ctx.sessionId ? { id: { not: ctx.sessionId } } : {})
+      },
+      data: { revokedAt: new Date() }
+    });
     await writeAuditLog({
       ctx,
       action: CAMPUS_CORE_AUDIT_EVENTS.USER_PASSWORD_CHANGED,
       entityType: "User",
       entityId: ctx.userId,
-      metadata: passwordMetadata(ctx.userId)
+      metadata: {
+        ...passwordMetadata(ctx.userId),
+        sessionsRevoked: revokedSessions.count,
+        mustChange: false
+      }
     }, tx);
     return { userId: ctx.userId };
   });
@@ -814,35 +878,41 @@ export async function requestPasswordRecoveryService(
   input: z.infer<typeof forgotPasswordSchema>,
   options: PasswordRecoveryRequestOptions = {}
 ) {
-  const user = await db.user.findFirst({
+  const tenant = await db.tenant.findUnique({
+    where: { slug: input.tenantSlug },
+    select: { id: true, name: true, status: true }
+  });
+  if (!tenant || tenant.status !== "ACTIVE") return { requested: true };
+
+  const user = await db.user.findUnique({
     where: {
-      email: input.email,
-      status: { not: "DEACTIVATED" },
-      tenant: { status: "ACTIVE" }
+      tenantId_email: {
+        tenantId: tenant.id,
+        email: input.email
+      }
     },
     select: {
       id: true,
       tenantId: true,
       email: true,
+      status: true,
       userType: true,
-      tenant: { select: { name: true } },
       branchAccesses: {
         where: { isActive: true },
         select: { branchId: true, isPrimary: true },
         orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
         take: 10
       }
-    },
-    orderBy: { createdAt: "asc" }
+    }
   });
 
-  if (!user) return { requested: true };
+  if (!user || user.status !== "ACTIVE") return { requested: true };
 
   const activeBranchAccess = user.branchAccesses.find((access) => access.isPrimary) ?? user.branchAccesses[0] ?? null;
   await writeAuditLog({
     ctx: {
       tenantId: user.tenantId,
-      tenantName: user.tenant.name,
+      tenantName: tenant.name,
       userId: user.id,
       userEmail: user.email,
       userType: user.userType,
@@ -858,7 +928,8 @@ export async function requestPasswordRecoveryService(
     branchId: activeBranchAccess?.branchId ?? null,
     metadata: {
       recoveryMode: "administrator_assisted",
-      emailDeliveryConfigured: false
+      emailDeliveryConfigured: false,
+      publicResetEnabled: false
     }
   }).catch(() => null);
 

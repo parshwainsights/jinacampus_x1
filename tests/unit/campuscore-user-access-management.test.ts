@@ -42,7 +42,8 @@ const ctx: TenantContext = {
   userType: "STAFF",
   activeBranchId: branchId,
   accessibleBranchIds: [branchId],
-  activeAcademicYearId: "00000000-0000-0000-0000-000000000006"
+  activeAcademicYearId: "00000000-0000-0000-0000-000000000006",
+  roleCodes: ["PRINCIPAL"]
 };
 
 const roleInput = {
@@ -81,7 +82,11 @@ describe("CampusCore user access management", () => {
   });
 
   it("assigns roles with tenant-scoped user and role lookups", async () => {
-    mocks.tx.user.findFirst.mockResolvedValue({ id: userId, email: "teacher@example.test" });
+    mocks.tx.user.findFirst.mockResolvedValue({
+      id: userId,
+      email: "teacher@example.test",
+      staffProfile: { id: "staff-profile-id", tenantId }
+    });
     mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "TEACHER", name: "Teacher" });
     mocks.tx.userRoleAssignment.findUnique.mockResolvedValue(null);
     mocks.tx.userRoleAssignment.create.mockResolvedValue({ id: "assignment-id", userId, roleId, isActive: true });
@@ -90,7 +95,11 @@ describe("CampusCore user access management", () => {
 
     expect(mocks.tx.user.findFirst).toHaveBeenCalledWith({
       where: expect.objectContaining({ id: userId, tenantId, status: { not: "DEACTIVATED" } }),
-      select: { id: true, email: true }
+      select: {
+        id: true,
+        email: true,
+        staffProfile: { select: { id: true, tenantId: true } }
+      }
     });
     expect(mocks.tx.role.findFirst).toHaveBeenCalledWith({
       where: { id: roleId, tenantId, isActive: true },
@@ -108,7 +117,10 @@ describe("CampusCore user access management", () => {
   });
 
   it("handles duplicate active role assignments safely", async () => {
-    mocks.tx.user.findFirst.mockResolvedValue({ id: userId });
+    mocks.tx.user.findFirst.mockResolvedValue({
+      id: userId,
+      staffProfile: { id: "staff-profile-id", tenantId }
+    });
     mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "TEACHER", name: "Teacher" });
     mocks.tx.userRoleAssignment.findUnique.mockResolvedValue({ id: "assignment-id", isActive: true });
 
@@ -120,7 +132,11 @@ describe("CampusCore user access management", () => {
   });
 
   it("reactivates inactive role assignments and clears stale date limits", async () => {
-    mocks.tx.user.findFirst.mockResolvedValue({ id: userId, email: "teacher@example.test" });
+    mocks.tx.user.findFirst.mockResolvedValue({
+      id: userId,
+      email: "teacher@example.test",
+      staffProfile: { id: "staff-profile-id", tenantId }
+    });
     mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "TEACHER", name: "Teacher" });
     mocks.tx.userRoleAssignment.findUnique.mockResolvedValue({
       id: "assignment-id",
@@ -254,7 +270,11 @@ describe("CampusCore user access management", () => {
   });
 
   it("prevents principals from assigning platform-admin roles", async () => {
-    mocks.tx.user.findFirst.mockResolvedValue({ id: userId, email: "teacher@example.test" });
+    mocks.tx.user.findFirst.mockResolvedValue({
+      id: userId,
+      email: "teacher@example.test",
+      staffProfile: { id: "staff-profile-id", tenantId }
+    });
     mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "ADMIN", name: "Admin" });
 
     await expect(assignUserRoleService({ ...ctx, roleCodes: ["PRINCIPAL"] }, roleInput)).rejects.toThrow("ROLE_ASSIGNMENT_NOT_ALLOWED");
@@ -263,16 +283,40 @@ describe("CampusCore user access management", () => {
     expect(mocks.writeAuditLog).not.toHaveBeenCalled();
   });
 
-  it("allows platform admins to assign platform-admin roles", async () => {
-    mocks.tx.user.findFirst.mockResolvedValue({ id: userId, email: "admin@example.test" });
-    mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "ADMIN", name: "Admin" });
+  it("allows platform admins to assign school roles but not another platform administrator", async () => {
+    mocks.tx.user.findFirst.mockResolvedValue({
+      id: userId,
+      email: "admin@example.test",
+      staffProfile: { id: "staff-profile-id", tenantId }
+    });
+    mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "PRINCIPAL", name: "Principal" });
     mocks.tx.userRoleAssignment.findUnique.mockResolvedValue(null);
     mocks.tx.userRoleAssignment.create.mockResolvedValue({ id: "assignment-id", userId, roleId, isActive: true });
 
-    await assignUserRoleService({ ...ctx, roleCodes: ["TENANT_OWNER"] }, roleInput);
+    await assignUserRoleService({ ...ctx, roleCodes: ["ADMINISTRATOR"] }, roleInput);
 
     expect(mocks.tx.userRoleAssignment.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ tenantId, userId, roleId, assignedById: actorUserId })
     });
+
+    resetMocks();
+    mocks.tx.user.findFirst.mockResolvedValue({ id: userId, email: "admin@example.test" });
+    mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "ADMINISTRATOR", name: "Platform Administrator" });
+    await expect(assignUserRoleService({ ...ctx, roleCodes: ["ADMINISTRATOR"] }, roleInput))
+      .rejects.toThrow("ROLE_ASSIGNMENT_NOT_ALLOWED");
+  });
+
+  it("rejects school operational roles for users without a linked staff profile", async () => {
+    mocks.tx.user.findFirst.mockResolvedValue({
+      id: userId,
+      email: "unlinked@example.test",
+      staffProfile: null
+    });
+    mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "STAFF", name: "Staff" });
+
+    await expect(assignUserRoleService(ctx, roleInput))
+      .rejects.toThrow("STAFF_PROFILE_REQUIRED_FOR_ROLE");
+
+    expect(mocks.tx.userRoleAssignment.create).not.toHaveBeenCalled();
   });
 });

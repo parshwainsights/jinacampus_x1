@@ -8,7 +8,7 @@ import { CAMPUS_CORE_AUDIT_EVENTS } from "@/modules/campus-core/audit-events";
 
 export async function POST(request: NextRequest) {
   const rawToken = request.cookies.get(env.SESSION_COOKIE_NAME)?.value;
-  const ctx = await getTenantContext().catch(() => null);
+  const ctx = await getTenantContext({ allowPasswordChangeRequired: true }).catch(() => null);
 
   if (rawToken) {
     const tokenHash = await hashSessionToken(rawToken);

@@ -51,7 +51,7 @@ describe("mobile UI foundation", () => {
     expect(attentionSource).toContain("md:grid-cols-2 xl:grid-cols-4");
     expect(cardSource).toContain("min-w-0");
     expect(cardSource).toContain("break-words");
-    expect(quickActionSource).toContain("min-h-28");
+    expect(quickActionSource).toContain("min-h-24");
     expect(headerSource).toContain("sm:grid-cols-3");
     expect(dashboardSource).toContain("Today's Attendance");
   });

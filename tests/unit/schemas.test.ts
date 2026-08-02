@@ -91,10 +91,17 @@ describe("CampusCore schemas", () => {
     }).success).toBe(true);
   });
 
-  it("validates public forgot-password email without accepting client tenant or role claims", () => {
-    expect(forgotPasswordSchema.parse({ email: "Teacher@Example.Test" })).toEqual({ email: "teacher@example.test" });
-    expect(forgotPasswordSchema.safeParse({ email: "not-an-email" }).success).toBe(false);
+  it("validates tenant-specific forgot-password input without accepting client identity claims", () => {
+    expect(forgotPasswordSchema.parse({
+      tenantSlug: "School-A",
+      email: "Teacher@Example.Test"
+    })).toEqual({
+      tenantSlug: "school-a",
+      email: "teacher@example.test"
+    });
+    expect(forgotPasswordSchema.safeParse({ tenantSlug: "school-a", email: "not-an-email" }).success).toBe(false);
     expect(forgotPasswordSchema.safeParse({
+      tenantSlug: "school-a",
       email: "teacher@example.test",
       tenantId: "00000000-0000-0000-0000-000000000001",
       role: "ADMIN"

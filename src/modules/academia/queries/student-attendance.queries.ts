@@ -67,6 +67,12 @@ function teacherDisplayName(user: { displayName: string | null; firstName: strin
   return user.displayName ?? ([user.firstName, user.lastName].filter(Boolean).join(" ") || user.email);
 }
 
+function canManageAnyClassSection(permissions: Set<string>) {
+  return permissions.has("academia.attendance.update") ||
+    permissions.has("academia.attendance.correct") ||
+    permissions.has("academia.attendance.lock");
+}
+
 export async function listClassSectionsForAttendance(ctx: TenantContext): Promise<AttendanceClassSectionOption[]> {
   const branchId = ctx.activeBranchId ?? undefined;
   const academicYearId = ctx.activeAcademicYearId ?? undefined;
@@ -80,10 +86,7 @@ export async function listClassSectionsForAttendance(ctx: TenantContext): Promis
   });
 
   const permissions = await getEffectivePermissions({ ctx, branchId, academicYearId });
-  const canMarkAnyClassSection =
-    permissions.has("academia.attendance.update") ||
-    permissions.has("academia.attendance.correct") ||
-    permissions.has("academia.attendance.lock");
+  const canMarkAnyClassSection = canManageAnyClassSection(permissions);
 
   const classSections = await db.classSection.findMany({
     where: {
@@ -124,24 +127,27 @@ export async function listActiveEnrolledStudentsForAttendance(
 
   if (!branchId || !academicYearId) return [];
 
+  await requirePermission({
+    ctx,
+    permission: "academia.attendance.view",
+    branchId,
+    academicYearId
+  });
+  const permissions = await getEffectivePermissions({ ctx, branchId, academicYearId });
+  const canViewAnyClassSection = canManageAnyClassSection(permissions);
+
   const classSection = await db.classSection.findFirst({
     where: {
       id: params.classSectionId,
       tenantId: ctx.tenantId,
       branchId,
       academicYearId,
+      ...(canViewAnyClassSection ? {} : { classTeacherUserId: ctx.userId }),
       status: "ACTIVE"
     },
     select: { id: true, branchId: true, academicYearId: true }
   });
   if (!classSection) return [];
-
-  await requirePermission({
-    ctx,
-    permission: "academia.attendance.view",
-    branchId: classSection.branchId,
-    academicYearId: classSection.academicYearId
-  });
 
   const where: Prisma.EnrollmentWhereInput = {
     tenantId: ctx.tenantId,

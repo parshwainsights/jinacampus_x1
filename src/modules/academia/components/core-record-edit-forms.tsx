@@ -12,10 +12,12 @@ import {
 import {
   cancelEnrollmentAction,
   deactivateClassAction,
+  deactivateClassSectionAction,
   deactivateSectionAction,
   deactivateStudentAction,
   deactivateSubjectAction,
   updateClassAction,
+  updateClassSectionAction,
   updateEnrollmentAction,
   updateGuardianAction,
   updateSectionAction,
@@ -54,6 +56,27 @@ type SubjectRecord = {
   type: SubjectType;
   description: string | null;
   status: AcademicRecordStatus;
+};
+
+type ClassSectionRecord = {
+  id: string;
+  classId: string;
+  sectionId: string;
+  classTeacherUserId: string | null;
+  displayName: string;
+  capacity: number | null;
+  status: AcademicRecordStatus;
+  branchName: string;
+  academicYearName: string;
+};
+
+type AcademicSetupOption = {
+  id: string;
+  name: string;
+};
+
+type ClassTeacherOption = AcademicSetupOption & {
+  email: string;
 };
 
 type StudentRecord = {
@@ -358,6 +381,80 @@ export function SubjectEditForm({ record }: { record: SubjectRecord }) {
       pendingLabel="Deactivating..."
       disabled={record.status === "INACTIVE"}
     />
+    </div>
+  );
+}
+
+export function ClassSectionEditForm({
+  record,
+  classes,
+  sections,
+  teachers
+}: {
+  record: ClassSectionRecord;
+  classes: AcademicSetupOption[];
+  sections: AcademicSetupOption[];
+  teachers: ClassTeacherOption[];
+}) {
+  const [state, formAction, pending] = useActionState(updateClassSectionAction, initialState);
+
+  return (
+    <div className="space-y-6">
+      <form action={formAction}>
+        <FormShell
+          title="Edit Class Section"
+          description="Update the class-section mapping and optional class teacher. Branch and academic-year scope remain fixed."
+          backHref="/academia/class-sections"
+          state={state}
+          pending={pending}
+        >
+          <input type="hidden" name="classSectionId" value={record.id} />
+          <div className="mb-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm sm:grid-cols-2">
+            <p><span className="font-semibold text-slate-700">Branch:</span> {record.branchName}</p>
+            <p><span className="font-semibold text-slate-700">Academic year:</span> {record.academicYearName}</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField id="class-section-class" label="Class" required error={fieldError(state, "classId")}>
+              <select id="class-section-class" name="classId" defaultValue={record.classId} required className="min-h-11 w-full">
+                {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </FormField>
+            <FormField id="class-section-section" label="Section" required error={fieldError(state, "sectionId")}>
+              <select id="class-section-section" name="sectionId" defaultValue={record.sectionId} required className="min-h-11 w-full">
+                {sections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </FormField>
+            <FormField id="class-section-display-name" label="Display Name" required error={fieldError(state, "displayName")}>
+              <input id="class-section-display-name" name="displayName" defaultValue={record.displayName} required className="min-h-11 w-full" />
+            </FormField>
+            <FormField id="class-section-teacher" label="Class Teacher" helpText="Only active teachers with branch access are available." error={fieldError(state, "classTeacherUserId")}>
+              <select id="class-section-teacher" name="classTeacherUserId" defaultValue={record.classTeacherUserId ?? ""} className="min-h-11 w-full">
+                <option value="">Unassigned</option>
+                {teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.name}</option>)}
+              </select>
+            </FormField>
+            <FormField id="class-section-capacity" label="Capacity" error={fieldError(state, "capacity")}>
+              <input id="class-section-capacity" name="capacity" type="number" min={1} max={500} defaultValue={record.capacity ?? ""} className="min-h-11 w-full" />
+            </FormField>
+            <FormField id="class-section-status" label="Status" error={fieldError(state, "status")}>
+              <select id="class-section-status" name="status" defaultValue={record.status} className="min-h-11 w-full">
+                {academicStatusOptions.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
+              </select>
+            </FormField>
+          </div>
+        </FormShell>
+      </form>
+      <LifecycleActionCard
+        action={deactivateClassSectionAction}
+        idName="classSectionId"
+        idValue={record.id}
+        title="Deactivate Class Section"
+        description="Deactivation preserves historical enrollment and attendance records while removing this mapping from active setup."
+        confirmText={`I understand ${record.displayName} will be marked inactive.`}
+        buttonLabel="Deactivate Class Section"
+        pendingLabel="Deactivating..."
+        disabled={record.status === "INACTIVE"}
+      />
     </div>
   );
 }

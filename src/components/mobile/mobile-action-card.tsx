@@ -7,11 +7,12 @@ type MobileActionCardProps = {
   href: string;
   icon?: ReactNode;
   tone?: "indigo" | "cyan" | "green" | "amber" | "slate";
+  compact?: boolean;
 };
 
 const toneClassName = {
-  indigo: "border-indigo-100 bg-indigo-50 text-indigo-700",
-  cyan: "border-cyan-100 bg-cyan-50 text-cyan-700",
+  indigo: "border-brand-100 bg-brand-50 text-brand-700",
+  cyan: "border-teal-100 bg-teal-50 text-teal-700",
   green: "border-emerald-100 bg-emerald-50 text-emerald-700",
   amber: "border-amber-100 bg-amber-50 text-amber-700",
   slate: "border-slate-200 bg-slate-50 text-slate-700",
@@ -23,20 +24,21 @@ export function MobileActionCard({
   href,
   icon,
   tone = "indigo",
+  compact = false,
 }: MobileActionCardProps) {
   return (
     <Link
       href={href}
-      className="group flex min-h-[5.75rem] items-center gap-3 rounded-2xl border border-white/80 bg-white/92 p-4 shadow-sm shadow-slate-950/6 transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-900/10 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+      className={`dashboard-glass-panel group flex min-w-0 gap-3 p-4 transition hover:border-brand-200 hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/30 ${compact ? "min-h-28 flex-col items-start" : "min-h-[5.75rem] items-center"}`}
       data-mobile-action-card="true"
     >
       <span
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${toneClassName[tone]}`}
+        className={`flex shrink-0 items-center justify-center rounded-lg border ${toneClassName[tone]} ${compact ? "h-10 w-10" : "h-12 w-12"}`}
       >
         {icon}
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold text-slate-950">{title}</span>
+        <span className="block break-words text-sm font-semibold text-slate-950">{title}</span>
         {description ? (
           <span className="mt-1 block text-xs leading-5 text-slate-600">{description}</span>
         ) : null}

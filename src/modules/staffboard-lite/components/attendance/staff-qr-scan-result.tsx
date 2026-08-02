@@ -16,7 +16,7 @@ export function StaffQrScanResult({ result }: { result: StaffQrScanActionData })
   ];
 
   return (
-    <section className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.06)] backdrop-blur" aria-labelledby="staff-scan-result-title">
+    <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-soft" aria-labelledby="staff-scan-result-title">
       <h2 id="staff-scan-result-title" className="text-base font-semibold text-emerald-950">
         {result.message}
       </h2>

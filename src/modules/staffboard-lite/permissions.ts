@@ -5,6 +5,7 @@ export const STAFFBOARD_LITE_PERMISSIONS = [
   "staffboard.staff.deactivate",
   "staffboard.attendance.qr.generate",
   "staffboard.attendance.self_scan",
+  "staffboard.attendance.self_view",
   "staffboard.attendance.view",
   "staffboard.attendance.correct",
   "staffboard.attendance.report"

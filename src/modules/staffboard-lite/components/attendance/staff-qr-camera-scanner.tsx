@@ -579,7 +579,7 @@ export function StaffQrCameraScanner({ disabled, variant = "default", onQrPayloa
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white/88 p-3 text-sm leading-6 text-slate-600">
-        <p className="mb-2 inline-flex min-h-8 items-center rounded-full bg-indigo-50 px-3 text-xs font-semibold text-indigo-700">
+        <p className="mb-2 inline-flex min-h-8 items-center rounded-full bg-brand-50 px-3 text-xs font-semibold text-brand-700">
           {statusLabel(status)}
         </p>
         <p aria-live="polite">{message}</p>

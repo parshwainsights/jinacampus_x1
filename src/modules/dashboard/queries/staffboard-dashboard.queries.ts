@@ -1,6 +1,11 @@
 import type { StaffAttendanceStatus, StaffType } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { TenantContext } from "@/lib/tenant/context";
+import {
+  buildAttendanceTrendPoints,
+  getDashboardTrendDates,
+  type DashboardAttendanceTrendPoint
+} from "./attendance-trend";
 import { activeBranchFilter, resolveDashboardScope } from "./shared";
 
 export type StaffBoardDashboardMetrics = {
@@ -147,4 +152,30 @@ export async function getStaffAttendanceDashboardMetrics(
     notMarked,
     notMarkedOrAbsent: notMarked + absent
   };
+}
+
+export async function getStaffAttendanceDashboardTrend(
+  ctx: TenantContext,
+  input: unknown = {}
+): Promise<DashboardAttendanceTrendPoint[]> {
+  const scope = await resolveDashboardScope(ctx, input);
+  const branchFilter = activeBranchFilter(scope);
+  const dates = getDashboardTrendDates(scope.date);
+  const groups = await db.staffAttendanceRecord.groupBy({
+    by: ["attendanceDate", "status"],
+    where: {
+      tenantId: ctx.tenantId,
+      branchId: branchFilter,
+      attendanceDate: { gte: dates[0], lte: scope.date },
+      staff: {
+        tenantId: ctx.tenantId,
+        branchId: branchFilter,
+        employmentStatus: "ACTIVE"
+      }
+    },
+    _count: { _all: true },
+    orderBy: { attendanceDate: "asc" }
+  });
+
+  return buildAttendanceTrendPoints(dates, groups);
 }

@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   BarChart3,
   BriefcaseBusiness,
   Building2,
@@ -10,12 +9,14 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
-  UsersRound,
+  UserCheck,
+  UsersRound
 } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
-import type { NavigationAudience } from "@/components/app-shell/navigation";
 
 import { MobilePageHeader } from "@/components/app-shell/mobile-page-header";
+import type { NavigationAudience } from "@/components/app-shell/navigation";
 import { MobileActionCard } from "@/components/mobile/mobile-action-card";
 import { MobileEmptyState } from "@/components/mobile/mobile-empty-state";
 import { MobileListCard } from "@/components/mobile/mobile-list-card";
@@ -23,14 +24,15 @@ import { MobileStatCard } from "@/components/mobile/mobile-stat-card";
 import type {
   AcademiaDashboardMetrics,
   CampusCoreDashboardMetrics,
+  DashboardAttendanceTrendPoint,
   StaffAttendanceDashboardMetrics,
   StaffBoardDashboardMetrics,
-  StudentAttendanceDashboardMetrics,
+  StudentAttendanceDashboardMetrics
 } from "@/modules/dashboard/queries";
 
 import type { DashboardAttentionItem } from "./dashboard-attention-panel";
-import type { DashboardQuickAction } from "./dashboard-state";
-import type { AdminMobileAction } from "./dashboard-state";
+import type { AdminMobileAction, DashboardQuickAction } from "./dashboard-state";
+import { DashboardTrendChart } from "./dashboard-visualizations";
 
 type MobileDashboardProps = {
   userName: string;
@@ -48,8 +50,18 @@ type MobileDashboardProps = {
   campusCore: CampusCoreDashboardMetrics | null;
   academia: AcademiaDashboardMetrics | null;
   studentAttendance: StudentAttendanceDashboardMetrics | null;
+  studentAttendanceTrend: readonly DashboardAttendanceTrendPoint[] | null;
   staffBoard: StaffBoardDashboardMetrics | null;
   staffAttendance: StaffAttendanceDashboardMetrics | null;
+  staffAttendanceTrend: readonly DashboardAttendanceTrendPoint[] | null;
+  canViewSelfAttendance: boolean;
+  selfAttendance: {
+    attendanceDate: string;
+    status: string;
+    checkInAt: string | null;
+    checkOutAt: string | null;
+    workingMinutes: number | null;
+  } | null;
 };
 
 const adminActionIconByLabel: Record<string, ReactNode> = {
@@ -72,6 +84,7 @@ const actionIconByLabel = {
   "Staff Reports": <BarChart3 className="h-5 w-5" aria-hidden="true" />,
   "Manage Staff": <BriefcaseBusiness className="h-5 w-5" aria-hidden="true" />,
   "Scan QR": <QrCode className="h-5 w-5" aria-hidden="true" />,
+  "My Attendance": <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
 } satisfies Partial<Record<DashboardQuickAction["label"], ReactNode>>;
 
 function actionTone(label: DashboardQuickAction["label"]): "indigo" | "cyan" | "green" | "amber" | "slate" {
@@ -79,6 +92,19 @@ function actionTone(label: DashboardQuickAction["label"]): "indigo" | "cyan" | "
   if (label.includes("Attendance")) return "indigo";
   if (label.includes("Reports")) return "slate";
   return "green";
+}
+
+function percentage(value: number, total: number) {
+  return total > 0 ? Math.min(Math.round((value / total) * 100), 100) : null;
+}
+
+function formatSelfAttendanceTime(value: string | null) {
+  if (!value) return "Not recorded";
+  return new Intl.DateTimeFormat("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata"
+  }).format(new Date(value));
 }
 
 export function MobileDashboard({
@@ -97,145 +123,158 @@ export function MobileDashboard({
   campusCore,
   academia,
   studentAttendance,
+  studentAttendanceTrend,
   staffBoard,
   staffAttendance,
+  staffAttendanceTrend,
+  canViewSelfAttendance,
+  selfAttendance
 }: MobileDashboardProps) {
   const isAdmin = audience === "admin";
   const primaryActions = quickActions.slice(0, 4);
+  const fallbackActions = primaryActions.length === 0 && isAdmin ? adminOperations.slice(0, 4) : [];
+  const secondaryActions = quickActions.slice(4);
+  const managementActions = isAdmin ? adminOperations.filter((action) => action.label !== "Attendance") : [];
+  const studentPresenceCount = studentAttendance
+    ? studentAttendance.present + studentAttendance.late + studentAttendance.halfDay
+    : 0;
+  const studentPresenceRate = studentAttendance ? percentage(studentPresenceCount, studentAttendance.marked) : null;
+  const staffCheckInRate = staffAttendance && staffBoard
+    ? percentage(staffAttendance.checkedIn, staffBoard.totalActiveStaff)
+    : null;
 
   return (
     <div className="space-y-5 lg:hidden" data-mobile-dashboard="true">
       <MobilePageHeader
         eyebrow={dateLabel}
         title={`Good day, ${userName}`}
-        description={`${branchLabel}. ${activeAcademicYearName ?? "Academic year setup is pending."}`}
+        description={`${branchLabel} · ${activeAcademicYearName ?? "Academic year setup pending"}`}
       />
 
       {hasQueryFailure ? (
-        <MobileEmptyState
-          title="Some dashboard data is unavailable"
-          description="Only verified data for your current school context is shown."
-        />
+        <MobileEmptyState title="Some dashboard data is unavailable" description="Only verified data for your current school context is shown." />
       ) : null}
-
       {!hasActiveAcademicYear ? (
-        <MobileEmptyState
-          title="No active academic year"
-          description="Attendance and enrollment cards will stay empty until CampusCore setup is completed."
-        />
+        <MobileEmptyState title="No active academic year" description="Attendance and enrollment cards will stay empty until CampusCore setup is completed." />
       ) : null}
-
       {!hasBranchAccess ? (
-        <MobileEmptyState
-          title="No branch access"
-          description="Ask an administrator to assign branch access before using branch-scoped workflows."
-        />
+        <MobileEmptyState title="No branch access" description="Ask an administrator to assign branch access before using branch-scoped workflows." />
       ) : null}
 
       <section className="space-y-3" aria-labelledby="mobile-primary-actions">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="mobile-primary-actions" className="text-sm font-semibold text-slate-950">
-            {isAdmin ? "Today's Operations" : "Today's primary actions"}
-          </h2>
-        </div>
-        {isAdmin && adminOperations.length > 0 ? (
-          <div className="grid gap-3">
-            {adminOperations.map((action) => (
-              <MobileActionCard
-                key={action.href}
-                href={action.href}
-                title={action.label}
-                description={action.description}
-                icon={adminActionIconByLabel[action.label]}
-                tone={action.label === "Attendance" ? "indigo" : action.label === "Settings" ? "slate" : "cyan"}
-              />
-            ))}
-          </div>
-        ) : primaryActions.length > 0 ? (
-          <div className="grid gap-3">
+        <h2 id="mobile-primary-actions" className="text-base font-semibold text-slate-950">Today's Operations</h2>
+        {primaryActions.length > 0 || fallbackActions.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
             {primaryActions.map((action) => (
               <MobileActionCard
                 key={action.href}
                 href={action.href}
                 title={action.label}
-                description={action.description}
                 icon={actionIconByLabel[action.label]}
                 tone={actionTone(action.label)}
+                compact
+              />
+            ))}
+            {fallbackActions.map((action) => (
+              <MobileActionCard
+                key={action.href}
+                href={action.href}
+                title={action.label}
+                icon={adminActionIconByLabel[action.label]}
+                tone="cyan"
+                compact
               />
             ))}
           </div>
         ) : (
-          <MobileEmptyState
-            title="No quick actions available"
-            description="Your current permissions do not include a mobile shortcut."
-          />
+          <MobileEmptyState title="No quick actions available" description="Your current permissions do not include a mobile shortcut." />
         )}
       </section>
 
       <section className="space-y-3" aria-labelledby="mobile-summary">
-        <h2 id="mobile-summary" className="text-sm font-semibold text-slate-950">
-          {isAdmin ? "Quick Stats" : "Summary"}
-        </h2>
+        <h2 id="mobile-summary" className="text-base font-semibold text-slate-950">Quick Stats</h2>
         <div className="grid grid-cols-2 gap-3">
-          {isAdmin && campusCore ? (
+          {studentAttendance ? (
+            <MobileStatCard
+              label="Student presence"
+              value={studentPresenceRate === null ? "No data" : `${studentPresenceRate}%`}
+              hint={`${studentAttendance.marked} marked`}
+              icon={<GraduationCap className="h-4 w-4" aria-hidden="true" />}
+              progress={studentPresenceRate}
+              tone="indigo"
+            />
+          ) : null}
+          {staffAttendance && staffBoard ? (
+            <MobileStatCard
+              label="Staff checked in"
+              value={staffAttendance.checkedIn}
+              hint={`of ${staffBoard.totalActiveStaff} active`}
+              icon={<UserCheck className="h-4 w-4" aria-hidden="true" />}
+              progress={staffCheckInRate}
+              tone="cyan"
+            />
+          ) : null}
+          {studentAttendance ? (
+            <MobileStatCard
+              label="Classes pending"
+              value={studentAttendance.classesNotMarked}
+              hint={`${studentAttendance.classesMarked}/${studentAttendance.eligibleClassSections} complete`}
+              icon={<ClipboardCheck className="h-4 w-4" aria-hidden="true" />}
+              progress={studentAttendance.markingRate}
+              tone={studentAttendance.classesNotMarked > 0 ? "amber" : "green"}
+            />
+          ) : null}
+          {academia ? (
+            <MobileStatCard
+              label="Active students"
+              value={academia.totalActiveStudents}
+              hint={`${academia.totalClassSections} class sections`}
+              icon={<UsersRound className="h-4 w-4" aria-hidden="true" />}
+              tone="green"
+            />
+          ) : null}
+          {!studentAttendance && !staffAttendance && campusCore ? (
             <>
-              <MobileStatCard label="Total branches" value={campusCore.totalBranches} tone="cyan" />
-              <MobileStatCard label="Total users" value={campusCore.totalUsers} tone="indigo" />
-              <MobileStatCard label="Academic year" value={campusCore.activeAcademicYearName ?? "Not set"} tone={campusCore.activeAcademicYearName ? "green" : "amber"} />
-              <MobileStatCard label="Active roles" value={campusCore.totalActiveRoles} tone="slate" />
+              <MobileStatCard label="Total branches" value={campusCore.totalBranches} icon={<Building2 className="h-4 w-4" aria-hidden="true" />} tone="cyan" />
+              <MobileStatCard label="Total users" value={campusCore.totalUsers} icon={<UsersRound className="h-4 w-4" aria-hidden="true" />} tone="indigo" />
             </>
-          ) : null}
-          {!isAdmin && studentAttendance ? (
-            <>
-              <MobileStatCard label="Present" value={studentAttendance.present} tone="green" />
-              <MobileStatCard label="Absent" value={studentAttendance.absent} tone="red" />
-              <MobileStatCard label="Late" value={studentAttendance.late} tone="amber" />
-              <MobileStatCard label="Not marked" value={studentAttendance.classesNotMarked} tone="slate" />
-            </>
-          ) : null}
-          {!isAdmin && staffAttendance ? (
-            <>
-              <MobileStatCard label="Staff in" value={staffAttendance.checkedIn} tone="cyan" />
-              <MobileStatCard label="Staff late" value={staffAttendance.late} tone="amber" />
-            </>
-          ) : null}
-          {!isAdmin && !studentAttendance && !staffAttendance && academia ? (
-            <>
-              <MobileStatCard label="Students" value={academia.totalActiveStudents} tone="indigo" />
-              <MobileStatCard label="Enrollments" value={academia.totalActiveEnrollments} tone="green" />
-            </>
-          ) : null}
-          {!isAdmin && !studentAttendance && !staffAttendance && staffBoard ? (
-            <MobileStatCard label="Staff" value={staffBoard.totalActiveStaff} tone="cyan" />
-          ) : null}
-          {!isAdmin && !studentAttendance && !staffAttendance && campusCore ? (
-            <MobileStatCard label="Branches" value={campusCore.totalBranches} tone="slate" />
           ) : null}
         </div>
       </section>
 
-      {isAdmin && adminTools.length > 0 ? (
-        <section className="space-y-3" aria-labelledby="mobile-admin-tools">
-          <h2 id="mobile-admin-tools" className="text-sm font-semibold text-slate-950">Admin Tools</h2>
-          <div className="grid gap-3">
-            {adminTools.map((action) => (
-              <MobileActionCard
-                key={action.label}
-                href={action.href}
-                title={action.label}
-                description={action.description}
-                icon={adminActionIconByLabel[action.label]}
-                tone="slate"
-              />
-            ))}
-          </div>
+      {studentAttendance || staffAttendance ? (
+        <DashboardTrendChart
+          idPrefix="mobile-attendance-trend"
+          studentTrend={studentAttendanceTrend}
+          staffTrend={staffAttendanceTrend}
+          compact
+        />
+      ) : null}
+
+      {canViewSelfAttendance ? (
+        <section className="space-y-3" aria-labelledby="mobile-own-attendance">
+          <h2 id="mobile-own-attendance" className="text-base font-semibold text-slate-950">My Attendance</h2>
+          {selfAttendance ? (
+            <MobileListCard
+              title={selfAttendance.status.replaceAll("_", " ")}
+              subtitle={`Check in ${formatSelfAttendanceTime(selfAttendance.checkInAt)} · Check out ${formatSelfAttendanceTime(selfAttendance.checkOutAt)}`}
+              status={<ClipboardCheck className="h-5 w-5 text-emerald-600" aria-hidden="true" />}
+              meta={[
+                { label: "Date", value: selfAttendance.attendanceDate },
+                { label: "Working minutes", value: selfAttendance.workingMinutes ?? "Pending" }
+              ]}
+              actions={
+                <Link href="/staffboard/attendance/me" className="premium-secondary-button w-full">View my attendance</Link>
+              }
+            />
+          ) : (
+            <MobileEmptyState title="No attendance recorded yet today" description="Use Scan QR when the school displays an active attendance code." />
+          )}
         </section>
       ) : null}
 
       <section className="space-y-3" aria-labelledby="mobile-attention">
-        <h2 id="mobile-attention" className="text-sm font-semibold text-slate-950">
-          Needs attention
-        </h2>
+        <h2 id="mobile-attention" className="text-base font-semibold text-slate-950">Needs Attention</h2>
         {attentionItems.length > 0 ? (
           <div className="space-y-3">
             {attentionItems.map((item) => (
@@ -243,57 +282,79 @@ export function MobileDashboard({
                 key={item.label}
                 title={item.label}
                 subtitle={item.description}
-                status={
-                  <span className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-full bg-amber-50 px-2 text-sm font-semibold text-amber-700">
-                    {item.value}
-                  </span>
-                }
+                status={<span className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-full bg-amber-50 px-2 text-sm font-semibold text-amber-700">{item.value}</span>}
               />
             ))}
           </div>
         ) : (
-          <MobileEmptyState
-            title="Nothing urgent"
-            description="No attendance exceptions need immediate action in your current context."
-            action={<CalendarDays className="mx-auto h-5 w-5 text-slate-400" aria-hidden="true" />}
-          />
+          <MobileEmptyState title="Nothing urgent" description="No attendance exceptions need immediate action in your current context." />
         )}
       </section>
 
-      {campusCore && !campusCore.activeAcademicYearName ? (
-        <MobileListCard
-          title="Academic year setup"
-          subtitle="Set the active academic year from CampusCore before using academic-year scoped workflows."
-          status={<AlertTriangle className="h-5 w-5 text-amber-600" aria-hidden="true" />}
-          meta={[
-            { label: "Users", value: campusCore.totalUsers },
-            { label: "Roles", value: campusCore.totalActiveRoles },
-          ]}
-        />
+      {academia || staffBoard || campusCore ? (
+        <section className="space-y-3" aria-labelledby="mobile-school-overview">
+          <h2 id="mobile-school-overview" className="text-base font-semibold text-slate-950">School Overview</h2>
+          <div className="space-y-3">
+            {academia ? (
+              <MobileListCard
+                title="Academia"
+                subtitle="Active student and enrollment coverage."
+                status={<GraduationCap className="h-5 w-5 text-brand-600" aria-hidden="true" />}
+                meta={[
+                  { label: "Students", value: academia.totalActiveStudents },
+                  { label: "Enrollments", value: academia.totalActiveEnrollments },
+                  { label: "Class sections", value: academia.totalClassSections }
+                ]}
+              />
+            ) : null}
+            {staffBoard ? (
+              <MobileListCard
+                title="StaffBoard Lite"
+                subtitle="Active teaching and non-teaching profiles."
+                status={<BriefcaseBusiness className="h-5 w-5 text-teal-600" aria-hidden="true" />}
+                meta={[
+                  { label: "Active staff", value: staffBoard.totalActiveStaff },
+                  { label: "Teachers", value: staffBoard.totalTeachers },
+                  { label: "Non-teaching", value: staffBoard.totalNonTeachingStaff }
+                ]}
+              />
+            ) : null}
+            {campusCore ? (
+              <MobileListCard
+                title="School Setup"
+                subtitle={campusCore.activeAcademicYearName ?? "Active academic year is not set."}
+                status={<Building2 className="h-5 w-5 text-slate-600" aria-hidden="true" />}
+                meta={[
+                  { label: "Branches", value: campusCore.totalBranches },
+                  { label: "Users", value: campusCore.totalUsers },
+                  { label: "Active roles", value: campusCore.totalActiveRoles }
+                ]}
+              />
+            ) : null}
+          </div>
+        </section>
       ) : null}
 
-      {!isAdmin && academia ? (
-        <MobileListCard
-          title="Academia readiness"
-          subtitle="Current active student and class-section coverage."
-          status={<GraduationCap className="h-5 w-5 text-indigo-600" aria-hidden="true" />}
-          meta={[
-            { label: "Students", value: academia.totalActiveStudents },
-            { label: "Class sections", value: academia.totalClassSections },
-          ]}
-        />
+      {secondaryActions.length > 0 ? (
+        <section className="space-y-3" aria-labelledby="mobile-more-actions">
+          <h2 id="mobile-more-actions" className="text-base font-semibold text-slate-950">More Actions</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {secondaryActions.map((action) => (
+              <MobileActionCard key={action.href} href={action.href} title={action.label} icon={actionIconByLabel[action.label]} tone={actionTone(action.label)} compact />
+            ))}
+          </div>
+        </section>
       ) : null}
 
-      {!isAdmin && campusCore ? (
-        <MobileListCard
-          title="School setup"
-          subtitle={campusCore.activeAcademicYearName ?? "Active academic year is not set."}
-          status={<Building2 className="h-5 w-5 text-cyan-600" aria-hidden="true" />}
-          meta={[
-            { label: "Branches", value: campusCore.totalBranches },
-            { label: "Users", value: campusCore.totalUsers },
-          ]}
-        />
+      {isAdmin && (managementActions.length > 0 || adminTools.length > 0) ? (
+        <section className="space-y-3" aria-labelledby="mobile-admin-tools">
+          <h2 id="mobile-admin-tools" className="text-base font-semibold text-slate-950">Admin Tools</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {[...managementActions, ...adminTools].map((action) => (
+              <MobileActionCard key={`${action.label}-${action.href}`} href={action.href} title={action.label} icon={adminActionIconByLabel[action.label]} tone="slate" compact />
+            ))}
+          </div>
+        </section>
       ) : null}
     </div>
   );

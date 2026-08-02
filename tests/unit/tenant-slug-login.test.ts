@@ -6,7 +6,9 @@ const mocks = vi.hoisted(() => ({
   db: {
     tenant: { findUnique: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
-    session: { create: vi.fn() }
+    staffProfile: { findFirst: vi.fn() },
+    session: { create: vi.fn() },
+    $transaction: vi.fn()
   },
   verifyPassword: vi.fn(),
   createRawSessionToken: vi.fn(),
@@ -41,15 +43,41 @@ const principalUser = {
   email: "principal@demo.jinacampus.test",
   userType: "STAFF",
   status: "ACTIVE",
-  passwordCredential: { passwordHash: "stored-hash" },
-  roleAssignments: [{ role: { code: "PRINCIPAL", isActive: true } }]
+  passwordCredential: { passwordHash: "stored-hash", mustChange: false },
+  roleAssignments: [{
+    tenantId: tenant.id,
+    role: { tenantId: tenant.id, code: "PRINCIPAL", isActive: true }
+  }]
 };
 
 const teacherUser = {
   ...principalUser,
   id: "teacher-user-id",
   email: "teacher@demo.jinacampus.test",
-  roleAssignments: [{ role: { code: "CLASS_TEACHER", isActive: true } }]
+  roleAssignments: [{
+    tenantId: tenant.id,
+    role: { tenantId: tenant.id, code: "TEACHER", isActive: true }
+  }]
+};
+
+const staffUser = {
+  ...principalUser,
+  id: "staff-user-id",
+  email: "staff@demo.jinacampus.test",
+  roleAssignments: [{
+    tenantId: tenant.id,
+    role: { tenantId: tenant.id, code: "STAFF", isActive: true }
+  }]
+};
+
+const platformAdministratorUser = {
+  ...principalUser,
+  id: "platform-administrator-user-id",
+  email: "operator@jinacampus.test",
+  roleAssignments: [{
+    tenantId: tenant.id,
+    role: { tenantId: tenant.id, code: "ADMINISTRATOR", isActive: true }
+  }]
 };
 
 function source(path: string) {
@@ -78,6 +106,7 @@ beforeEach(() => {
   mocks.db.user.findUnique.mockResolvedValue(principalUser);
   mocks.db.user.update.mockResolvedValue({});
   mocks.db.session.create.mockResolvedValue({});
+  mocks.db.$transaction.mockImplementation((callback: (client: typeof mocks.db) => unknown) => callback(mocks.db));
   mocks.verifyPassword.mockResolvedValue(true);
   mocks.createRawSessionToken.mockReturnValue("raw-session-token");
   mocks.hashSessionToken.mockResolvedValue("hashed-session-token");
@@ -117,7 +146,10 @@ describe("School ID login", () => {
       password: "correct-password"
     });
 
-    expect(result).toEqual({ status: 200, body: { ok: true, redirectTo: "/dashboard" } });
+    expect(result).toEqual({
+      status: 200,
+      body: { ok: true, redirectTo: "/dashboard", passwordChangeRequired: false }
+    });
     expect(mocks.db.tenant.findUnique).toHaveBeenCalledWith({ where: { slug: "jinacampus-demo" } });
     expect(mocks.db.user.findUnique.mock.calls[0][0].where.tenantId_email).toEqual({
       tenantId: tenant.id,
@@ -150,7 +182,53 @@ describe("School ID login", () => {
       password: "correct-password"
     });
 
-    expect(result).toEqual({ status: 200, body: { ok: true, redirectTo: "/academia/attendance/mark" } });
+    expect(result).toEqual({
+      status: 200,
+      body: { ok: true, redirectTo: "/academia/attendance/mark", passwordChangeRequired: false }
+    });
+  });
+
+  it("logs staff in with a tenant-scoped employee code and password", async () => {
+    mocks.db.user.findUnique.mockResolvedValue(null);
+    mocks.db.staffProfile.findFirst.mockResolvedValue({ user: staffUser });
+
+    const result = await postLogin({
+      schoolId: "jinacampus-demo",
+      identifier: " staff-001 ",
+      password: "correct-password"
+    });
+
+    expect(result).toEqual({
+      status: 200,
+      body: {
+        ok: true,
+        redirectTo: "/staffboard/attendance/scan",
+        passwordChangeRequired: false
+      }
+    });
+    expect(mocks.db.staffProfile.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        tenantId: tenant.id,
+        employeeCode: { equals: "STAFF-001", mode: "insensitive" },
+        employmentStatus: "ACTIVE",
+        userId: { not: null }
+      })
+    }));
+  });
+
+  it("rejects platform administrators at the school login boundary", async () => {
+    mocks.db.user.findUnique.mockResolvedValue(platformAdministratorUser);
+
+    const result = await postLogin({
+      schoolId: "jinacampus-demo",
+      email: platformAdministratorUser.email,
+      password: "correct-password"
+    });
+
+    expect(result).toEqual({ status: 401, body: { error: SCHOOL_LOGIN_ERROR_MESSAGE } });
+    expect(mocks.verifyPassword).not.toHaveBeenCalled();
+    expect(mocks.db.session.create).not.toHaveBeenCalled();
+    expect(JSON.stringify(result.body)).not.toMatch(/administrator|role|tenantId/i);
   });
 
   it("returns the same safe error for wrong tenant, unknown email, inactive tenant, inactive user, and bad password", async () => {
@@ -184,7 +262,7 @@ describe("School ID login", () => {
     }
   });
 
-  it("ignores client-supplied tenantId and creates session from server-resolved tenant", async () => {
+  it("rejects client-supplied tenant context fields", async () => {
     const result = await postLogin({
       schoolId: "jinacampus-demo",
       tenantId: "client-supplied-cross-tenant-id",
@@ -192,20 +270,22 @@ describe("School ID login", () => {
       password: "correct-password"
     });
 
-    expect(result.status).toBe(200);
-    expect(mocks.db.user.findUnique.mock.calls[0][0].where.tenantId_email.tenantId).toBe(tenant.id);
-    expect(mocks.db.session.create.mock.calls[0][0].data.tenantId).toBe(tenant.id);
-    expect(JSON.stringify(mocks.db.user.findUnique.mock.calls)).not.toContain("client-supplied-cross-tenant-id");
+    expect(result).toEqual({ status: 400, body: { error: SCHOOL_LOGIN_ERROR_MESSAGE } });
+    expect(mocks.db.tenant.findUnique).not.toHaveBeenCalled();
+    expect(mocks.db.user.findUnique).not.toHaveBeenCalled();
+    expect(mocks.db.session.create).not.toHaveBeenCalled();
   });
 
   it("keeps generic login blank and supports an explicit tenant route with locked School ID UI", () => {
-    const loginPage = source("src/app/(auth)/login/page.tsx");
+    const loginPage = source("src/app/page.tsx");
+    const compatibilityRoute = source("src/app/(auth)/login/page.tsx");
     const tenantLoginPage = source("src/app/t/[tenantSlug]/login/page.tsx");
     const loginForm = source("src/components/auth/login-form.tsx");
 
-    expect(loginPage).toContain("schoolId={null}");
+    expect(loginPage).toContain("schoolId={schoolId}");
     expect(loginPage).toContain("schoolIdLocked={false}");
-    expect(loginPage).not.toContain("searchParams");
+    expect(loginPage).toContain("searchParams");
+    expect(compatibilityRoute).toContain('redirect(schoolId ? `/?schoolId=');
     expect(tenantLoginPage).toContain("params: Promise<{ tenantSlug: string }>");
     expect(tenantLoginPage).toContain("schoolIdLocked={true}");
     expect(loginForm).toContain('label="School ID"');

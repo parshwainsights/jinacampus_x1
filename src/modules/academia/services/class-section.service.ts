@@ -12,7 +12,8 @@ import {
   ensureActiveClass,
   ensureActiveSection,
   ensureClassTeacherAccess,
-  requireBranchPermission
+  requireBranchPermission,
+  validationError
 } from "./shared";
 
 export async function createClassSection(ctx: TenantContext, input: unknown) {
@@ -20,8 +21,14 @@ export async function createClassSection(ctx: TenantContext, input: unknown) {
   await requireBranchPermission(ctx, "academia.class.manage", data.branchId);
 
   return db.$transaction(async (tx) => {
-    await ensureActiveBranch(tx, ctx, data.branchId);
-    await ensureAcademicYear(tx, ctx, data.academicYearId);
+    const branch = await ensureActiveBranch(tx, ctx, data.branchId);
+    const academicYear = await ensureAcademicYear(tx, ctx, data.academicYearId);
+    if (branch.institutionId !== academicYear.institutionId) {
+      throw validationError("ACADEMIC_YEAR_DOES_NOT_BELONG_TO_BRANCH_INSTITUTION");
+    }
+    if (!academicYear.isActive || academicYear.status !== "ACTIVE") {
+      throw validationError("ACTIVE_ACADEMIC_YEAR_REQUIRED");
+    }
     await ensureActiveClass(tx, ctx, data.classId);
     await ensureActiveSection(tx, ctx, data.sectionId);
     await ensureClassTeacherAccess(tx, ctx, data.classTeacherUserId, data.branchId);

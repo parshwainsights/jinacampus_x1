@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TenantContext } from "@/lib/tenant/context";
 import {
+  buildAttendanceTrendPoints,
   getAcademiaDashboardMetrics,
   getCampusCoreDashboardMetrics,
   getMvpDashboardSummary,
   getStaffAttendanceDashboardMetrics,
+  getStaffAttendanceDashboardTrend,
   getStaffBoardDashboardMetrics,
-  getStudentAttendanceDashboardMetrics
+  getStudentAttendanceDashboardMetrics,
+  getStudentAttendanceDashboardTrend
 } from "@/modules/dashboard/queries";
 
 const mocks = vi.hoisted(() => {
@@ -158,6 +161,31 @@ describe("dashboard query services", () => {
     });
   });
 
+  it("limits teacher dashboard student and class metrics to assigned class sections", async () => {
+    const teacherCtx = { ...ctx, roleCodes: ["TEACHER"] };
+
+    await getAcademiaDashboardMetrics(teacherCtx);
+
+    expect(mocks.db.student.count.mock.calls[0][0].where.enrollments.some).toMatchObject({
+      tenantId,
+      academicYearId,
+      status: "ACTIVE",
+      classSection: { classTeacherUserId: userId }
+    });
+    expect(mocks.db.enrollment.count.mock.calls[0][0].where.classSection).toEqual({
+      classTeacherUserId: userId
+    });
+    expect(mocks.db.classSection.count.mock.calls[0][0].where).toMatchObject({
+      classTeacherUserId: userId
+    });
+    expect(mocks.db.class.count.mock.calls[0][0].where.classSections.some).toMatchObject({
+      academicYearId,
+      classTeacherUserId: userId
+    });
+    expect(mocks.db.guardian.count.mock.calls[0][0].where.studentLinks.some.student.enrollments.some.classSection)
+      .toEqual({ classTeacherUserId: userId });
+  });
+
   it("student attendance dashboard metrics count statuses and ignore no-enrollment sections for not-marked", async () => {
     mocks.db.studentAttendanceRecord.groupBy.mockResolvedValue([
       { status: "PRESENT", _count: { _all: 10 } },
@@ -200,7 +228,85 @@ describe("dashboard query services", () => {
       absent: 2,
       late: 3,
       halfDay: 1,
-      classesNotMarked: 1
+      eligibleClassSections: 2,
+      classesMarked: 1,
+      classesNotMarked: 1,
+      markingRate: 50
+    });
+  });
+
+  it("builds a bounded trend without treating not-marked records as absence", () => {
+    const dates = Array.from({ length: 7 }, (_, index) => new Date(Date.UTC(2026, 4, index + 1)));
+    const result = buildAttendanceTrendPoints(dates, [
+      { attendanceDate: new Date(Date.UTC(2026, 4, 7)), status: "PRESENT", _count: { _all: 7 } },
+      { attendanceDate: new Date(Date.UTC(2026, 4, 7)), status: "LATE", _count: { _all: 1 } },
+      { attendanceDate: new Date(Date.UTC(2026, 4, 7)), status: "ABSENT", _count: { _all: 2 } },
+      { attendanceDate: new Date(Date.UTC(2026, 4, 7)), status: "NOT_MARKED", _count: { _all: 4 } }
+    ]);
+
+    expect(result).toHaveLength(7);
+    expect(result[0]).toMatchObject({ date: "2026-05-01", recorded: 0, presenceRate: null });
+    expect(result[6]).toMatchObject({
+      date: "2026-05-07",
+      recorded: 10,
+      present: 7,
+      absent: 2,
+      late: 1,
+      presenceRate: 80
+    });
+  });
+
+  it("scopes student attendance trends to tenant, branch, academic year, and teacher assignments", async () => {
+    const teacherCtx = { ...ctx, roleCodes: ["TEACHER"] };
+
+    await getStudentAttendanceDashboardTrend(teacherCtx, { date: "2026-05-07" });
+
+    expect(mocks.db.studentAttendanceRecord.groupBy).toHaveBeenCalledWith(expect.objectContaining({
+      by: ["attendanceDate", "status"],
+      where: expect.objectContaining({
+        tenantId,
+        branchId: { in: [branchId] },
+        academicYearId,
+        attendanceDate: {
+          gte: new Date(Date.UTC(2026, 4, 1)),
+          lte: dashboardDate
+        },
+        classSection: { classTeacherUserId: userId }
+      })
+    }));
+  });
+
+  it("scopes staff attendance trends to active staff in the current tenant and branch", async () => {
+    await getStaffAttendanceDashboardTrend(ctx, { date: "2026-05-07" });
+
+    expect(mocks.db.staffAttendanceRecord.groupBy).toHaveBeenCalledWith(expect.objectContaining({
+      by: ["attendanceDate", "status"],
+      where: expect.objectContaining({
+        tenantId,
+        branchId: { in: [branchId] },
+        attendanceDate: {
+          gte: new Date(Date.UTC(2026, 4, 1)),
+          lte: dashboardDate
+        },
+        staff: {
+          tenantId,
+          branchId: { in: [branchId] },
+          employmentStatus: "ACTIVE"
+        }
+      })
+    }));
+  });
+
+  it("limits teacher attendance dashboard records to assigned class sections", async () => {
+    const teacherCtx = { ...ctx, roleCodes: ["TEACHER"] };
+
+    await getStudentAttendanceDashboardMetrics(teacherCtx, { date: "2026-05-07" });
+
+    expect(mocks.db.studentAttendanceRecord.groupBy.mock.calls[0][0].where.classSection).toEqual({
+      classTeacherUserId: userId
+    });
+    expect(mocks.db.classSection.findMany.mock.calls[0][0].where).toMatchObject({
+      classTeacherUserId: userId
     });
   });
 

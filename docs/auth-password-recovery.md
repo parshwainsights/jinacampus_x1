@@ -1,102 +1,130 @@
-# Auth Password Recovery and OTP Login
+# Auth Password Recovery and Mandatory Password Change
 
-Date: 2026-07-11
+Date: 2026-07-30
 
-Status: OTP login and OTP-backed password recovery foundation implemented.
+Status: administrator-assisted public recovery and central `mustChange` enforcement implemented.
 
 ## Login Model
 
-JinaCampus uses user-based login. Institutions and roles do not log in directly. A user signs in, then the server resolves tenant, institution, branch, academic-year, role, permission, and branding context.
+JinaCampus uses user-based login. Institutions and roles do not log in. School
+users enter School ID plus employee code or email and authenticate with a
+registered passkey or case-sensitive password. Platform Administrators use the
+separate Administrator Portal.
 
-## Login Methods
+The public phone-OTP login and public OTP password-reset routes are not exposed.
 
-The login page supports two user login methods:
+## Public Forgot Password Behavior
 
-- School ID, email, and password.
-- School ID, registered contact number, and one-time password for active tenant administrators or tenant owners.
+The login page links to `/forgot-password`. The public form accepts:
 
-Password values remain case-sensitive and are never normalized. School IDs, emails, and phone numbers are normalized independently. Successful password and OTP logins create the same server-managed session and resolve tenant, branch, role, and permission context on the server.
+- School ID
+- Account email
 
-## Forgot Password Behavior
+For any syntactically valid request, the public response remains generic and
+does not reveal whether the school, email, or user exists:
 
-The login page includes a `Forgot password?` link to `/forgot-password`.
-
-The public forgot-password form accepts a School ID plus an email address or contact number. The response is intentionally non-enumerating:
-
-```txt
-If the account is eligible, an OTP will be sent to the registered contact number.
+```text
+If this account is eligible for password recovery, instructions will be provided. Institution staff should contact their Principal/Admin for password reset.
 ```
 
-The public response does not reveal whether the school, email, phone, or user exists; whether the user is active; or which role the user has. A matching active account must have a valid linked phone number before an OTP can be issued.
+No email or OTP delivery is claimed because no approved delivery provider or
+reset-token flow exists. The route does not accept tenant IDs, user IDs, roles,
+permissions, passwords, or reset tokens from the client.
 
-The reset step accepts the identifier, OTP, and a new password. The password must contain at least 10 characters with uppercase, lowercase, numeric, and symbol characters. A successful reset hashes the new password, clears the `mustChange` flag, consumes the OTP, and revokes existing sessions.
+When an active account can be resolved inside the submitted School ID, the
+server may write a safe `auth.password_recovery_requested` audit record. Unknown
+accounts return the same public shape without creating an account-specific
+record.
 
-## Admin / Principal Reset Responsibility
+## Administrator-Assisted Reset
 
-Authenticated Admin/Principal password reset from CampusCore user management remains an additional supported operational recovery flow for institution users.
-
-Supported route:
+Authenticated Principal user management remains the supported operational
+recovery flow for school users:
 
 - `/campus-core/users/[userId]/reset-password`
 
-The reset flow remains tenant-scoped, branch-aware, permission-protected, hashed, and audited.
+The reset requires `campuscore.user.reset_password` and server-derived tenant
+and branch scope. A Principal cannot reset a platform Administrator or a user
+outside the Principal's governance scope. Teacher, Staff, and Office Staff do
+not receive reset authority by default.
 
-## Teacher / Staff / Office Policy
+A successful administrative reset:
 
-Teacher, staff, and office users may request the same non-enumerating recovery operation. A reset can complete only with an unexpired OTP sent to the contact number already linked to that account. Authenticated Principal/Admin reset remains the operational fallback when a user has no eligible phone number. Public requests never reveal the account role or recovery eligibility.
+- hashes the new temporary password
+- sets `mustChange=true`
+- revokes all active sessions for the target user
+- removes target-user passkeys
+- activates an invited user where applicable
+- writes a safe audit event without password material
 
-## OTP Controls
+Removing passkeys on administrative reset prevents a previously enrolled
+credential from bypassing the newly issued temporary-password lifecycle.
 
-- OTPs contain six numeric digits and expire after five minutes.
-- Only an HMAC hash is stored in `login_otps`; the raw OTP is never stored.
-- A user has at most five verification attempts per OTP.
-- Resends have a 60-second cooldown and invalidate older unconsumed OTPs for the same purpose.
-- OTPs are tenant- and user-scoped and can be consumed only once.
-- Administrator OTP login is limited server-side to active users with an active `TENANT_OWNER` or `ADMIN` role.
-- Development mode writes the OTP to the local server console for local QA only.
-- Production mode intentionally has an SMS provider adapter placeholder and does not write raw OTPs to logs.
+## Mandatory Password Change
+
+`mustChange` is enforced centrally by tenant-context resolution, not only by
+navigation hiding.
+
+- Password and passkey login return the change-password route for a temporary credential.
+- Protected web contexts reject the session until the password is changed.
+- Mobile protected-token resolution rejects a temporary credential.
+- `/api/auth/me` exposes only the safe `passwordChangeRequired` flag.
+- Logout and the change-own-password route remain available.
+- Passkey registration is unavailable until the temporary password is replaced.
+
+A successful own-password change:
+
+- verifies the current password
+- hashes the new password
+- clears `mustChange`
+- keeps the current session where it can be identified
+- revokes the user's other active sessions
+- writes `user.password_changed` with safe metadata
 
 ## Show Password UX
 
-Password inputs now include a keyboard-accessible show/hide control:
+Password inputs include a keyboard-accessible show/hide control on:
 
 - `/login`
 - `/account/change-password`
 - `/campus-core/users/[userId]/reset-password`
-- CampusCore user create initial-password fields
+- CampusCore user creation where an initial password is present
 
-The toggle is a non-submit button, defaults to hidden password input, and stores no password value.
+The toggle is a non-submit button, defaults to hidden, and does not log or
+persist the password.
 
 ## Security Rules
 
-- Do not reveal whether a forgot-password email exists.
-- Do not reveal role or account status from the public recovery response.
+- Do not reveal public account, role, school, or recovery eligibility.
 - Do not store plaintext passwords.
-- Do not expose password hashes.
-- Do not log raw passwords.
-- Do not expose OTP hashes or return raw OTPs from routes.
-- Do not accept tenant, user, role, or permission claims from the client.
-- Do not weaken admin/principal reset RBAC or tenant scope.
+- Do not expose password hashes, session tokens, OTP hashes, or reset tokens.
+- Do not log passwords or WebAuthn credential payloads.
+- Do not trust tenant, user, role, permission, or branch claims from clients.
+- Do not permit school login for a platform Administrator.
+- Do not let public recovery change a password.
+- Do not weaken Principal reset scope.
 
 ## Audit
 
-The OTP and password flows write safe audit events where an account context can be resolved:
+Relevant audit actions include:
 
-- `auth.otp.requested`
-- `auth.otp.verified`
-- `auth.otp.failed`
-- `auth.password.reset_requested`
-- `auth.password.reset_completed`
+- `auth.password_recovery_requested`
 - `auth.login.password_success`
-- `auth.login.otp_success`
+- `auth.login.passkey_success`
+- `user.password_reset`
+- `user.password_changed`
+- `user.passkey_registered`
+- `user.passkey_removed`
 
-Audit metadata records only safe purpose and outcome information. It does not include passwords, password hashes, raw OTPs, OTP hashes, reset tokens, or secrets. Unknown identifiers do not create account-specific audit rows.
+Audit metadata may contain safe outcome, authentication-method, session-revoke,
+and passkey-removal counts. It must not contain raw passwords, password hashes,
+session tokens, WebAuthn challenges, OTPs, or reset secrets.
 
 ## Deferred
 
-- Production SMS provider integration
-- Delivery receipts and provider retry handling
-- Email provider and reset-link flow
+- Email provider integration
+- Signed reset-token email flow
+- SMS recovery provider
+- Password reset request queue and operator inbox
 - Invite-based onboarding
-- Forced password change UX
-- Dedicated password reset request queue
+- Forced passkey enrollment

@@ -97,7 +97,12 @@ export async function POST(request: Request) {
     });
     await setSessionCookie(rawToken, expiresAt);
 
-    return NextResponse.json({ ok: true, redirectTo: "/administrator" });
+    return NextResponse.json({
+      ok: true,
+      redirectTo: user.passwordCredential.mustChange
+        ? "/account/change-password?required=1"
+        : "/administrator"
+    });
   }
 
   return NextResponse.json({ error: ADMINISTRATOR_LOGIN_ERROR_MESSAGE }, { status: 401 });

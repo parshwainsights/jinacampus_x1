@@ -1,6 +1,10 @@
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac/require-permission";
-import { canAssignRole, hasPlatformAdminRole } from "@/lib/rbac/roles";
+import {
+  canAssignRole,
+  hasPlatformAdminRole,
+  SCHOOL_OPERATIONAL_ROLE_CODES
+} from "@/lib/rbac/roles";
 import type { TenantContext } from "@/lib/tenant/context";
 
 const defaultListTake = 100;
@@ -14,6 +18,26 @@ function scopedBranchWhere(ctx: TenantContext) {
     tenantId: ctx.tenantId,
     ...(isPlatformAdminContext(ctx) ? {} : { id: { in: ctx.accessibleBranchIds } }),
     status: { not: "ARCHIVED" as const }
+  };
+}
+
+function scopedInstitutionWhere(ctx: TenantContext, institutionId?: string) {
+  const base = {
+    ...(institutionId ? { id: institutionId } : {}),
+    tenantId: ctx.tenantId,
+    status: { not: "ARCHIVED" as const }
+  };
+  if (isPlatformAdminContext(ctx)) return base;
+
+  return {
+    ...base,
+    branches: {
+      some: {
+        tenantId: ctx.tenantId,
+        id: { in: ctx.accessibleBranchIds },
+        status: { not: "ARCHIVED" as const }
+      }
+    }
   };
 }
 
@@ -48,7 +72,7 @@ function scopedUserWhere(ctx: TenantContext, userId?: string) {
 export async function listInstitutions(ctx: TenantContext) {
   await requirePermission({ ctx, permission: "campuscore.institution.manage" });
   return db.institution.findMany({
-    where: { tenantId: ctx.tenantId, status: { not: "ARCHIVED" } },
+    where: scopedInstitutionWhere(ctx),
     select: {
       id: true,
       name: true,
@@ -65,7 +89,7 @@ export async function listInstitutions(ctx: TenantContext) {
 export async function getInstitutionById(ctx: TenantContext, institutionId: string) {
   await requirePermission({ ctx, permission: "campuscore.institution.manage" });
   return db.institution.findFirst({
-    where: { id: institutionId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } },
+    where: scopedInstitutionWhere(ctx, institutionId),
     select: {
       id: true,
       name: true,
@@ -166,7 +190,23 @@ export async function listUserAssignableBranches(ctx: TenantContext) {
 export async function listAcademicYears(ctx: TenantContext) {
   await requirePermission({ ctx, permission: "campuscore.academic_year.manage" });
   return db.academicYear.findMany({
-    where: { tenantId: ctx.tenantId, status: { not: "ARCHIVED" } },
+    where: {
+      tenantId: ctx.tenantId,
+      status: { not: "ARCHIVED" },
+      ...(isPlatformAdminContext(ctx)
+        ? {}
+        : {
+            institution: {
+              branches: {
+                some: {
+                  tenantId: ctx.tenantId,
+                  id: { in: ctx.accessibleBranchIds },
+                  status: { not: "ARCHIVED" }
+                }
+              }
+            }
+          })
+    },
     select: {
       id: true,
       name: true,
@@ -245,7 +285,11 @@ export async function getUserById(ctx: TenantContext, userId: string) {
 export async function listRoles(ctx: TenantContext) {
   await requirePermission({ ctx, permission: "campuscore.role.view" });
   return db.role.findMany({
-    where: { tenantId: ctx.tenantId, isActive: true },
+    where: {
+      tenantId: ctx.tenantId,
+      isActive: true,
+      code: { in: [...SCHOOL_OPERATIONAL_ROLE_CODES] }
+    },
     select: {
       id: true,
       code: true,

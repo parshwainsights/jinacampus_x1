@@ -39,7 +39,7 @@ export const DEMO_USERS = [
     firstName: "Aarav",
     lastName: "Admin",
     displayName: "Aarav Admin",
-    roleCodes: ["ADMIN"]
+    roleCodes: ["PRINCIPAL"]
   },
   {
     key: "principal",
@@ -57,7 +57,7 @@ export const DEMO_USERS = [
     firstName: "Anaya",
     lastName: "Teacher",
     displayName: "Anaya Teacher",
-    roleCodes: ["CLASS_TEACHER"]
+    roleCodes: ["TEACHER"]
   },
   {
     key: "staff",
@@ -80,6 +80,16 @@ export const DEMO_USERS = [
 ] as const;
 
 export type DemoUserSeedKey = (typeof DEMO_USERS)[number]["key"];
+
+export function getAssignableDemoPhone(
+  normalizedPhone: string | null,
+  targetUserId: string | null,
+  phoneOwnerUserId: string | null
+) {
+  if (!normalizedPhone) return null;
+  if (phoneOwnerUserId && phoneOwnerUserId !== targetUserId) return null;
+  return normalizedPhone;
+}
 
 export function getDemoUserPassword(userKey: DemoUserSeedKey) {
   if (userKey === "admin") return SEED_ADMIN_TEMP_PASSWORD;

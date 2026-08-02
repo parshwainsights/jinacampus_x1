@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac/require-permission";
+import { hasPlatformAdminRole, hasPrincipalRole, hasTeacherRole } from "@/lib/rbac/roles";
 import type { TenantContext } from "@/lib/tenant/context";
 import { listStudentsSchema } from "@/modules/academia/schemas";
 import { idSchema } from "@/modules/academia/schemas/shared";
@@ -11,6 +12,12 @@ export type StudentClassSectionOption = {
   displayName: string;
   className: string;
   sectionName: string;
+};
+
+export type StudentRegistrationClassSectionOption = StudentClassSectionOption & {
+  branchId: string;
+  branchName: string;
+  academicYearName: string;
 };
 
 export type StudentListRow = {
@@ -33,6 +40,17 @@ export type StudentListRow = {
 
 function resolveBranchId(ctx: TenantContext, branchId?: string) {
   return branchId ?? ctx.activeBranchId ?? ctx.accessibleBranchIds[0] ?? undefined;
+}
+
+function isAssignedTeacherScope(ctx: TenantContext) {
+  const roleCodes = ctx.roleCodes ?? [];
+  return hasTeacherRole(roleCodes) &&
+    !hasPrincipalRole(roleCodes) &&
+    !hasPlatformAdminRole(roleCodes);
+}
+
+function assignedClassSectionFilter(ctx: TenantContext): Prisma.ClassSectionWhereInput {
+  return isAssignedTeacherScope(ctx) ? { classTeacherUserId: ctx.userId } : {};
 }
 
 function studentName(student: { displayName: string | null; firstName: string; lastName: string | null }) {
@@ -71,6 +89,8 @@ export async function listStudents(ctx: TenantContext, input: unknown = {}) {
   const params = listStudentsSchema.parse(input);
   const branchId = resolveBranchId(ctx, params.branchId);
   if (!branchId) return [];
+  const academicYearId = resolveAcademicYearId(ctx);
+  if (isAssignedTeacherScope(ctx) && !academicYearId) return [];
   await requirePermission({ ctx, permission: "academia.student.view", branchId });
 
   const where: Prisma.StudentWhereInput = {
@@ -78,7 +98,20 @@ export async function listStudents(ctx: TenantContext, input: unknown = {}) {
     branchId,
     status: params.status ?? { not: "WITHDRAWN" },
     gender: params.gender,
-    bloodGroup: params.bloodGroup
+    bloodGroup: params.bloodGroup,
+    ...(isAssignedTeacherScope(ctx)
+      ? {
+        enrollments: {
+          some: {
+            tenantId: ctx.tenantId,
+            branchId,
+            academicYearId,
+            status: "ACTIVE",
+            classSection: assignedClassSectionFilter(ctx)
+          }
+        }
+      }
+      : {})
   };
   if (params.search) {
     where.OR = [
@@ -128,6 +161,7 @@ export async function listStudentClassSectionOptions(
       tenantId: ctx.tenantId,
       branchId,
       academicYearId,
+      ...assignedClassSectionFilter(ctx),
       status: "ACTIVE"
     },
     select: {
@@ -144,6 +178,58 @@ export async function listStudentClassSectionOptions(
     displayName: classSection.displayName,
     className: classSection.academicClass.name,
     sectionName: classSection.section.name
+  }));
+}
+
+export async function listStudentRegistrationClassSectionOptions(
+  ctx: TenantContext,
+  branchId?: string
+): Promise<StudentRegistrationClassSectionOption[]> {
+  const accessibleBranchIds = branchId
+    ? ctx.accessibleBranchIds.filter((id) => id === branchId)
+    : ctx.accessibleBranchIds;
+  if (!accessibleBranchIds.length) return [];
+  await requirePermission({
+    ctx,
+    permission: "academia.enrollment.manage",
+    branchId: branchId ?? ctx.activeBranchId ?? accessibleBranchIds[0]
+  });
+
+  const classSections = await db.classSection.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      branchId: { in: accessibleBranchIds },
+      status: "ACTIVE",
+      academicYear: {
+        tenantId: ctx.tenantId,
+        isActive: true,
+        status: "ACTIVE"
+      }
+    },
+    select: {
+      id: true,
+      branchId: true,
+      displayName: true,
+      branch: { select: { name: true } },
+      academicYear: { select: { name: true } },
+      academicClass: { select: { name: true, sortOrder: true } },
+      section: { select: { name: true, sortOrder: true } }
+    },
+    orderBy: [
+      { branch: { name: "asc" } },
+      { academicClass: { sortOrder: "asc" } },
+      { section: { sortOrder: "asc" } }
+    ]
+  });
+
+  return classSections.map((classSection) => ({
+    id: classSection.id,
+    branchId: classSection.branchId,
+    displayName: classSection.displayName,
+    className: classSection.academicClass.name,
+    sectionName: classSection.section.name,
+    branchName: classSection.branch.name,
+    academicYearName: classSection.academicYear.name
   }));
 }
 
@@ -166,6 +252,7 @@ export async function listStudentsWithCurrentEnrollment(
         tenantId: ctx.tenantId,
         branchId,
         academicYearId,
+        ...assignedClassSectionFilter(ctx),
         status: "ACTIVE"
       },
       select: { id: true }
@@ -182,6 +269,17 @@ export async function listStudentsWithCurrentEnrollment(
     bloodGroup: params.bloodGroup,
     category: params.category
   };
+  if (isAssignedTeacherScope(ctx)) {
+    studentWhere.enrollments = {
+      some: {
+        tenantId: ctx.tenantId,
+        branchId,
+        academicYearId,
+        status: "ACTIVE",
+        classSection: assignedClassSectionFilter(ctx)
+      }
+    };
+  }
   if (params.search) {
     studentWhere.OR = [
       { admissionNumber: { contains: params.search, mode: "insensitive" } },
@@ -230,7 +328,8 @@ export async function listStudentsWithCurrentEnrollment(
             tenantId: ctx.tenantId,
             branchId,
             academicYearId,
-            status: "ACTIVE"
+            status: "ACTIVE",
+            classSection: assignedClassSectionFilter(ctx)
           },
           select: {
             rollNumber: true,
@@ -279,6 +378,7 @@ export async function listStudentsWithCurrentEnrollment(
       academicYearId,
       classSectionId,
       status: "ACTIVE",
+      classSection: assignedClassSectionFilter(ctx),
       student: studentWhere
     },
     select: {
@@ -353,8 +453,26 @@ export async function listStudentsWithCurrentEnrollment(
 
 export async function getStudentById(ctx: TenantContext, studentId: string) {
   const id = idSchema.parse(studentId);
+  const academicYearId = resolveAcademicYearId(ctx);
+  if (isAssignedTeacherScope(ctx) && !academicYearId) return null;
   const student = await db.student.findFirst({
-    where: { id, tenantId: ctx.tenantId, branchId: { in: ctx.accessibleBranchIds } }
+    where: {
+      id,
+      tenantId: ctx.tenantId,
+      branchId: { in: ctx.accessibleBranchIds },
+      ...(isAssignedTeacherScope(ctx)
+        ? {
+          enrollments: {
+            some: {
+              tenantId: ctx.tenantId,
+              academicYearId,
+              status: "ACTIVE",
+              classSection: assignedClassSectionFilter(ctx)
+            }
+          }
+        }
+        : {})
+    }
   });
   if (!student) return null;
 
@@ -364,8 +482,26 @@ export async function getStudentById(ctx: TenantContext, studentId: string) {
 
 export async function getStudentProfileWithGuardians(ctx: TenantContext, studentId: string) {
   const id = idSchema.parse(studentId);
+  const academicYearId = resolveAcademicYearId(ctx);
+  if (isAssignedTeacherScope(ctx) && !academicYearId) return null;
   const student = await db.student.findFirst({
-    where: { id, tenantId: ctx.tenantId, branchId: { in: ctx.accessibleBranchIds } },
+    where: {
+      id,
+      tenantId: ctx.tenantId,
+      branchId: { in: ctx.accessibleBranchIds },
+      ...(isAssignedTeacherScope(ctx)
+        ? {
+          enrollments: {
+            some: {
+              tenantId: ctx.tenantId,
+              academicYearId,
+              status: "ACTIVE",
+              classSection: assignedClassSectionFilter(ctx)
+            }
+          }
+        }
+        : {})
+    },
     include: {
       guardianLinks: {
         where: { tenantId: ctx.tenantId },
@@ -373,7 +509,16 @@ export async function getStudentProfileWithGuardians(ctx: TenantContext, student
         orderBy: [{ isPrimary: "desc" }, { relation: "asc" }]
       },
       enrollments: {
-        where: { tenantId: ctx.tenantId },
+        where: {
+          tenantId: ctx.tenantId,
+          ...(isAssignedTeacherScope(ctx)
+            ? {
+              academicYearId,
+              status: "ACTIVE",
+              classSection: assignedClassSectionFilter(ctx)
+            }
+            : {})
+        },
         include: { classSection: { include: { academicClass: true, section: true } }, academicYear: true },
         orderBy: { enrolledOn: "desc" }
       }

@@ -1,7 +1,6 @@
 import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
 import { listInstitutions } from "@/modules/campus-core/queries";
-import { createInstitutionAction } from "@/modules/campus-core/actions";
 import { EmptyState, PermissionState } from "@/components/ui/empty-state";
 import { ResponsiveTable, StatusBadge, TableActionLink } from "@/components/ui/table-primitives";
 
@@ -14,14 +13,12 @@ export default async function InstitutionsPage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-semibold">Institutions</h1><p className="text-sm text-slate-500">Manage tenant institutions.</p></div>
-      <form action={createInstitutionAction} className="premium-card grid gap-3 p-5 md:grid-cols-4">
-        <input name="name" placeholder="Institution name" required />
-        <input name="displayName" placeholder="Display name (optional)" />
-        <input name="code" placeholder="Code e.g. MAIN" required />
-        <input name="board" placeholder="Board" />
-        <button className="bg-brand-700 px-4 py-2 text-sm font-medium text-white">Create</button>
-      </form>
+      <div className="premium-glass-panel p-5">
+        <h1 className="text-2xl font-semibold text-slate-950">School Profile</h1>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+          Review and update the institution profiles available through your assigned branches. New schools are provisioned only from the JinaCampus Administrator Portal.
+        </p>
+      </div>
       {institutions.length ? (
         <ResponsiveTable columns={["Institution", "Code", "Status", "Actions"]} caption="Institutions table">
           {institutions.map((i) => (
@@ -50,7 +47,10 @@ export default async function InstitutionsPage() {
           ))}
         </ResponsiveTable>
       ) : (
-        <EmptyState title="No institutions yet" description="Create the first institution for this tenant." />
+        <EmptyState
+          title="No school profile available"
+          description="Ask a JinaCampus administrator to provision the school and assign your branch access."
+        />
       )}
     </div>
   );

@@ -5,7 +5,7 @@ JinaCampus is a production-grade, multi-tenant School Management SaaS for Indian
 
 Brand:
 
-> JinaCampus — The Complete School OS, powered by Parshav Insights
+> JinaCampus - The Complete School OS, powered by Parshwa Insights
 
 The first development phase creates the foundation for a reliable school operations platform with secure tenant isolation, role-based access, audit logs, student academic records, student attendance, staff profiles, QR-based staff attendance, and a lightweight attendance notification foundation.
 
@@ -71,28 +71,37 @@ Reason: the current MVP foundation is technically strong, but a school SaaS must
 - Better empty, loading, and error states across core pages.
 - Stronger demo readiness through safe seeded data and smoke checklists.
 
-## 4. Target Users
+## 4. Target Users and Roles
 
-### 4.0 JinaCampus Administrator / Super Admin
-Manages school tenants, School IDs, platform school lifecycle, and administrator-level audit/governance through the separate administrator portal.
+JinaCampus uses five canonical operational roles. A human signs in through one
+tenant-scoped user account and may hold multiple role assignments; effective
+permissions are merged server-side.
 
-### 4.1 Tenant Owner
-Owns the school tenant account and manages high-level settings, branches, users, roles, and permissions.
+### 4.0 JinaCampus Administrator
+Manages school tenants, School IDs, platform lifecycle, and platform audit/governance through the separate administrator portal. This operator-only role is provisioned separately and cannot be assigned by a school principal.
 
-### 4.2 Principal
-Views school operations, attendance status, users, students, and reports across assigned branches.
+### 4.1 Principal
+Manages school settings, branches, users, students, staff, attendance, and reports inside authorized tenant and branch scope. A Principal may assign only Office Staff, Teacher, and Staff roles.
 
-### 4.3 Admin
-Manages branches, academic years, students, guardians, enrollments, staff records, and attendance operations.
+### 4.2 Office Staff
+Performs explicitly permitted branch operations such as QR generation, attendance correction, and attendance reports. Office Staff receives no user or role governance by default.
 
-### 4.4 Class Teacher
-Marks daily full-day attendance for assigned class-sections.
+### 4.3 Teacher
+Views assigned class-sections and students, marks student attendance, and uses self staff-attendance workflows where linked to a staff profile.
 
-### 4.5 Teacher / Staff Member
-Uses QR scan check-in/check-out for staff attendance.
+### 4.4 Staff
+Uses own QR attendance, own attendance status, and account access only unless an additional role grants more permissions.
 
-### 4.6 Parent / Student
-Seed future-ready roles only. Full parent/student portals are out of scope for first development.
+Parent and student account portals remain deferred. Legacy role codes are migration aliases only and are not new operational roles.
+
+### 4.5 Fast Login
+
+- School users enter School ID plus employee code or email.
+- A registered passkey is the preferred fast-login method.
+- Employee-code/email and case-sensitive password remains a permanent fallback.
+- Passkeys require HTTPS, are tenant-scoped, and never send biometric data to JinaCampus.
+- Authorization is always resolved from server-side role and permission assignments; users never select a role to grant themselves access.
+- A temporary password marked for change must be replaced before passkey enrollment.
 
 ## 5. Core Product Principles
 
@@ -387,6 +396,7 @@ The notification foundation is limited to attendance WhatsApp use cases and does
 - `staffboard.staff.update`
 - `staffboard.attendance.qr.generate`
 - `staffboard.attendance.self_scan`
+- `staffboard.attendance.self_view`
 - `staffboard.attendance.view`
 - `staffboard.attendance.correct`
 - `staffboard.attendance.report`
@@ -403,12 +413,15 @@ The notification foundation is limited to attendance WhatsApp use cases and does
 ### CampusCore Routes
 
 - `/dashboard`
+- `/attendance-login`
+- `/account/workspaces`
 - `/campus-core/institutions`
 - `/campus-core/branches`
 - `/campus-core/academic-years`
 - `/campus-core/users`
 - `/campus-core/roles`
 - `/campus-core/settings`
+- `/campus-core/readiness`
 - `/campus-core/audit-logs`
 
 ### Academia Routes
@@ -430,6 +443,7 @@ The notification foundation is limited to attendance WhatsApp use cases and does
 - `/staffboard/attendance`
 - `/staffboard/attendance/qr`
 - `/staffboard/attendance/scan`
+- `/staffboard/attendance/me`
 - `/staffboard/attendance/reports`
 
 ## 10. Reporting Requirements

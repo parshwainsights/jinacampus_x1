@@ -5,6 +5,7 @@ import { createRawSessionToken, getSessionExpiresAt, hashSessionToken } from "@/
 import { writeAuditLog } from "@/lib/audit/audit-log";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
 import type { PermissionCode } from "@/lib/rbac/permissions";
+import { hasSchoolLoginRole } from "@/lib/rbac/roles";
 import type { TenantContext } from "@/lib/tenant/context";
 import { CAMPUS_CORE_AUDIT_EVENTS } from "@/modules/campus-core/audit-events";
 import { mobileLoginSchema, type MobileLoginInput } from "./schemas";
@@ -132,7 +133,11 @@ async function buildMobileUserPayload(ctx: TenantContext, user: {
   };
 }
 
-async function resolveMobileAuthFromRawToken(rawToken: string, request: Request): Promise<MobileAuthContext> {
+async function resolveMobileAuthFromRawToken(
+  rawToken: string,
+  request: Request,
+  options: { allowPasswordChangeRequired?: boolean } = {}
+): Promise<MobileAuthContext> {
   const tokenHash = await hashSessionToken(rawToken);
   const session = await db.session.findUnique({
     where: { tokenHash },
@@ -140,6 +145,9 @@ async function resolveMobileAuthFromRawToken(rawToken: string, request: Request)
       tenant: true,
       user: {
         include: {
+          passwordCredential: {
+            select: { mustChange: true }
+          },
           branchAccesses: {
             where: { isActive: true },
             select: {
@@ -192,6 +200,9 @@ async function resolveMobileAuthFromRawToken(rawToken: string, request: Request)
   }
   if (session.tenant.status !== "ACTIVE") throw new AppError("TENANT_INACTIVE", "TENANT_INACTIVE", 403);
   if (session.user.status !== "ACTIVE") throw new AppError("USER_INACTIVE", "USER_INACTIVE", 403);
+  if (session.user.passwordCredential?.mustChange && !options.allowPasswordChangeRequired) {
+    throw new AppError("PASSWORD_CHANGE_REQUIRED", "PASSWORD_CHANGE_REQUIRED", 403);
+  }
 
   const activeBranchAccesses = session.user.branchAccesses.filter((branchAccess) => (
     branchAccess.tenantId === session.tenantId &&
@@ -232,10 +243,14 @@ async function resolveMobileAuthFromRawToken(rawToken: string, request: Request)
       (!assignment.endsAt || assignment.endsAt > now)
     ))
     .map((assignment) => ({ code: assignment.role.code, label: assignment.role.name }));
+  if (!hasSchoolLoginRole(roles.map((role) => role.code))) {
+    throw new AppError("UNAUTHENTICATED", "UNAUTHENTICATED", 401);
+  }
 
   const ctx: TenantContext = {
     tenantId: session.tenantId,
     tenantName: session.tenant.name,
+    sessionId: session.id,
     userId: session.userId,
     userEmail: session.user.email,
     userType: session.user.userType,
@@ -250,6 +265,7 @@ async function resolveMobileAuthFromRawToken(rawToken: string, request: Request)
     institutionLogoUrl: institution?.logoUrl ?? null,
     roleLabels: roles.map((role) => role.label),
     roleCodes: roles.map((role) => role.code),
+    passwordChangeRequired: session.user.passwordCredential?.mustChange ?? false,
     ipAddress: ipAddressFrom(request),
     userAgent: userAgentFrom(request)
   };
@@ -289,6 +305,22 @@ export async function createMobileLoginSession(input: unknown, request: Request)
 
   const valid = await verifyPassword(data.password, user.passwordCredential.passwordHash);
   if (!valid) throw new AppError("INVALID_MOBILE_CREDENTIALS", "INVALID_MOBILE_CREDENTIALS", 401);
+  if (user.passwordCredential.mustChange) {
+    throw new AppError("PASSWORD_CHANGE_REQUIRED", "PASSWORD_CHANGE_REQUIRED", 403);
+  }
+
+  const roleAssignments = await db.userRoleAssignment.findMany({
+    where: {
+      tenantId: tenant.id,
+      userId: user.id,
+      isActive: true,
+      role: { isActive: true }
+    },
+    select: { role: { select: { code: true } } }
+  });
+  if (!hasSchoolLoginRole(roleAssignments.map((assignment) => assignment.role.code))) {
+    throw new AppError("INVALID_MOBILE_CREDENTIALS", "INVALID_MOBILE_CREDENTIALS", 401);
+  }
 
   const rawToken = createRawSessionToken();
   const tokenHash = await hashSessionToken(rawToken);
@@ -322,7 +354,11 @@ export async function createMobileLoginSession(input: unknown, request: Request)
 }
 
 export async function revokeMobileSession(request: Request) {
-  const auth = await requireMobileAuth(request);
+  const rawToken = bearerTokenFromRequest(request);
+  if (!rawToken) throw new AppError("UNAUTHENTICATED", "UNAUTHENTICATED", 401);
+  const auth = await resolveMobileAuthFromRawToken(rawToken, request, {
+    allowPasswordChangeRequired: true
+  });
   await db.session.updateMany({
     where: { tokenHash: auth.tokenHash, revokedAt: null },
     data: { revokedAt: new Date() }

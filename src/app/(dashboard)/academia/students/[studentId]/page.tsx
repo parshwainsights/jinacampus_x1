@@ -4,8 +4,12 @@ import type { ReactNode } from "react";
 import { EmptyState, PermissionState } from "@/components/ui/empty-state";
 import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
-import { getStudentProfileWithGuardians } from "@/modules/academia/queries";
+import {
+  getStudentProfileWithGuardians,
+  listStudentRegistrationClassSectionOptions
+} from "@/modules/academia/queries";
 import { PageHeader, StatusPill, formatDateTime, formatEnumLabel } from "@/modules/academia/components/academia-page-shell";
+import { AssignStudentClassForm } from "@/modules/academia/components/assign-student-class-form";
 
 function displayName(student: {
   fullName: string | null;
@@ -59,8 +63,15 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const permissions = await getEffectivePermissions({ ctx, branchId: student.branchId });
   if (!permissions.has("academia.student.view")) return <PermissionState />;
   const canUpdate = permissions.has("academia.student.update");
+  const canManageEnrollment = permissions.has("academia.enrollment.manage");
   const name = displayName(student);
   const primaryGuardian = student.guardianLinks[0]?.guardian;
+  const currentYearEnrollment = student.enrollments.find(
+    (enrollment) => enrollment.academicYear.isActive
+  );
+  const classSections = canManageEnrollment && !currentYearEnrollment
+    ? await listStudentRegistrationClassSectionOptions(ctx, student.branchId)
+    : [];
 
   return (
     <div className="space-y-6">
@@ -131,6 +142,14 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
         <InfoRow label="Bank Branch" value={student.bankBranchName} />
         <InfoRow label="IFSC" value={student.ifscCode} />
       </ProfileSection>
+
+      {canManageEnrollment && !currentYearEnrollment ? (
+        <AssignStudentClassForm
+          studentId={student.id}
+          classSections={classSections}
+          defaultEnrollmentDate={new Date().toISOString().slice(0, 10)}
+        />
+      ) : null}
 
       {student.enrollments.length ? (
         <ProfileSection title="Current Academic Records" description="Recent enrollments for this student.">

@@ -1,6 +1,7 @@
 export const CAMPUS_CORE_AUDIT_EVENTS = {
   AUTH_LOGIN_SUCCESS: "campuscore.auth.login_success",
   AUTH_LOGIN_PASSWORD_SUCCESS: "auth.login.password_success",
+  AUTH_LOGIN_PASSKEY_SUCCESS: "auth.login.passkey_success",
   AUTH_LOGIN_OTP_SUCCESS: "auth.login.otp_success",
   AUTH_LOGOUT: "campuscore.auth.logout",
   AUTH_PASSWORD_RECOVERY_REQUESTED: "auth.password_recovery_requested",
@@ -32,12 +33,15 @@ export const CAMPUS_CORE_AUDIT_EVENTS = {
   USER_CREATED: "campuscore.user.created",
   USER_UPDATED: "campuscore.user.updated",
   USER_DEACTIVATED: "campuscore.user.deactivated",
+  USER_REACTIVATED: "campuscore.user.reactivated",
   USER_ROLE_ASSIGNED: "campuscore.user.role_assigned",
   USER_ROLE_REMOVED: "campuscore.user.role_removed",
   USER_BRANCH_ASSIGNED: "campuscore.user.branch_assigned",
   USER_BRANCH_REMOVED: "campuscore.user.branch_removed",
   USER_PASSWORD_RESET: "campuscore.user.password_reset",
   USER_PASSWORD_CHANGED: "campuscore.user.password_changed",
+  USER_PASSKEY_REGISTERED: "campuscore.user.passkey_registered",
+  USER_PASSKEY_REMOVED: "campuscore.user.passkey_removed",
   ROLE_CREATED: "campuscore.role.created",
   SETTINGS_UPDATED: "campuscore.settings.updated",
   ATTENDANCE_SETTINGS_UPDATED: "campuscore.attendance_settings.updated"

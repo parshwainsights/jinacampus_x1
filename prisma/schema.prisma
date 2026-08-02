@@ -53,6 +53,11 @@ enum OtpPurpose {
   FORGOT_PASSWORD
 }
 
+enum PasskeyChallengePurpose {
+  REGISTRATION
+  AUTHENTICATION
+}
+
 enum PermissionModule {
   CAMPUS_CORE
   ACADEMIA
@@ -282,6 +287,8 @@ model Tenant {
   branchAccesses           UserBranchAccess[]
   sessions                 Session[]
   loginOtps                LoginOtp[]
+  passkeyCredentials       PasskeyCredential[]
+  passkeyChallenges        PasskeyChallenge[]
   tenantSettings           TenantSettings?
   attendanceSettings       AttendanceSetting[]
   auditLogs                AuditLog[]
@@ -435,6 +442,8 @@ model User {
   passwordCredential         PasswordCredential?
   sessions                   Session[]
   loginOtps                  LoginOtp[]
+  passkeyCredentials         PasskeyCredential[]
+  passkeyChallenges          PasskeyChallenge[]
   roleAssignments            UserRoleAssignment[]
   branchAccesses             UserBranchAccess[]
   auditLogs                  AuditLog[]                @relation("AuditActor")
@@ -508,6 +517,52 @@ model LoginOtp {
   @@index([tenantId, userId])
   @@index([expiresAt])
   @@map("login_otps")
+}
+
+model PasskeyCredential {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  userId       String    @db.Uuid
+  credentialId String    @unique
+  publicKey    Bytes
+  counter      BigInt    @default(0)
+  deviceType   String
+  backedUp     Boolean   @default(false)
+  transports   String[]  @default([])
+  name         String?
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([tenantId, lastUsedAt])
+  @@map("passkey_credentials")
+}
+
+model PasskeyChallenge {
+  id             String                  @id @default(uuid()) @db.Uuid
+  tenantId       String                  @db.Uuid
+  userId         String?                 @db.Uuid
+  purpose        PasskeyChallengePurpose
+  challenge      String                  @unique
+  identifierHash String?
+  identifierType String?
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime                @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, purpose])
+  @@index([tenantId, ipAddress, createdAt])
+  @@index([expiresAt])
+  @@map("passkey_challenges")
 }
 
 model Permission {

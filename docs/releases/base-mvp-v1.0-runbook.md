@@ -57,8 +57,8 @@ Required or supported variables:
 | `COMMERCIAL_BOOTSTRAP_ENABLED` | Explicit one-time tenant bootstrap gate | Keep `false` except during approved onboarding. |
 | `RESET_SEED_ADMIN_PASSWORD` | Explicit administrator credential reset gate | Keep `false`; use only for a controlled recovery. |
 | `SEED_TENANT_NAME` / `SEED_TENANT_SLUG` | Commercial school identity | Required only when commercial bootstrap is enabled. |
-| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PHONE` | Initial tenant owner identity | Values belong in environment configuration, not source control. |
-| `SEED_ADMIN_TEMP_PASSWORD` | Initial tenant owner temporary password | Must be strong, rotated after login, and never committed. |
+| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PHONE` | Initial school Principal identity | Values belong in environment configuration, not source control. |
+| `SEED_ADMIN_TEMP_PASSWORD` | Initial school Principal temporary password | Must be strong, rotated after login, and never committed. |
 | `DEV_DEMO_SEED_ENABLED` | Optional development fixture gate | Must remain `false` in production; production execution rejects it. |
 | `NODE_ENV` | Runtime environment | Use expected Next.js/Node values. |
 | `WHATSAPP_PROVIDER_MODE` | WhatsApp provider mode | Keep `DRY_RUN` for this pilot. |
@@ -119,7 +119,7 @@ Commercial bootstrap behavior:
 
 - Required tenant and administrator values come only from environment configuration.
 - Institution, branch, attendance settings, and academic year are created only when their complete environment groups are provided.
-- The administrator receives `TENANT_OWNER`, a hashed temporary password, and `mustChange=true`.
+- The school administrator receives `PRINCIPAL`, a hashed temporary password, and `mustChange=true`.
 - Existing administrator passwords are preserved unless `RESET_SEED_ADMIN_PASSWORD="true"` is explicitly set.
 - Disable `COMMERCIAL_BOOTSTRAP_ENABLED` immediately after approved onboarding.
 

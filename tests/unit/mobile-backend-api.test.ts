@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   db: {
     tenant: { findUnique: vi.fn() },
     user: { findUnique: vi.fn(), update: vi.fn() },
+    userRoleAssignment: { findMany: vi.fn() },
     session: { create: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
     academicYear: { findFirst: vi.fn() },
     institution: { findFirst: vi.fn() },
@@ -110,6 +111,7 @@ function sessionRecord(overrides: Record<string, unknown> = {}) {
       displayName: "Demo Teacher",
       userType: "STAFF",
       status: "ACTIVE",
+      passwordCredential: { mustChange: false },
       branchAccesses: [
         {
           tenantId,
@@ -166,8 +168,11 @@ beforeEach(() => {
     tenantId,
     email: "teacher@example.test",
     status: "ACTIVE",
-    passwordCredential: { passwordHash: "stored-password-hash" }
+    passwordCredential: { passwordHash: "stored-password-hash", mustChange: false }
   });
+  mocks.db.userRoleAssignment.findMany.mockResolvedValue([
+    { role: { code: "TEACHER" } }
+  ]);
   mocks.db.user.update.mockResolvedValue({});
   mocks.db.session.create.mockResolvedValue({});
   mocks.db.session.findUnique.mockResolvedValue(sessionRecord());
@@ -294,6 +299,37 @@ describe("mobile backend auth", () => {
   it("requires a bearer token for protected mobile APIs", async () => {
     await expect(requireMobileAuth(new Request("https://school.example.test/api/mobile/me")))
       .rejects.toMatchObject({ code: "UNAUTHENTICATED", status: 401 });
+  });
+
+  it("blocks mobile login and protected APIs until a temporary password is changed", async () => {
+    mocks.db.user.findUnique.mockResolvedValueOnce({
+      id: userId,
+      tenantId,
+      email: "teacher@example.test",
+      status: "ACTIVE",
+      passwordCredential: { passwordHash: "stored-password-hash", mustChange: true }
+    });
+
+    await expect(createMobileLoginSession({
+      schoolId: "jinacampus-demo",
+      email: "teacher@example.test",
+      password: "valid-password"
+    }, loginRequest())).rejects.toMatchObject({
+      code: "PASSWORD_CHANGE_REQUIRED",
+      status: 403
+    });
+    expect(mocks.db.session.create).not.toHaveBeenCalled();
+
+    mocks.db.session.findUnique.mockResolvedValueOnce(sessionRecord({
+      user: {
+        ...sessionRecord().user,
+        passwordCredential: { mustChange: true }
+      }
+    }));
+    await expect(requireMobileAuth(requestWithBearer())).rejects.toMatchObject({
+      code: "PASSWORD_CHANGE_REQUIRED",
+      status: 403
+    });
   });
 
   it("resolves the active academic year through the current branch institution", async () => {

@@ -8,6 +8,7 @@ import {
   seedCommercialBootstrap
 } from "../../prisma/seeds/bootstrap-commercial.seed";
 import { assertDevDemoSeedAllowed, seedDevDemo } from "../../prisma/seeds/dev-demo.seed";
+import { getAssignableDemoPhone } from "../../prisma/seeds/demo-data.seed";
 
 const requiredEnvironment = {
   COMMERCIAL_BOOTSTRAP_ENABLED: "true",
@@ -23,7 +24,7 @@ function createDatabaseMock() {
     tenantSettings: { upsert: vi.fn().mockResolvedValue({ id: "settings-1" }) },
     role: {
       upsert: vi.fn().mockImplementation(({ create }: { create: { code: string } }) => ({ id: `role-${create.code}` })),
-      findUnique: vi.fn().mockResolvedValue({ id: "role-TENANT_OWNER" })
+      findUnique: vi.fn().mockResolvedValue({ id: "role-PRINCIPAL" })
     },
     permission: { findUnique: vi.fn().mockResolvedValue({ id: "permission-1" }) },
     rolePermission: { upsert: vi.fn().mockResolvedValue({ id: "role-permission-1" }) },
@@ -66,6 +67,17 @@ describe("commercial seed safety", () => {
     })).toThrow("DEV_DEMO_SEED_ENABLED cannot be true when NODE_ENV=production.");
   });
 
+  it("does not move a configured demo phone between user accounts", () => {
+    expect(getAssignableDemoPhone("+919876543210", "target-user", "target-user"))
+      .toBe("+919876543210");
+    expect(getAssignableDemoPhone("+919876543210", "target-user", null))
+      .toBe("+919876543210");
+    expect(getAssignableDemoPhone("+919876543210", "target-user", "another-user"))
+      .toBeNull();
+    expect(getAssignableDemoPhone("+919876543210", null, "another-user"))
+      .toBeNull();
+  });
+
   it("requires commercial tenant and administrator environment values", () => {
     expect(() => getCommercialBootstrapConfig({ COMMERCIAL_BOOTSTRAP_ENABLED: "true" }))
       .toThrow("SEED_TENANT_NAME is required");
@@ -89,7 +101,7 @@ describe("commercial seed safety", () => {
     });
   });
 
-  it("creates an idempotent tenant owner with a hashed temporary password and mustChange", async () => {
+  it("creates an idempotent school principal with a hashed temporary password and mustChange", async () => {
     const { db, tx } = createDatabaseMock();
     const passwordHasher = vi.fn().mockResolvedValue("hashed-temporary-password");
 
@@ -103,7 +115,7 @@ describe("commercial seed safety", () => {
       create: expect.objectContaining({ passwordHash: "hashed-temporary-password", mustChange: true })
     }));
     expect(tx.userRoleAssignment.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: expect.objectContaining({ roleId: "role-TENANT_OWNER", scopeType: "TENANT" })
+      create: expect.objectContaining({ roleId: "role-PRINCIPAL", scopeType: "TENANT" })
     }));
     expect(tx.auditLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -133,7 +145,8 @@ describe("commercial seed safety", () => {
 
   it("keeps login fields empty and removes committed production-facing credentials", () => {
     const loginSource = readFileSync(join(process.cwd(), "src/components/auth/login-form.tsx"), "utf8");
-    const loginPageSource = readFileSync(join(process.cwd(), "src/app/(auth)/login/page.tsx"), "utf8");
+    const loginPageSource = readFileSync(join(process.cwd(), "src/app/page.tsx"), "utf8");
+    const compatibilityRouteSource = readFileSync(join(process.cwd(), "src/app/(auth)/login/page.tsx"), "utf8");
     const envExample = readFileSync(join(process.cwd(), ".env.example"), "utf8");
     const readme = readFileSync(join(process.cwd(), "README.md"), "utf8");
 
@@ -141,9 +154,10 @@ describe("commercial seed safety", () => {
     expect(loginSource).toContain('useState("")');
     expect(loginSource).toContain('formData.get("password")');
     expect(loginSource).not.toMatch(/demo login|sample credentials|changeme@123/i);
-    expect(loginPageSource).toContain("schoolId={null}");
+    expect(loginPageSource).toContain("schoolId={schoolId}");
     expect(loginPageSource).toContain("schoolIdLocked={false}");
-    expect(loginPageSource).not.toContain("searchParams");
+    expect(loginPageSource).toContain("searchParams");
+    expect(compatibilityRouteSource).toContain('redirect(schoolId ? `/?schoolId=');
     expect(`${envExample}\n${readme}`).not.toMatch(/parshavinsights@gmail\.com|JinaCampus@123|ChangeMe@123/);
     expect(envExample).not.toMatch(/postgres(?:ql)?:\/\/[^:\s]+:[^@\s]+@/);
   });

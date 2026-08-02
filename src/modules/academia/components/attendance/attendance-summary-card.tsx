@@ -17,7 +17,7 @@ export function AttendanceSummaryCard({ summary }: { summary: SubmitDailyStudent
   if (!summary) return null;
 
   return (
-    <section aria-label="Submission summary" className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.06)] backdrop-blur">
+    <section aria-label="Submission summary" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-soft">
       <div>
         <h2 className="text-base font-semibold text-emerald-950">Attendance submitted</h2>
         <p className="mt-1 text-sm text-emerald-800">

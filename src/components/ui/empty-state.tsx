@@ -19,10 +19,10 @@ type StateShellProps = BaseStateProps & {
 };
 
 const toneClassNames: Record<StateTone, string> = {
-  neutral: "border-slate-200/80 bg-white/[0.86] text-slate-800",
-  danger: "border-rose-200 bg-rose-50/90 text-rose-900",
-  warning: "border-amber-200 bg-amber-50/90 text-amber-900",
-  success: "border-emerald-200 bg-emerald-50/90 text-emerald-900"
+  neutral: "border-campus-border bg-white text-slate-800",
+  danger: "border-rose-200 bg-rose-50 text-rose-900",
+  warning: "border-amber-200 bg-amber-50 text-amber-900",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-900"
 };
 
 const descriptionClassNames: Record<StateTone, string> = {
@@ -47,9 +47,9 @@ function StateShell({
     <div
       role={role}
       aria-live={ariaLive}
-      className={`motion-fade-in relative min-w-0 overflow-hidden rounded-2xl border px-4 py-8 text-center shadow-soft backdrop-blur sm:px-6 ${toneClassNames[tone]}`}
+      className={`motion-fade-in relative min-w-0 overflow-hidden rounded-lg border px-4 py-8 text-center shadow-soft sm:px-6 ${toneClassNames[tone]}`}
     >
-      <div aria-hidden="true" className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-brand-300/70 to-transparent" />
+      <div aria-hidden="true" className="absolute inset-x-8 top-0 h-0.5 bg-brand-400" />
       {loading ? (
         <div className="mx-auto mb-4 h-8 w-8 rounded-full border-2 border-slate-200 border-t-brand-600 motion-safe:animate-spin" aria-hidden="true" />
       ) : null}

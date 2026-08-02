@@ -3,13 +3,22 @@ import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
 import { listAccessibleBranches } from "@/modules/campus-core/queries";
 import { StudentCreateForm } from "@/modules/academia/components/student-create-form";
+import { listStudentRegistrationClassSectionOptions } from "@/modules/academia/queries";
 
 export default async function CreateStudentPage() {
   const ctx = await requireAuth();
   const permissions = await getEffectivePermissions({ ctx, branchId: ctx.activeBranchId });
-  if (!permissions.has("academia.student.create")) return <PermissionState />;
+  const canRegisterStudent = [
+    "academia.student.create",
+    "academia.guardian.manage",
+    "academia.enrollment.manage"
+  ] as const;
+  if (!canRegisterStudent.every((permission) => permissions.has(permission))) return <PermissionState />;
 
-  const branches = await listAccessibleBranches(ctx);
+  const [branches, classSections] = await Promise.all([
+    listAccessibleBranches(ctx),
+    listStudentRegistrationClassSectionOptions(ctx)
+  ]);
   const branchOptions = branches.map((branch) => ({ id: branch.id, name: branch.name }));
 
   return (
@@ -20,7 +29,11 @@ export default async function CreateStudentPage() {
           Capture admission-sheet details for an accessible branch. Aadhaar and bank account inputs are converted to masked references only.
         </p>
       </div>
-      <StudentCreateForm branchOptions={branchOptions} defaultBranchId={ctx.activeBranchId ?? branchOptions[0]?.id} />
+      <StudentCreateForm
+        branchOptions={branchOptions}
+        classSectionOptions={classSections}
+        defaultBranchId={ctx.activeBranchId ?? branchOptions[0]?.id}
+      />
     </div>
   );
 }

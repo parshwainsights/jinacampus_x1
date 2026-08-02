@@ -64,6 +64,15 @@ function req(formData: FormData, key: string) {
   if (!value) throw new Error(`Missing field: ${key}`);
   return value;
 }
+function passwordValue(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+function requiredPasswordValue(formData: FormData, key: string) {
+  const value = passwordValue(formData, key);
+  if (!value) throw new Error(`Missing field: ${key}`);
+  return value;
+}
 function checked(formData: FormData, key: string) {
   return formData.get(key) === "on";
 }
@@ -227,8 +236,8 @@ export async function createUserAction(
       userType: s(formData, "userType") ?? "STAFF",
       branchIds: formData.getAll("branchIds").filter((v): v is string => typeof v === "string"),
       roleCodes: formData.getAll("roleCodes").filter((v): v is string => typeof v === "string"),
-      initialPassword: s(formData, "initialPassword"),
-      confirmInitialPassword: s(formData, "confirmInitialPassword")
+      initialPassword: passwordValue(formData, "initialPassword"),
+      confirmInitialPassword: passwordValue(formData, "confirmInitialPassword")
     });
     const ctx = await getTenantContext();
     await createUserService(ctx, input);
@@ -368,8 +377,8 @@ export async function adminResetUserPasswordAction(
   try {
     const input = adminResetPasswordSchema.parse({
       userId: req(formData, "userId"),
-      newPassword: req(formData, "newPassword"),
-      confirmNewPassword: req(formData, "confirmNewPassword")
+      newPassword: requiredPasswordValue(formData, "newPassword"),
+      confirmNewPassword: requiredPasswordValue(formData, "confirmNewPassword")
     });
     const ctx = await getTenantContext();
     await adminResetUserPasswordService(ctx, input);
@@ -388,11 +397,14 @@ export async function changeOwnPasswordAction(
 ): Promise<CampusCoreFormActionState> {
   try {
     const input = changeOwnPasswordSchema.parse({
-      currentPassword: req(formData, "currentPassword"),
-      newPassword: req(formData, "newPassword"),
-      confirmNewPassword: req(formData, "confirmNewPassword")
+      currentPassword: requiredPasswordValue(formData, "currentPassword"),
+      newPassword: requiredPasswordValue(formData, "newPassword"),
+      confirmNewPassword: requiredPasswordValue(formData, "confirmNewPassword")
     });
-    await changeOwnPasswordService(await getTenantContext(), input);
+    await changeOwnPasswordService(
+      await getTenantContext({ allowPasswordChangeRequired: true }),
+      input
+    );
     return { ok: true, message: "Password was updated successfully." };
   } catch (error) {
     return formError(error, "Unable to update password. Please try again.");
@@ -405,6 +417,7 @@ export async function requestPasswordRecoveryAction(
 ): Promise<CampusCoreFormActionState> {
   try {
     const input = forgotPasswordSchema.parse({
+      tenantSlug: formData.get("tenantSlug"),
       email: formData.get("email")
     });
     const headerStore = await headers();

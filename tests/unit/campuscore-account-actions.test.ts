@@ -235,6 +235,7 @@ describe("CampusCore account server actions", () => {
 
   it("forgot password action returns the same safe response for existing and unknown accounts", async () => {
     const formData = new FormData();
+    formData.set("tenantSlug", "school-a");
     formData.set("email", "teacher@example.test");
     mocks.requestPasswordRecoveryService.mockResolvedValueOnce({ requested: true });
 
@@ -249,13 +250,14 @@ describe("CampusCore account server actions", () => {
     expect(existing.message).toContain("If this account is eligible for password recovery");
     expect(JSON.stringify(existing)).not.toMatch(/passwordHash|reset token|user does not exist|email not found/i);
     expect(mocks.requestPasswordRecoveryService).toHaveBeenCalledWith(
-      { email: "teacher@example.test" },
+      { tenantSlug: "school-a", email: "teacher@example.test" },
       { ipAddress: undefined, userAgent: undefined }
     );
   });
 
   it("forgot password action maps invalid email to a field-level error", async () => {
     const formData = new FormData();
+    formData.set("tenantSlug", "school-a");
     formData.set("email", "not-an-email");
 
     const result = await requestPasswordRecoveryAction({ ok: false }, formData);
@@ -268,6 +270,7 @@ describe("CampusCore account server actions", () => {
 
   it("forgot password action fails closed with the public message on unexpected service errors", async () => {
     const formData = new FormData();
+    formData.set("tenantSlug", "school-a");
     formData.set("email", "admin@example.test");
     mocks.requestPasswordRecoveryService.mockRejectedValueOnce(new Error("DATABASE_URL leaked error"));
 

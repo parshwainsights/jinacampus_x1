@@ -47,7 +47,7 @@ const administratorContext: TenantContext = {
   activeBranchId: null,
   accessibleBranchIds: [],
   activeAcademicYearId: null,
-  roleCodes: ["SUPER_ADMIN"]
+  roleCodes: ["ADMINISTRATOR"]
 };
 
 beforeEach(() => {

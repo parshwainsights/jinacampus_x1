@@ -111,7 +111,7 @@ describe("StaffBoard Lite UI route config", () => {
   });
 
   it("protects StaffBoard routes through middleware", () => {
-    const middlewareSource = readFileSync(resolve(process.cwd(), "middleware.ts"), "utf8");
+    const middlewareSource = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
 
     expect(middlewareSource).toContain("\"/staffboard\"");
     expect(middlewareSource).toContain("\"/staffboard/:path*\"");

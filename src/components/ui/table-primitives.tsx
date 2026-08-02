@@ -19,11 +19,11 @@ type TableToolbarProps = {
 };
 
 const statusToneClassNames: Record<StatusTone, string> = {
-  neutral: "border-slate-200 bg-white/85 text-slate-700",
-  success: "border-emerald-200 bg-emerald-50/85 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50/85 text-amber-700",
-  danger: "border-rose-200 bg-rose-50/85 text-rose-700",
-  info: "border-cyan-200 bg-cyan-50/85 text-cyan-700"
+  neutral: "border-campus-border bg-white text-slate-700",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  danger: "border-rose-200 bg-rose-50 text-rose-700",
+  info: "border-blue-200 bg-blue-50 text-blue-700"
 };
 
 const statusDotClassNames: Record<StatusTone, string> = {
@@ -31,7 +31,7 @@ const statusDotClassNames: Record<StatusTone, string> = {
   success: "bg-emerald-500",
   warning: "bg-amber-500",
   danger: "bg-rose-500",
-  info: "bg-cyan-500"
+  info: "bg-blue-500"
 };
 
 function statusTone(value?: string | null): StatusTone {
@@ -60,7 +60,7 @@ export function StatusBadge({ value, label }: { value?: string | null; label?: s
   const tone = statusTone(value);
 
   return (
-    <span className={`motion-soft-hover inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold shadow-sm shadow-slate-950/5 backdrop-blur ${statusToneClassNames[tone]}`}>
+    <span className={`motion-soft-hover inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${statusToneClassNames[tone]}`}>
       <span className={`mr-1.5 mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${statusDotClassNames[tone]}`} aria-hidden="true" />
       {label ?? formatEnumLabel(value)}
     </span>
@@ -88,13 +88,13 @@ export function ResponsiveTable({
 }: ResponsiveTableProps) {
   return (
     <div className="premium-card motion-slide-up min-w-0 overflow-hidden">
-      <div className="border-b border-white/70 bg-gradient-to-r from-slate-50/95 via-white/80 to-cyan-50/70 px-4 py-2 text-xs font-medium text-slate-500 md:hidden">
+      <div className="border-b border-campus-border bg-surface-muted px-4 py-2 text-xs font-medium text-slate-500 md:hidden">
         Scroll sideways to view all columns.
       </div>
       <div className="max-w-full overflow-x-auto overscroll-x-contain" data-mobile-table-shell="true" data-responsive-table="true" tabIndex={0}>
         <table className={`w-full ${minWidthClass} text-left text-sm`}>
           {caption ? <caption className="sr-only">{caption}</caption> : null}
-          <thead className="bg-gradient-to-r from-slate-50/95 via-white/90 to-brand-50/60 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-xs uppercase text-slate-600">
             <tr>
               {columns.map((column) => (
                 <th key={column} scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">
@@ -103,7 +103,7 @@ export function ResponsiveTable({
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100/80 text-slate-700 [&_tr]:align-top [&_tr]:transition [&_tr:hover]:bg-brand-50/45">{children}</tbody>
+          <tbody className="divide-y divide-slate-100 text-slate-700 [&_tr]:align-top [&_tr]:transition [&_tr:hover]:bg-brand-50">{children}</tbody>
         </table>
       </div>
     </div>
@@ -123,7 +123,7 @@ export function TableActionLink({
     <Link
       href={href}
       aria-label={ariaLabel}
-      className="motion-soft-hover inline-flex min-h-11 items-center justify-center rounded-xl border border-brand-100 bg-brand-50/90 px-3 py-1.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-200 hover:bg-brand-100 premium-focus"
+      className="motion-soft-hover inline-flex min-h-11 items-center justify-center rounded-lg border border-brand-100 bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700 shadow-sm transition hover:border-brand-200 hover:bg-brand-100 premium-focus"
     >
       {children}
     </Link>

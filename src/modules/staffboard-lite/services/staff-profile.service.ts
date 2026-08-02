@@ -11,13 +11,14 @@ import {
   createStaffLoginAccessSchema,
   createStaffProfileSchema,
   disableStaffLoginAccessSchema,
+  reactivateStaffLoginAccessSchema,
   updateStaffProfileSchema
 } from "@/modules/staffboard-lite/schemas";
 import { employmentStatusSchema, idSchema } from "@/modules/staffboard-lite/schemas/shared";
 import { staffProfileSelect } from "@/modules/staffboard-lite/queries/staff-profile.queries";
 import { conflict, ensureActiveBranch, requireBranchPermission } from "./shared";
 
-type StaffLoginRoleCode = "STAFF" | "TEACHER" | "CLASS_TEACHER" | "OFFICE_STAFF";
+type StaffLoginRoleCode = "STAFF" | "TEACHER" | "OFFICE_STAFF";
 
 type StaffLoginAccountInput = {
   branchId: string;
@@ -336,6 +337,12 @@ export async function disableStaffLoginAccess(ctx: TenantContext, input: unknown
     });
     if (!before) throw notFound("STAFF_PROFILE_NOT_FOUND");
     if (!before.user) throw new AppError("STAFF_LOGIN_ACCESS_NOT_ENABLED", "STAFF_LOGIN_ACCESS_NOT_ENABLED", 400);
+    if (before.user.id === ctx.userId) {
+      throw new AppError("USER_SELF_DEACTIVATE_BLOCKED", "USER_SELF_DEACTIVATE_BLOCKED", 400);
+    }
+    if (before.user.status === "DEACTIVATED") {
+      throw new AppError("STAFF_LOGIN_ACCESS_ALREADY_DISABLED", "STAFF_LOGIN_ACCESS_ALREADY_DISABLED", 409);
+    }
 
     await requireBranchPermission(ctx, "staffboard.staff.update", before.branchId);
     await requirePermission({ ctx, permission: "campuscore.user.deactivate" });
@@ -360,9 +367,8 @@ export async function disableStaffLoginAccess(ctx: TenantContext, input: unknown
       where: { tenantId: ctx.tenantId, userId: before.user.id, revokedAt: null },
       data: { revokedAt: new Date() }
     });
-    const after = await tx.staffProfile.update({
+    const after = await tx.staffProfile.findUniqueOrThrow({
       where: { id: before.id },
-      data: { userId: null },
       select: staffProfileSelect
     });
     await writeAuditLog({
@@ -382,6 +388,109 @@ export async function disableStaffLoginAccess(ctx: TenantContext, input: unknown
       branchId: after.branchId,
       before,
       after,
+      metadata: { userId: before.user.id, linkPreserved: true }
+    }, tx);
+    return after;
+  });
+}
+
+export async function reactivateStaffLoginAccess(ctx: TenantContext, input: unknown) {
+  const data = reactivateStaffLoginAccessSchema.parse(input);
+
+  return db.$transaction(async (tx) => {
+    const before = await tx.staffProfile.findFirst({
+      where: { id: data.staffId, tenantId: ctx.tenantId },
+      select: {
+        ...staffProfileSelect,
+        user: {
+          select: {
+            id: true,
+            tenantId: true,
+            email: true,
+            status: true,
+            deactivatedAt: true
+          }
+        }
+      }
+    });
+    if (!before) throw notFound("STAFF_PROFILE_NOT_FOUND");
+    if (!before.user) throw new AppError("STAFF_LOGIN_ACCESS_NOT_ENABLED", "STAFF_LOGIN_ACCESS_NOT_ENABLED", 400);
+    if (before.employmentStatus !== "ACTIVE") {
+      throw new AppError("STAFF_PROFILE_INACTIVE", "STAFF_PROFILE_INACTIVE", 400);
+    }
+    if (before.user.status === "ACTIVE") {
+      throw new AppError("STAFF_LOGIN_ACCESS_ALREADY_ENABLED", "STAFF_LOGIN_ACCESS_ALREADY_ENABLED", 409);
+    }
+
+    await requireBranchPermission(ctx, "staffboard.staff.update", before.branchId);
+    await requirePermission({ ctx, permission: "campuscore.user.update", branchId: before.branchId });
+    await requirePermission({ ctx, permission: "campuscore.user.manage" });
+
+    const branchAccess = await tx.userBranchAccess.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        userId: before.user.id,
+        branchId: before.branchId,
+        isActive: true
+      },
+      select: { id: true }
+    });
+    const roleAssignment = await tx.userRoleAssignment.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        userId: before.user.id,
+        isActive: true,
+        role: {
+          tenantId: ctx.tenantId,
+          isActive: true,
+          code: { in: ["PRINCIPAL", "OFFICE_STAFF", "TEACHER", "STAFF", "TENANT_OWNER", "SUPER_ADMIN", "ADMIN", "CLASS_TEACHER"] }
+        }
+      },
+      select: { id: true }
+    });
+    if (!branchAccess) throw new AppError("STAFF_LOGIN_BRANCH_ACCESS_REQUIRED", "STAFF_LOGIN_BRANCH_ACCESS_REQUIRED", 400);
+    if (!roleAssignment) throw new AppError("STAFF_LOGIN_ROLE_REQUIRED", "STAFF_LOGIN_ROLE_REQUIRED", 400);
+
+    const reactivatedUser = await tx.user.update({
+      where: { id: before.user.id },
+      data: {
+        status: "ACTIVE",
+        activatedAt: new Date(),
+        deactivatedAt: null,
+        updatedById: ctx.userId
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        email: true,
+        status: true,
+        activatedAt: true,
+        deactivatedAt: true,
+        updatedAt: true
+      }
+    });
+    const after = await tx.staffProfile.findUniqueOrThrow({
+      where: { id: before.id },
+      select: staffProfileSelect
+    });
+
+    await writeAuditLog({
+      ctx,
+      action: CAMPUS_CORE_AUDIT_EVENTS.USER_REACTIVATED,
+      entityType: "User",
+      entityId: before.user.id,
+      before: before.user,
+      after: reactivatedUser,
+      metadata: { source: "staff_profile_login_access_reactivated" }
+    }, tx);
+    await writeAuditLog({
+      ctx,
+      action: STAFFBOARD_LITE_AUDIT_EVENTS.STAFF_LOGIN_ACCESS_REACTIVATED,
+      entityType: "StaffProfile",
+      entityId: after.id,
+      branchId: after.branchId,
+      before,
+      after,
       metadata: { userId: before.user.id }
     }, tx);
     return after;
@@ -392,7 +501,24 @@ export async function updateStaffProfile(ctx: TenantContext, input: unknown) {
   const { staffId, ...data } = updateStaffProfileSchema.parse(input);
 
   return db.$transaction(async (tx) => {
-    const before = await tx.staffProfile.findFirst({ where: { id: staffId, tenantId: ctx.tenantId } });
+    const before = await tx.staffProfile.findFirst({
+      where: { id: staffId, tenantId: ctx.tenantId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            tenantId: true,
+            email: true,
+            phone: true,
+            firstName: true,
+            middleName: true,
+            lastName: true,
+            displayName: true,
+            status: true
+          }
+        }
+      }
+    });
     if (!before) throw notFound("STAFF_PROFILE_NOT_FOUND");
 
     await requireBranchPermission(ctx, "staffboard.staff.update", before.branchId);
@@ -412,16 +538,177 @@ export async function updateStaffProfile(ctx: TenantContext, input: unknown) {
       if (duplicate) throw conflict("STAFF_EMPLOYEE_CODE_EXISTS");
     }
 
+    const nextBranchId = data.branchId ?? before.branchId;
+    const linkedUserIdentityChanged = Boolean(before.user && (
+      (data.email !== undefined && data.email !== before.user.email) ||
+      (data.phone !== undefined && data.phone !== before.user.phone) ||
+      (data.firstName !== undefined && data.firstName !== before.user.firstName) ||
+      (data.middleName !== undefined && data.middleName !== before.user.middleName) ||
+      (data.lastName !== undefined && data.lastName !== before.user.lastName)
+    ));
+    const linkedUserBranchChanged = Boolean(before.user && nextBranchId !== before.branchId);
+    const shouldDeactivateLinkedUser = Boolean(
+      before.user &&
+      data.employmentStatus &&
+      data.employmentStatus !== "ACTIVE" &&
+      before.user.status === "ACTIVE"
+    );
+
+    if (before.user && (linkedUserIdentityChanged || linkedUserBranchChanged)) {
+      await requirePermission({ ctx, permission: "campuscore.user.update", branchId: nextBranchId });
+    }
+    if (shouldDeactivateLinkedUser) {
+      if (before.user?.id === ctx.userId) {
+        throw new AppError("USER_SELF_DEACTIVATE_BLOCKED", "USER_SELF_DEACTIVATE_BLOCKED", 400);
+      }
+      await requirePermission({ ctx, permission: "campuscore.user.deactivate", branchId: before.branchId });
+    }
+
+    if (before.user && data.email !== undefined && data.email !== before.user.email) {
+      const duplicateEmail = await tx.user.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          email: data.email,
+          id: { not: before.user.id }
+        },
+        select: { id: true }
+      });
+      if (duplicateEmail) throw conflict("STAFF_LOGIN_EMAIL_EXISTS");
+    }
+    if (before.user && data.phone && data.phone !== before.user.phone) {
+      const duplicatePhone = await tx.user.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          phone: data.phone,
+          id: { not: before.user.id }
+        },
+        select: { id: true }
+      });
+      if (duplicatePhone) throw conflict("STAFF_LOGIN_PHONE_EXISTS");
+    }
+
     const after = await tx.staffProfile.update({
       where: { id: staffId },
       data,
       select: staffProfileSelect
     });
+
+    if (before.user && linkedUserBranchChanged) {
+      const existingBranchAccess = await tx.userBranchAccess.findUnique({
+        where: {
+          tenantId_userId_branchId: {
+            tenantId: ctx.tenantId,
+            userId: before.user.id,
+            branchId: nextBranchId
+          }
+        }
+      });
+      await tx.userBranchAccess.updateMany({
+        where: {
+          tenantId: ctx.tenantId,
+          userId: before.user.id,
+          isPrimary: true,
+          branchId: { not: nextBranchId }
+        },
+        data: { isPrimary: false }
+      });
+      const branchAccess = existingBranchAccess
+        ? await tx.userBranchAccess.update({
+          where: { id: existingBranchAccess.id },
+          data: {
+            isActive: true,
+            isPrimary: true,
+            grantedById: ctx.userId
+          }
+        })
+        : await tx.userBranchAccess.create({
+          data: {
+            tenantId: ctx.tenantId,
+            userId: before.user.id,
+            branchId: nextBranchId,
+            isPrimary: true,
+            grantedById: ctx.userId
+          }
+        });
+      if (!existingBranchAccess?.isActive) {
+        await writeAuditLog({
+          ctx,
+          action: CAMPUS_CORE_AUDIT_EVENTS.USER_BRANCH_ASSIGNED,
+          entityType: "User",
+          entityId: before.user.id,
+          branchId: nextBranchId,
+          after: branchAccess,
+          metadata: { source: "staff_profile_branch_sync" }
+        }, tx);
+      }
+    }
+
+    if (before.user && (linkedUserIdentityChanged || shouldDeactivateLinkedUser)) {
+      const linkedUserAfter = await tx.user.update({
+        where: { id: before.user.id },
+        data: {
+          email: data.email,
+          phone: data.phone,
+          firstName: data.firstName,
+          middleName: data.middleName,
+          lastName: data.lastName,
+          displayName: data.firstName !== undefined || data.lastName !== undefined
+            ? userDisplayName({
+              firstName: data.firstName ?? before.user.firstName,
+              lastName: data.lastName ?? before.user.lastName
+            })
+            : undefined,
+          status: shouldDeactivateLinkedUser ? "DEACTIVATED" : undefined,
+          deactivatedAt: shouldDeactivateLinkedUser ? new Date() : undefined,
+          updatedById: ctx.userId
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          email: true,
+          phone: true,
+          firstName: true,
+          middleName: true,
+          lastName: true,
+          displayName: true,
+          status: true,
+          deactivatedAt: true,
+          updatedAt: true
+        }
+      });
+      if (shouldDeactivateLinkedUser) {
+        await tx.session.updateMany({
+          where: {
+            tenantId: ctx.tenantId,
+            userId: before.user.id,
+            revokedAt: null
+          },
+          data: { revokedAt: new Date() }
+        });
+      }
+      await writeAuditLog({
+        ctx,
+        action: shouldDeactivateLinkedUser
+          ? CAMPUS_CORE_AUDIT_EVENTS.USER_DEACTIVATED
+          : CAMPUS_CORE_AUDIT_EVENTS.USER_UPDATED,
+        entityType: "User",
+        entityId: before.user.id,
+        before: before.user,
+        after: linkedUserAfter,
+        metadata: {
+          source: "staff_profile_sync",
+          sessionsRevoked: shouldDeactivateLinkedUser
+        }
+      }, tx);
+    }
+
     await writeAuditLog({
       ctx,
       action:
         data.employmentStatus && data.employmentStatus !== before.employmentStatus
-          ? STAFFBOARD_LITE_AUDIT_EVENTS.STAFF_EMPLOYMENT_STATUS_CHANGED
+          ? data.employmentStatus === "INACTIVE"
+            ? STAFFBOARD_LITE_AUDIT_EVENTS.STAFF_DEACTIVATED
+            : STAFFBOARD_LITE_AUDIT_EVENTS.STAFF_EMPLOYMENT_STATUS_CHANGED
           : STAFFBOARD_LITE_AUDIT_EVENTS.STAFF_UPDATED,
       entityType: "StaffProfile",
       entityId: after.id,
@@ -440,32 +727,9 @@ export async function updateStaffProfile(ctx: TenantContext, input: unknown) {
 export async function updateStaffEmploymentStatus(ctx: TenantContext, staffId: string, status: unknown) {
   const id = idSchema.parse(staffId);
   const nextStatus = employmentStatusSchema.parse(status);
-  const permission = nextStatus === "ACTIVE" ? "staffboard.staff.update" : "staffboard.staff.deactivate";
-
-  return db.$transaction(async (tx) => {
-    const before = await tx.staffProfile.findFirst({ where: { id, tenantId: ctx.tenantId } });
-    if (!before) throw notFound("STAFF_PROFILE_NOT_FOUND");
-
-    await requireBranchPermission(ctx, permission, before.branchId);
-    const after = await tx.staffProfile.update({
-      where: { id },
-      data: { employmentStatus: nextStatus },
-      select: staffProfileSelect
-    });
-    await writeAuditLog({
-      ctx,
-      action:
-        nextStatus === "INACTIVE"
-          ? STAFFBOARD_LITE_AUDIT_EVENTS.STAFF_DEACTIVATED
-          : STAFFBOARD_LITE_AUDIT_EVENTS.STAFF_EMPLOYMENT_STATUS_CHANGED,
-      entityType: "StaffProfile",
-      entityId: after.id,
-      branchId: after.branchId,
-      before,
-      after,
-      metadata: { previousStatus: before.employmentStatus, newStatus: nextStatus }
-    }, tx);
-    return after;
+  return updateStaffProfile(ctx, {
+    staffId: id,
+    employmentStatus: nextStatus
   });
 }
 

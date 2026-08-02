@@ -21,6 +21,8 @@ const environmentSchema = z.object({
   DATABASE_URL: postgresUrl,
   DIRECT_URL: optionalPostgresUrl,
   APP_URL: z.string().url().default("http://localhost:3000"),
+  WEBAUTHN_ORIGIN: z.string().url().optional(),
+  WEBAUTHN_RP_ID: optionalText,
   SESSION_COOKIE_NAME: z.string().min(1).default("jc_session"),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
   SESSION_SECRET: optionalText,
@@ -73,6 +75,8 @@ export function validateEnvironment(environment: EnvironmentInput) {
     if (isLocalDatabaseUrl(value.DATABASE_URL)) missing.push("DATABASE_URL must not use localhost in production");
     if (value.DIRECT_URL && isLocalDatabaseUrl(value.DIRECT_URL)) missing.push("DIRECT_URL must not use localhost in production");
     if (value.DEV_DEMO_SEED_ENABLED === "true") missing.push("DEV_DEMO_SEED_ENABLED must be false in production");
+    const webAuthnOrigin = value.WEBAUTHN_ORIGIN ?? value.APP_URL;
+    if (!webAuthnOrigin.startsWith("https://")) missing.push("WEBAUTHN_ORIGIN must use HTTPS in production");
   }
 
   if (value.COMMERCIAL_BOOTSTRAP_ENABLED === "true") {

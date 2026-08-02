@@ -18,6 +18,7 @@ import {
   DEMO_TODAY_STUDENT_ATTENDANCE,
   DEMO_USERS,
   SEED_ADMIN_EMAIL,
+  getAssignableDemoPhone,
   getDemoUserMustChangePassword,
   getDemoUserPassword
 } from "./demo-data.seed";
@@ -95,15 +96,34 @@ async function upsertDemoUsers(db: PrismaClient, tenantId: string, branchId: str
 
   for (const demoUser of DEMO_USERS) {
     const normalizedPhone = demoUser.phone ? normalizePhone(demoUser.phone) : null;
-    if (demoUser.key === "admin" && !normalizedPhone) {
-      console.warn("SEED_ADMIN_PHONE is missing or invalid; OTP login needs a valid phone number.");
+    if (demoUser.key === "admin" && demoUser.phone && !normalizedPhone) {
+      console.warn("SEED_ADMIN_PHONE is invalid; the demo administrator phone was not stored.");
     }
+    const existingTargetUser = await db.user.findUnique({
+      where: { tenantId_email: { tenantId, email: demoUser.email } },
+      select: { id: true }
+    });
+    const existingPhoneOwner = normalizedPhone
+      ? await db.user.findUnique({
+          where: { tenantId_phone: { tenantId, phone: normalizedPhone } },
+          select: { id: true }
+        })
+      : null;
+    const assignablePhone = getAssignableDemoPhone(
+      normalizedPhone,
+      existingTargetUser?.id ?? null,
+      existingPhoneOwner?.id ?? null
+    );
+    if (normalizedPhone && !assignablePhone) {
+      console.warn(`Skipped a duplicate phone while seeding the ${demoUser.key} demo account.`);
+    }
+
     const user = await db.user.upsert({
       where: { tenantId_email: { tenantId, email: demoUser.email } },
       create: {
         tenantId,
         email: demoUser.email,
-        phone: normalizedPhone ?? undefined,
+        phone: assignablePhone ?? undefined,
         firstName: demoUser.firstName,
         lastName: demoUser.lastName,
         displayName: demoUser.displayName,
@@ -115,7 +135,7 @@ async function upsertDemoUsers(db: PrismaClient, tenantId: string, branchId: str
         firstName: demoUser.firstName,
         lastName: demoUser.lastName,
         displayName: demoUser.displayName,
-        ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+        ...(assignablePhone ? { phone: assignablePhone } : {}),
         status: "ACTIVE",
         activatedAt: new Date()
       },

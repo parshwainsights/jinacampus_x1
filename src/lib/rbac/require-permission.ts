@@ -15,6 +15,7 @@ type RequirePermissionInput = PermissionScopeInput & {
 
 export async function getEffectivePermissions(input: PermissionScopeInput): Promise<Set<PermissionCode>> {
   const { ctx, branchId } = input;
+  if (ctx.passwordChangeRequired) throw new Error("PASSWORD_CHANGE_REQUIRED");
   const now = new Date();
   const academicYearId = input.academicYearId ?? ctx.activeAcademicYearId;
 

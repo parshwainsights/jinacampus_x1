@@ -10,13 +10,8 @@ import {
 describe("Academia UI route config", () => {
   it("defines the required Academia admin routes", () => {
     expect(academiaModuleCards.map((card) => card.href).filter(Boolean)).toEqual([
-      "/academia/classes",
-      "/academia/sections",
-      "/academia/class-sections",
-      "/academia/subjects",
+      "/academia/setup",
       "/academia/students",
-      "/academia/guardians",
-      "/academia/enrollments",
       "/academia/attendance"
     ]);
   });

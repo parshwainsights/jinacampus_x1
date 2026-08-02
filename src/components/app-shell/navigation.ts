@@ -1,18 +1,33 @@
 import { ACADEMIA_PERMISSIONS } from "@/modules/academia/permissions";
 import { STAFFBOARD_LITE_PERMISSIONS } from "@/modules/staffboard-lite/permissions";
 import type { PermissionCode } from "@/lib/rbac/permissions";
+import { hasPrincipalRole, hasTeacherRole } from "@/lib/rbac/roles";
 
-export type NavigationAudience = "admin" | "teacher" | "staff";
+export type NavigationAudience = "admin" | "office" | "teacher" | "staff";
 
 export type NavItem = {
   title: string;
   href: string;
+};
+
+type PermissionNavItem = NavItem & {
   permissions: readonly PermissionCode[];
 };
 
 export type NavGroup = {
   title: string;
   items: readonly NavItem[];
+};
+
+export type DesktopDockNavItem = NavItem & {
+  activeHrefs: readonly string[];
+  iconHref: string;
+  moduleKey: "dashboard" | "campus-core" | "academia" | "staffboard";
+};
+
+type PermissionNavGroup = {
+  title: string;
+  items: readonly PermissionNavItem[];
 };
 
 export const NAVIGATION_GROUPS = [
@@ -23,12 +38,13 @@ export const NAVIGATION_GROUPS = [
   {
     title: "CampusCore",
     items: [
-      { title: "Institutions", href: "/campus-core/institutions", permissions: ["campuscore.institution.manage"] },
+      { title: "School Profile", href: "/campus-core/institutions", permissions: ["campuscore.institution.manage"] },
       { title: "Branches", href: "/campus-core/branches", permissions: ["campuscore.branch.manage"] },
       { title: "Academic Years", href: "/campus-core/academic-years", permissions: ["campuscore.academic_year.manage"] },
       { title: "Users", href: "/campus-core/users", permissions: ["campuscore.user.view"] },
       { title: "Roles", href: "/campus-core/roles", permissions: ["campuscore.role.view"] },
       { title: "Settings", href: "/campus-core/settings", permissions: ["campuscore.settings.manage"] },
+      { title: "School Readiness", href: "/campus-core/readiness", permissions: ["campuscore.settings.manage"] },
       { title: "Audit Logs", href: "/campus-core/audit-logs", permissions: ["campuscore.audit.view"] }
     ]
   },
@@ -36,13 +52,12 @@ export const NAVIGATION_GROUPS = [
     title: "Academia",
     items: [
       { title: "Overview", href: "/academia", permissions: ACADEMIA_PERMISSIONS },
+      {
+        title: "Academic Setup",
+        href: "/academia/setup",
+        permissions: ["academia.class.manage", "academia.section.manage", "academia.subject.manage"]
+      },
       { title: "Students", href: "/academia/students", permissions: ["academia.student.view"] },
-      { title: "Guardians", href: "/academia/guardians", permissions: ["academia.guardian.manage"] },
-      { title: "Enrollments", href: "/academia/enrollments", permissions: ["academia.enrollment.manage"] },
-      { title: "Classes", href: "/academia/classes", permissions: ["academia.class.manage"] },
-      { title: "Sections", href: "/academia/sections", permissions: ["academia.section.manage"] },
-      { title: "Class Sections", href: "/academia/class-sections", permissions: ["academia.class.manage"] },
-      { title: "Subjects", href: "/academia/subjects", permissions: ["academia.subject.manage"] },
       { title: "Student Attendance", href: "/academia/attendance", permissions: ["academia.attendance.view"] },
       { title: "Student Attendance Reports", href: "/academia/attendance/reports", permissions: ["academia.attendance.report"] }
     ]
@@ -56,14 +71,18 @@ export const NAVIGATION_GROUPS = [
       { title: "Staff Attendance", href: "/staffboard/attendance", permissions: ["staffboard.attendance.view"] },
       { title: "QR Display", href: "/staffboard/attendance/qr", permissions: ["staffboard.attendance.qr.generate"] },
       { title: "Scan QR", href: "/staffboard/attendance/scan", permissions: ["staffboard.attendance.self_scan"] },
+      { title: "My Attendance", href: "/staffboard/attendance/me", permissions: ["staffboard.attendance.self_view"] },
       { title: "Staff Reports", href: "/staffboard/attendance/reports", permissions: ["staffboard.attendance.report"] }
     ]
   }
-] satisfies readonly NavGroup[];
+] satisfies readonly PermissionNavGroup[];
 
 export type MobileNavShortcut = {
   title: string;
   href: string;
+};
+
+type PermissionMobileNavShortcut = MobileNavShortcut & {
   permissions: readonly PermissionCode[];
   audiences: readonly NavigationAudience[];
 };
@@ -71,9 +90,12 @@ export type MobileNavShortcut = {
 export type MobileBottomNavItem = {
   title: string;
   href: string;
+  kind?: "link" | "more";
+};
+
+type PermissionMobileBottomNavItem = MobileBottomNavItem & {
   permissions: readonly PermissionCode[];
   audiences: readonly NavigationAudience[];
-  kind?: "link" | "more";
 };
 
 const ADMIN_NAV_SIGNALS = [
@@ -96,7 +118,7 @@ export const MOBILE_NAVIGATION_SHORTCUTS = [
     title: "Home",
     href: "/dashboard",
     permissions: ["campuscore.tenant.view"],
-    audiences: ["admin", "teacher", "staff"]
+    audiences: ["admin", "office", "teacher", "staff"]
   },
   {
     title: "Students",
@@ -120,7 +142,7 @@ export const MOBILE_NAVIGATION_SHORTCUTS = [
     title: "Scan QR",
     href: "/staffboard/attendance/scan",
     permissions: ["staffboard.attendance.self_scan"],
-    audiences: ["teacher", "staff"]
+    audiences: ["office", "teacher", "staff"]
   },
   {
     title: "Reports",
@@ -132,9 +154,9 @@ export const MOBILE_NAVIGATION_SHORTCUTS = [
     title: "Staff Reports",
     href: "/staffboard/attendance/reports",
     permissions: ["staffboard.attendance.report"],
-    audiences: ["admin"]
+    audiences: ["admin", "office"]
   }
-] as const satisfies readonly MobileNavShortcut[];
+] as const satisfies readonly PermissionMobileNavShortcut[];
 
 const MOBILE_BOTTOM_NAVIGATION_ITEMS = {
   admin: [
@@ -189,6 +211,32 @@ const MOBILE_BOTTOM_NAVIGATION_ITEMS = {
       audiences: ["teacher"]
     }
   ],
+  office: [
+    {
+      title: "Home",
+      href: "/dashboard",
+      permissions: ["campuscore.tenant.view"],
+      audiences: ["office"]
+    },
+    {
+      title: "Attendance",
+      href: "/staffboard/attendance",
+      permissions: ["staffboard.attendance.view"],
+      audiences: ["office"]
+    },
+    {
+      title: "Scan QR",
+      href: "/staffboard/attendance/scan",
+      permissions: ["staffboard.attendance.self_scan"],
+      audiences: ["office"]
+    },
+    {
+      title: "My Attendance",
+      href: "/staffboard/attendance/me",
+      permissions: ["staffboard.attendance.self_view"],
+      audiences: ["office"]
+    }
+  ],
   staff: [
     {
       title: "Home",
@@ -204,8 +252,8 @@ const MOBILE_BOTTOM_NAVIGATION_ITEMS = {
     },
     {
       title: "My Attendance",
-      href: "/staffboard/attendance",
-      permissions: ["staffboard.attendance.view"],
+      href: "/staffboard/attendance/me",
+      permissions: ["staffboard.attendance.self_view"],
       audiences: ["staff"]
     },
     {
@@ -215,20 +263,45 @@ const MOBILE_BOTTOM_NAVIGATION_ITEMS = {
       audiences: ["staff"]
     }
   ]
-} as const satisfies Record<NavigationAudience, readonly MobileBottomNavItem[]>;
+} as const satisfies Record<NavigationAudience, readonly PermissionMobileBottomNavItem[]>;
 
 const ACTIVE_ROUTE_OVERRIDES = [
   { pattern: /^\/academia\/attendance\/mark(?:\/|$)/, href: "/academia/attendance" },
-  { pattern: /^\/academia\/classes\/[^/]+\/edit(?:\/|$)/, href: "/academia/classes" },
-  { pattern: /^\/academia\/sections\/[^/]+\/edit(?:\/|$)/, href: "/academia/sections" },
-  { pattern: /^\/academia\/subjects\/[^/]+\/edit(?:\/|$)/, href: "/academia/subjects" },
+  { pattern: /^\/academia\/(?:classes|sections|subjects|class-sections)(?:\/|$)/, href: "/academia/setup" },
   { pattern: /^\/academia\/students\/[^/]+\/edit(?:\/|$)/, href: "/academia/students" },
   { pattern: /^\/academia\/guardians\/[^/]+\/edit(?:\/|$)/, href: "/academia/guardians" },
   { pattern: /^\/academia\/enrollments\/[^/]+\/edit(?:\/|$)/, href: "/academia/enrollments" },
   { pattern: /^\/staffboard\/staff\/[^/]+\/edit(?:\/|$)/, href: "/staffboard/staff" }
 ] as const;
 
-export function canViewNavItem(permissions: ReadonlySet<PermissionCode>, item: NavItem) {
+const DESKTOP_DOCK_GROUP_CONFIG = {
+  Dashboard: {
+    title: "Dashboard",
+    preferredHref: "/dashboard",
+    iconHref: "/dashboard",
+    moduleKey: "dashboard"
+  },
+  CampusCore: {
+    title: "CampusCore",
+    preferredHref: "/campus-core/institutions",
+    iconHref: "/campus-core",
+    moduleKey: "campus-core"
+  },
+  Academia: {
+    title: "Academia",
+    preferredHref: "/academia",
+    iconHref: "/academia",
+    moduleKey: "academia"
+  },
+  "StaffBoard Lite": {
+    title: "StaffBoard",
+    preferredHref: "/staffboard",
+    iconHref: "/staffboard",
+    moduleKey: "staffboard"
+  }
+} as const;
+
+export function canViewNavItem(permissions: ReadonlySet<PermissionCode>, item: PermissionNavItem) {
   return item.permissions.some((permission) => permissions.has(permission));
 }
 
@@ -240,19 +313,47 @@ export function getVisibleNavigationGroups(permissions: ReadonlySet<PermissionCo
   return NAVIGATION_GROUPS
     .map((group) => ({
       title: group.title,
-      items: group.items.filter((item) => canViewNavItem(permissions, item))
+      items: group.items
+        .filter((item) => canViewNavItem(permissions, item))
+        .map((item) => ({ title: item.title, href: item.href }))
     }))
     .filter((group) => group.items.length > 0);
 }
 
-export function getNavigationAudience(permissions: ReadonlySet<PermissionCode>): NavigationAudience {
+export function getDesktopDockNavigationItems(groups: readonly NavGroup[]): DesktopDockNavItem[] {
+  return groups.flatMap((group) => {
+    const config = DESKTOP_DOCK_GROUP_CONFIG[group.title as keyof typeof DESKTOP_DOCK_GROUP_CONFIG];
+    if (!config || group.items.length === 0) return [];
+
+    const target = group.items.find((item) => item.href === config.preferredHref) ?? group.items[0];
+    return [{
+      title: config.title,
+      href: target.href,
+      iconHref: config.iconHref,
+      moduleKey: config.moduleKey,
+      activeHrefs: group.items.map((item) => item.href)
+    }];
+  });
+}
+
+export function getNavigationAudience(
+  permissions: ReadonlySet<PermissionCode>,
+  roleCodes: readonly string[] = []
+): NavigationAudience {
+  if (hasPrincipalRole(roleCodes)) return "admin";
+  if (roleCodes.includes("OFFICE_STAFF")) return "office";
+  if (hasTeacherRole(roleCodes)) return "teacher";
+  if (roleCodes.includes("STAFF")) return "staff";
   if (ADMIN_NAV_SIGNALS.some((permission) => permissions.has(permission))) return "admin";
   if (TEACHER_NAV_SIGNALS.some((permission) => permissions.has(permission))) return "teacher";
   return "staff";
 }
 
-export function getPrimaryMobileNavigationItems(permissions: ReadonlySet<PermissionCode>) {
-  const audience = getNavigationAudience(permissions);
+export function getPrimaryMobileNavigationItems(
+  permissions: ReadonlySet<PermissionCode>,
+  roleCodes: readonly string[] = []
+) {
+  const audience = getNavigationAudience(permissions, roleCodes);
   const visibleShortcuts = MOBILE_NAVIGATION_SHORTCUTS.filter(
     (shortcut) =>
       shortcut.audiences.some((shortcutAudience) => shortcutAudience === audience) &&
@@ -261,14 +362,19 @@ export function getPrimaryMobileNavigationItems(permissions: ReadonlySet<Permiss
   const uniqueShortcuts = new Map<string, MobileNavShortcut>();
 
   for (const shortcut of visibleShortcuts) {
-    if (!uniqueShortcuts.has(shortcut.href)) uniqueShortcuts.set(shortcut.href, shortcut);
+    if (!uniqueShortcuts.has(shortcut.href)) {
+      uniqueShortcuts.set(shortcut.href, { title: shortcut.title, href: shortcut.href });
+    }
   }
 
   return Array.from(uniqueShortcuts.values()).slice(0, 4);
 }
 
-export function getMobileBottomNavigationItems(permissions: ReadonlySet<PermissionCode>) {
-  const audience = getNavigationAudience(permissions);
+export function getMobileBottomNavigationItems(
+  permissions: ReadonlySet<PermissionCode>,
+  roleCodes: readonly string[] = []
+) {
+  const audience = getNavigationAudience(permissions, roleCodes);
   const visibleGroups = getVisibleNavigationGroups(permissions);
   const visibleItems = MOBILE_BOTTOM_NAVIGATION_ITEMS[audience].filter(
     (item) =>
@@ -278,7 +384,9 @@ export function getMobileBottomNavigationItems(permissions: ReadonlySet<Permissi
   const uniqueItems = new Map<string, MobileBottomNavItem>();
 
   for (const item of visibleItems) {
-    if (!uniqueItems.has(item.href)) uniqueItems.set(item.href, item);
+    if (!uniqueItems.has(item.href)) {
+      uniqueItems.set(item.href, { title: item.title, href: item.href });
+    }
   }
 
   const primaryItems = Array.from(uniqueItems.values()).slice(0, 4);
@@ -289,8 +397,6 @@ export function getMobileBottomNavigationItems(permissions: ReadonlySet<Permissi
     {
       title: "More",
       href: "#mobile-more-menu",
-      permissions: [],
-      audiences: ["admin", "teacher", "staff"],
       kind: "more"
     }
   ] satisfies MobileBottomNavItem[];

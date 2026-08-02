@@ -16,7 +16,7 @@ JinaCampus is a production-grade, multi-tenant School Management SaaS for Indian
 
 Brand line:
 
-> JinaCampus — The Complete School OS, powered by Parshav Insights
+> JinaCampus - The Complete School OS, powered by Parshwa Insights
 
 This is not a demo CRUD app. Every implementation must respect SaaS-grade tenant isolation, RBAC, auditability, data integrity, and maintainable architecture.
 
@@ -169,18 +169,21 @@ Use Prisma transactions for multi-step writes, especially:
 ## 8. RBAC Rules
 Use permission-based RBAC, not only hardcoded roles.
 
-Default seeded roles:
+Canonical operational roles:
 
-- `TENANT_OWNER`
-- `SUPER_ADMIN`
-- `ADMINISTRATOR`
-- `PRINCIPAL`
-- `ADMIN`
-- `CLASS_TEACHER`
-- `TEACHER`
-- `STAFF`
-- `PARENT`
-- `STUDENT`
+- `ADMINISTRATOR` - JinaCampus platform operator, provisioned separately
+- `PRINCIPAL` - school governance and authorized user management
+- `OFFICE_STAFF` - permission-based branch operations
+- `TEACHER` - assigned class/student workflows and own attendance
+- `STAFF` - own attendance and account access
+
+New tenant role seeds must create only the four school roles. Legacy role codes
+may remain as migration aliases for existing assignments, but they must not be
+shown or assigned as new operational roles. Parent and student account roles are
+deferred until their portals are approved.
+
+One human must normally have one `User` record. Multiple active role assignments
+may merge permissions for that user; do not create duplicate accounts per job.
 
 Use permission strings such as:
 
@@ -274,6 +277,21 @@ Use:
 - Mobile-friendly attendance screens
 
 Avoid flashy UI that slows school office work.
+
+### 11.1 Brand and Interface System
+
+- Use the supplied masters in `public/brand` through `src/config/brand.ts` and the shared brand components. Do not redraw or recolor the logo.
+- Use semantic colors and shared surface/button classes from `src/app/globals.css` and `tailwind.config.ts`; avoid one-off colors, decorative gradients, and excessive glass effects.
+- Use Manrope for interface text and Nunito Sans sparingly for headings. Keep letter spacing at zero and use tabular numbers for operational values.
+- Keep cards and controls at an 8px radius or less, except familiar pills and circular identity marks.
+- Reuse shared page headers, form primitives, responsive tables, status badges, and empty/loading/error states before creating route-specific variants.
+- Preserve 44px touch targets, visible labels, keyboard focus, reduced-motion behavior, mobile safe areas, and responsive table containment.
+- Visible navigation covers only implemented and approved modules: CampusCore, Academia, and StaffBoard Lite. Permission filtering is UX only; server-side RBAC remains authoritative.
+- The application command bar uses `src/config/navbar.ts` and `src/hooks/use-auto-hide-navbar.ts`. Keep scroll thresholds centralized, use passive request-animation-frame containment, preserve its stable sticky layout row, and hide it only with transforms.
+- Navbar visibility must remain locked while focus, pointer interaction, a popover, or the mobile navigation drawer is active. Focus must return after dismissing the mobile drawer, and reduced-motion behavior must remain functional.
+- Pass only server-filtered navigation labels and URLs into client chrome. Do not serialize permission sets, add fake search or notification controls, or expose unimplemented modules.
+
+See `docs/UI_UX_REDESIGN.md` for asset usage, tokens, responsive rules, and the route migration record.
 
 ## 12. Coding Standards
 Use strict TypeScript.

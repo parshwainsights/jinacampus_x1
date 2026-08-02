@@ -50,8 +50,10 @@ export default async function StaffProfilesPage({ searchParams }: { searchParams
               <td className="whitespace-nowrap px-4 py-3">{staff.branch?.name ?? "-"}</td>
               <td className="whitespace-nowrap px-4 py-3"><StatusPill value={staff.employmentStatus} /></td>
               <td className="whitespace-nowrap px-4 py-3">
-                {staff.user ? (
+                {staff.user?.status === "ACTIVE" ? (
                   <span className="premium-muted-chip border-emerald-200 bg-emerald-50 text-emerald-700">Enabled</span>
+                ) : staff.user ? (
+                  <span className="premium-muted-chip border-amber-200 bg-amber-50 text-amber-700">Disabled</span>
                 ) : (
                   <span className="premium-muted-chip">No app access</span>
                 )}

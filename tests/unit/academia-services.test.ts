@@ -4,6 +4,7 @@ import { createClass, updateClass } from "@/modules/academia/services/class.serv
 import { createEnrollment } from "@/modules/academia/services/enrollment.service";
 import { createGuardian, linkGuardianToStudent } from "@/modules/academia/services/guardian.service";
 import { createStudent } from "@/modules/academia/services/student.service";
+import { createStudentRegistration } from "@/modules/academia/services/student-registration.service";
 import { listClasses } from "@/modules/academia/queries/class.queries";
 import { listActiveEnrollmentsByClassSection } from "@/modules/academia/queries/enrollment.queries";
 import type { TenantContext } from "@/lib/tenant/context";
@@ -16,7 +17,7 @@ const mocks = vi.hoisted(() => {
     class: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     classSection: { findFirst: vi.fn() },
     enrollment: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-    guardian: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    guardian: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     section: { findFirst: vi.fn() },
     student: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     studentGuardianLink: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
@@ -117,7 +118,7 @@ describe("Academia services and queries", () => {
   });
 
   it("createStudent preserves tenant admission number uniqueness", async () => {
-    mocks.tx.branch.findFirst.mockResolvedValue({ id: branchId });
+    mocks.tx.branch.findFirst.mockResolvedValue({ id: branchId, institutionId: "institution-1" });
     mocks.tx.student.findFirst.mockResolvedValue({ id: studentId });
 
     await expect(createStudent(ctx, {
@@ -140,7 +141,7 @@ describe("Academia services and queries", () => {
       aadhaarMasked: "XXXX-XXXX-1234",
       bankAccountMasked: "XXXXXX9012"
     };
-    mocks.tx.branch.findFirst.mockResolvedValue({ id: branchId });
+    mocks.tx.branch.findFirst.mockResolvedValue({ id: branchId, institutionId: "institution-1" });
     mocks.tx.student.findFirst.mockResolvedValue(null);
     mocks.tx.student.create.mockResolvedValue(created);
 
@@ -186,6 +187,93 @@ describe("Academia services and queries", () => {
     });
   });
 
+  it("registers the student, primary guardian, link, and initial enrollment in one transaction", async () => {
+    const institutionId = "00000000-0000-0000-0000-000000000011";
+    const createdStudent = {
+      id: studentId,
+      tenantId: ctx.tenantId,
+      branchId,
+      admissionNumber: "ADM-3",
+      aadhaarMasked: "XXXX-XXXX-1234"
+    };
+    const guardian = {
+      id: guardianId,
+      tenantId: ctx.tenantId,
+      firstName: "Nilesh",
+      displayName: "Nilesh Shah"
+    };
+    const guardianLink = {
+      id: "00000000-0000-0000-0000-000000000010",
+      tenantId: ctx.tenantId,
+      studentId,
+      guardianId,
+      relation: "FATHER"
+    };
+    const enrollment = {
+      id: "00000000-0000-0000-0000-000000000012",
+      tenantId: ctx.tenantId,
+      branchId,
+      academicYearId,
+      studentId,
+      classSectionId
+    };
+    mocks.tx.branch.findFirst.mockResolvedValue({ id: branchId, institutionId });
+    mocks.tx.academicYear.findFirst.mockResolvedValue({ id: academicYearId, institutionId });
+    mocks.tx.student.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: studentId });
+    mocks.tx.student.create.mockResolvedValue(createdStudent);
+    mocks.tx.guardian.findMany.mockResolvedValue([]);
+    mocks.tx.guardian.create.mockResolvedValue(guardian);
+    mocks.tx.studentGuardianLink.create.mockResolvedValue(guardianLink);
+    mocks.tx.classSection.findFirst.mockResolvedValue({
+      id: classSectionId,
+      branchId,
+      academicYearId
+    });
+    mocks.tx.enrollment.findFirst.mockResolvedValue(null);
+    mocks.tx.enrollment.create.mockResolvedValue(enrollment);
+
+    await expect(createStudentRegistration(ctx, {
+      student: validStudentInput({ admissionNumber: "ADM-3" }),
+      primaryGuardian: {
+        relation: "FATHER",
+        phone: "9876543210",
+        isEmergencyContact: true,
+        hasPickupPermission: true
+      },
+      initialClassAssignment: {
+        classSectionId,
+        enrolledOn: "2026-04-01"
+      }
+    })).resolves.toMatchObject({
+      student: createdStudent,
+      guardian,
+      guardianLink,
+      enrollment
+    });
+
+    expect(mocks.tx.studentGuardianLink.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId: ctx.tenantId,
+        studentId,
+        guardianId,
+        relation: "FATHER",
+        isPrimary: true
+      })
+    });
+    expect(mocks.tx.enrollment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenantId: ctx.tenantId,
+        branchId,
+        academicYearId,
+        studentId,
+        classSectionId
+      })
+    });
+    expect(mocks.db.$transaction).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects cross-tenant guardian/student linking", async () => {
     mocks.tx.student.findFirst.mockResolvedValue({ id: studentId, branchId });
     mocks.tx.guardian.findFirst.mockResolvedValue(null);
@@ -203,8 +291,8 @@ describe("Academia services and queries", () => {
   });
 
   it("createEnrollment rejects duplicate enrollment in the same academic year", async () => {
-    mocks.tx.branch.findFirst.mockResolvedValue({ id: branchId });
-    mocks.tx.academicYear.findFirst.mockResolvedValue({ id: academicYearId });
+    mocks.tx.branch.findFirst.mockResolvedValue({ id: branchId, institutionId: "institution-1" });
+    mocks.tx.academicYear.findFirst.mockResolvedValue({ id: academicYearId, institutionId: "institution-1" });
     mocks.tx.student.findFirst.mockResolvedValue({ id: studentId });
     mocks.tx.classSection.findFirst.mockResolvedValue({ id: classSectionId, branchId, academicYearId });
     mocks.tx.enrollment.findFirst.mockResolvedValue({ id: "existing", status: "ACTIVE" });

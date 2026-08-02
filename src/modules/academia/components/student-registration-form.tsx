@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { FormField, FormMessage, getFieldError } from "@/components/ui/form-primitives";
 import { SubmitButton } from "@/components/ui/submit-button";
 import {
@@ -19,6 +19,14 @@ import {
 type BranchOption = {
   id: string;
   name: string;
+};
+
+export type RegistrationClassSectionOption = {
+  id: string;
+  branchId: string;
+  displayName: string;
+  branchName: string;
+  academicYearName: string;
 };
 
 export type StudentRegistrationRecord = {
@@ -90,7 +98,7 @@ const studentStatusOptions = [
 ] as const;
 
 function fieldError(state: ProfileFormActionState, name: string) {
-  return getFieldError(state.fieldErrors, name);
+  return getFieldError(state.fieldErrors, name) ?? getFieldError(state.fieldErrors, `student.${name}`);
 }
 
 function value(record: StudentRegistrationRecord | undefined, key: keyof StudentRegistrationRecord, fallback = "") {
@@ -139,11 +147,13 @@ function OptionalBadge({ children = "Can add later" }: { children?: string }) {
 export function StudentRegistrationForm({
   mode,
   branchOptions,
+  classSectionOptions = [],
   defaultBranchId,
   student
 }: {
   mode: "create" | "edit";
   branchOptions: BranchOption[];
+  classSectionOptions?: RegistrationClassSectionOption[];
   defaultBranchId?: string;
   student?: StudentRegistrationRecord;
 }) {
@@ -153,6 +163,11 @@ export function StudentRegistrationForm({
   const isCreate = mode === "create";
   const hasExistingAadhaar = Boolean(student?.aadhaarMasked);
   const hasExistingBankAccount = Boolean(student?.bankAccountMasked);
+  const initialBranchId = student?.branchId ?? defaultBranchId ?? branchOptions[0]?.id ?? "";
+  const [selectedBranchId, setSelectedBranchId] = useState(initialBranchId);
+  const availableClassSections = classSectionOptions.filter(
+    (classSection) => classSection.branchId === selectedBranchId
+  );
 
   return (
     <form action={formAction} className="space-y-5">
@@ -164,7 +179,15 @@ export function StudentRegistrationForm({
         description="Core school admission identifiers and branch context."
       >
         <FormField id="student-branch" label="Branch" required helpText="Only accessible branches are available." error={fieldError(state, "branchId")}>
-          <select id="student-branch" name="branchId" required defaultValue={student?.branchId ?? defaultBranchId ?? ""} disabled={!branchOptions.length} className="min-h-11 w-full">
+          <select
+            id="student-branch"
+            name="branchId"
+            required
+            defaultValue={initialBranchId}
+            disabled={!branchOptions.length}
+            onChange={(event) => setSelectedBranchId(event.target.value)}
+            className="min-h-11 w-full"
+          >
             {!branchOptions.length ? <option value="">No branch access</option> : null}
             {branchOptions.map((branch) => (
               <option key={branch.id} value={branch.id}>{branch.name}</option>
@@ -178,6 +201,35 @@ export function StudentRegistrationForm({
           <input id="student-admission-date" name="admissionDate" type="date" defaultValue={value(student, "admissionDate")} required className="min-h-11 w-full" />
         </FormField>
       </FormSection>
+
+      {isCreate ? (
+        <FormSection
+          title="Initial Class Assignment"
+          description="Optional. Assign the student to an active class-section now, or complete it later from the student profile."
+        >
+          <FormField
+            id="student-initial-class-section"
+            label="Class Section"
+            helpText={availableClassSections.length ? "Only active class-sections for the selected branch are listed." : "Create an active class-section in Academic Setup before assigning a class."}
+            error={fieldError(state, "initialClassAssignment.classSectionId") ?? fieldError(state, "classSectionId")}
+          >
+            <select id="student-initial-class-section" name="initialClassSectionId" defaultValue="" className="min-h-11 w-full">
+              <option value="">Assign later</option>
+              {availableClassSections.map((classSection) => (
+                <option key={classSection.id} value={classSection.id}>
+                  {classSection.displayName} - {classSection.academicYearName}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField id="student-initial-roll-number" label="Roll Number" helpText={<OptionalBadge>Optional</OptionalBadge>} error={fieldError(state, "initialClassAssignment.rollNumber")}>
+            <input id="student-initial-roll-number" name="initialRollNumber" className="min-h-11 w-full" />
+          </FormField>
+          <FormField id="student-initial-enrolled-on" label="Enrollment Date" helpText="Defaults to admission date if left blank." error={fieldError(state, "initialClassAssignment.enrolledOn")}>
+            <input id="student-initial-enrolled-on" name="initialEnrolledOn" type="date" className="min-h-11 w-full" />
+          </FormField>
+        </FormSection>
+      ) : null}
 
       <FormSection
         title="Student Personal Details"
@@ -206,7 +258,7 @@ export function StudentRegistrationForm({
 
       <FormSection
         title="Parent / Guardian Details"
-        description="Required parent names are captured here. Detailed contacts remain in Guardian records."
+        description={isCreate ? "Create and link the primary guardian as part of registration." : "Admission-sheet parent names and guardian reference."}
       >
         <FormField id="student-father-name" label="Father Name" required error={fieldError(state, "fatherName")}>
           <input id="student-father-name" name="fatherName" defaultValue={value(student, "fatherName")} required className="min-h-11 w-full" />
@@ -220,6 +272,33 @@ export function StudentRegistrationForm({
         <FormField id="student-guardian-name" label="Guardian Name" helpText={<><OptionalBadge /> Use only when different from parents.</>} error={fieldError(state, "guardianName")}>
           <input id="student-guardian-name" name="guardianName" defaultValue={value(student, "guardianName")} className="min-h-11 w-full" />
         </FormField>
+        {isCreate ? (
+          <>
+            <FormField id="primary-guardian-relation" label="Primary Guardian" required error={fieldError(state, "primaryGuardian.relation")}>
+              <select id="primary-guardian-relation" name="primaryGuardianRelation" defaultValue="FATHER" required className="min-h-11 w-full">
+                <option value="FATHER">Father</option>
+                <option value="MOTHER">Mother</option>
+                <option value="GUARDIAN">Other Guardian</option>
+              </select>
+            </FormField>
+            <FormField id="primary-guardian-phone" label="Guardian Mobile" helpText="Optional Indian mobile number used for school communication." error={fieldError(state, "primaryGuardian.phone")}>
+              <input id="primary-guardian-phone" name="primaryGuardianPhone" type="tel" inputMode="tel" autoComplete="tel" className="min-h-11 w-full" />
+            </FormField>
+            <FormField id="primary-guardian-email" label="Guardian Email" helpText={<OptionalBadge>Optional</OptionalBadge>} error={fieldError(state, "primaryGuardian.email")}>
+              <input id="primary-guardian-email" name="primaryGuardianEmail" type="email" inputMode="email" autoComplete="email" className="min-h-11 w-full" />
+            </FormField>
+            <div id="primary-guardian" className="md:col-span-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+              <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-slate-700">
+                <input type="checkbox" name="primaryGuardianEmergencyContact" defaultChecked className="size-4" />
+                Emergency contact
+              </label>
+              <label className="flex min-h-11 items-center gap-3 text-sm font-medium text-slate-700">
+                <input type="checkbox" name="primaryGuardianPickupPermission" defaultChecked className="size-4" />
+                Pickup permission
+              </label>
+            </div>
+          </>
+        ) : null}
       </FormSection>
 
       <FormSection

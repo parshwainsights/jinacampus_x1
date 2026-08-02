@@ -6,6 +6,7 @@ import { validateEnvironment } from "@/lib/env-validation";
 
 const productionEnvironment = {
   NODE_ENV: "production",
+  APP_URL: "https://app.jinacampus.example",
   DATABASE_URL: "postgresql://runtime.example:secret@region.pooler.supabase.com:6543/postgres",
   DIRECT_URL: "postgresql://migration.example:secret@db.project.supabase.co:5432/postgres",
   SESSION_SECRET: "session-secret-with-at-least-32-characters",

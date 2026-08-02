@@ -27,6 +27,7 @@ describe("permission registry", () => {
       "staffboard.staff.deactivate",
       "staffboard.attendance.qr.generate",
       "staffboard.attendance.self_scan",
+      "staffboard.attendance.self_view",
       "staffboard.attendance.view",
       "staffboard.attendance.correct",
       "staffboard.attendance.report"
@@ -58,6 +59,8 @@ describe("permission registry", () => {
     expect(canAssignRole(["PRINCIPAL"], "OFFICE_STAFF")).toBe(true);
     expect(canAssignRole(["PRINCIPAL"], "ADMIN")).toBe(false);
     expect(canAssignRole(["PRINCIPAL"], "TENANT_OWNER")).toBe(false);
-    expect(canAssignRole(["TENANT_OWNER"], "ADMIN")).toBe(true);
+    expect(canAssignRole(["TENANT_OWNER"], "ADMIN")).toBe(false);
+    expect(canAssignRole(["ADMINISTRATOR"], "PRINCIPAL")).toBe(true);
+    expect(canAssignRole(["ADMINISTRATOR"], "ADMINISTRATOR")).toBe(false);
   });
 });

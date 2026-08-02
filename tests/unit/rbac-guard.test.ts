@@ -147,7 +147,7 @@ describe("RBAC guard", () => {
     ]);
 
     const permissions = await getEffectivePermissions({
-      ctx: { ...ctx, accessibleBranchIds: [], roleCodes: ["ADMIN"] },
+      ctx: { ...ctx, accessibleBranchIds: [], roleCodes: ["ADMINISTRATOR"] },
       branchId
     });
 

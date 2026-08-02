@@ -96,6 +96,7 @@ describe("listActiveEnrolledStudentsForAttendance", () => {
         tenantId: ctx.tenantId,
         branchId,
         academicYearId,
+        classTeacherUserId: ctx.userId,
         status: "ACTIVE"
       },
       select: { id: true, branchId: true, academicYearId: true }
@@ -114,6 +115,19 @@ describe("listActiveEnrolledStudentsForAttendance", () => {
       branchId,
       academicYearId
     });
+  });
+
+  it("allows attendance managers to resolve any class section in their branch scope", async () => {
+    mocks.getEffectivePermissions.mockResolvedValue(new Set([
+      "academia.attendance.view",
+      "academia.attendance.update"
+    ]));
+    mocks.db.classSection.findFirst.mockResolvedValue({ id: classSectionId, branchId, academicYearId });
+    mocks.db.enrollment.findMany.mockResolvedValue([]);
+
+    await listActiveEnrolledStudentsForAttendance(ctx, { classSectionId });
+
+    expect(mocks.db.classSection.findFirst.mock.calls[0][0].where).not.toHaveProperty("classTeacherUserId");
   });
 
   it("returns only ACTIVE enrollments with ACTIVE students", async () => {
@@ -190,7 +204,12 @@ describe("listActiveEnrolledStudentsForAttendance", () => {
     const result = await listActiveEnrolledStudentsForAttendance(ctx, { classSectionId });
 
     expect(result).toEqual([]);
-    expect(mocks.requirePermission).not.toHaveBeenCalled();
+    expect(mocks.requirePermission).toHaveBeenCalledWith({
+      ctx,
+      permission: "academia.attendance.view",
+      branchId,
+      academicYearId
+    });
     expect(mocks.db.enrollment.findMany).not.toHaveBeenCalled();
   });
 });

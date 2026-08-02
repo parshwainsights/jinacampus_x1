@@ -45,7 +45,7 @@ export function PageHeader({ title, description, actionLabel }: PageHeaderProps)
   return (
     <div className="premium-glass-panel flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
       <div className="max-w-3xl">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-950">{title}</h1>
+        <h1 className="text-2xl font-semibold text-ink">{title}</h1>
         <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
       </div>
       {actionLabel ? (
@@ -123,7 +123,7 @@ export function StatusPill({ value }: { value?: string | null }) {
 
 export function ReadOnlyAction() {
   return (
-    <span className="inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-500 shadow-sm">
+    <span className="inline-flex min-h-11 items-center rounded-lg border border-campus-border bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 shadow-sm">
       Read-only
     </span>
   );
@@ -139,7 +139,7 @@ export function ComingSoonPill() {
 
 export function CardLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className="premium-card block p-5 transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-[0_18px_42px_rgba(15,23,42,0.10)] premium-focus">
+    <Link href={href} className="premium-card block p-5 transition hover:border-brand-200 hover:shadow-elevated premium-focus">
       {children}
     </Link>
   );

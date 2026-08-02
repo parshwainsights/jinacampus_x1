@@ -36,13 +36,13 @@ describe("form UX polish", () => {
   it("marks important create fields as required and adds school-friendly helper text", () => {
     const studentForm = source("src/modules/academia/components/student-registration-form.tsx");
     const staffForm = source("src/modules/staffboard-lite/components/staff-profile-create-form.tsx");
-    const classPage = source("src/app/(dashboard)/academia/classes/page.tsx");
+    const classSetupForm = source("src/modules/academia/components/academic-setup-forms.tsx");
 
     expect(studentForm).toContain("Unique school scholar or admission number.");
     expect(staffForm).toContain("Unique staff code used by the school.");
-    expect(classPage).toContain("Short code used in lists and reports.");
-    expect(`${studentForm}\n${staffForm}\n${classPage}`).toContain("SubmitButton");
-    expect(`${studentForm}\n${staffForm}\n${classPage}`).toContain("pendingLabel");
+    expect(classSetupForm).toContain("Short code used in lists and reports.");
+    expect(`${studentForm}\n${staffForm}\n${classSetupForm}`).toContain("SubmitButton");
+    expect(`${studentForm}\n${staffForm}\n${classSetupForm}`).toContain("pendingLabel");
   });
 
   it("polishes attendance and QR forms with helper text and safe loading states", () => {
@@ -73,7 +73,8 @@ describe("form UX polish", () => {
     const combined = [
       source("src/modules/academia/components/core-record-edit-forms.tsx"),
       source("src/modules/staffboard-lite/components/staff-profile-edit-form.tsx"),
-      source("src/app/(auth)/login/page.tsx")
+      source("src/app/page.tsx"),
+      source("src/components/auth/login-form.tsx")
     ].join("\n");
 
     expect(combined).toContain("min-h-11 w-full");

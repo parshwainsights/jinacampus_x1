@@ -4,7 +4,11 @@ import { AppError, notFound } from "@/lib/errors";
 import { writeAuditLog } from "@/lib/audit/audit-log";
 import { hashPassword } from "@/lib/auth/password";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
-import { DEFAULT_ROLE_CODES, DEFAULT_ROLE_PERMISSION_MAP, hasPlatformAdminRole } from "@/lib/rbac/roles";
+import {
+  hasPlatformAdminRole,
+  ROLE_PERMISSION_MAP,
+  SCHOOL_OPERATIONAL_ROLE_CODES
+} from "@/lib/rbac/roles";
 import type { PermissionCode } from "@/lib/rbac/permissions";
 import type { TenantContext } from "@/lib/tenant/context";
 import { CAMPUS_CORE_AUDIT_EVENTS } from "@/modules/campus-core/audit-events";
@@ -119,7 +123,7 @@ export async function assertSchoolIdAvailable(client: SchoolDbClient, schoolId: 
 }
 
 async function ensureDefaultRolesForTenant(tx: Prisma.TransactionClient, tenantId: string, actorUserId: string) {
-  for (const roleCode of DEFAULT_ROLE_CODES) {
+  for (const roleCode of SCHOOL_OPERATIONAL_ROLE_CODES) {
     const role = await tx.role.upsert({
       where: { tenantId_code: { tenantId, code: roleCode } },
       create: {
@@ -131,13 +135,13 @@ async function ensureDefaultRolesForTenant(tx: Prisma.TransactionClient, tenantI
           .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
           .join(" "),
         isSystem: true,
-        isMutable: roleCode !== "TENANT_OWNER",
+        isMutable: false,
         createdById: actorUserId
       },
       update: { isActive: true }
     });
 
-    for (const permissionCode of DEFAULT_ROLE_PERMISSION_MAP[roleCode]) {
+    for (const permissionCode of ROLE_PERMISSION_MAP[roleCode]) {
       const permission = await tx.permission.findUnique({ where: { code: permissionCode } });
       if (!permission) continue;
       await tx.rolePermission.upsert({

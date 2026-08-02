@@ -13,6 +13,7 @@ import {
   createStaffLoginAccessAction,
   deactivateStaffProfileAction,
   disableStaffLoginAccessAction,
+  reactivateStaffLoginAccessAction,
   updateStaffProfileAction,
   type StaffProfileFormActionState
 } from "@/modules/staffboard-lite/actions/staff-profile.actions";
@@ -77,8 +78,7 @@ const employmentStatusOptions: EmploymentStatus[] = ["ACTIVE", "INACTIVE", "RESI
 const loginRoleOptions = [
   { value: "STAFF", label: "Staff" },
   { value: "TEACHER", label: "Teacher" },
-  { value: "CLASS_TEACHER", label: "Class Teacher" },
-  { value: "OFFICE_STAFF", label: "Office Staff" }
+  { value: "OFFICE_STAFF", label: "Office Operator" }
 ] as const;
 
 function fieldError(state: StaffProfileFormActionState, name: string) {
@@ -103,7 +103,9 @@ export function StaffProfileEditForm({
   const [state, formAction, pending] = useActionState(updateStaffProfileAction, initialState);
   const [loginAccessState, loginAccessFormAction, loginAccessPending] = useActionState(createStaffLoginAccessAction, initialState);
   const [disableLoginState, disableLoginFormAction, disableLoginPending] = useActionState(disableStaffLoginAccessAction, initialState);
+  const [reactivateLoginState, reactivateLoginFormAction, reactivateLoginPending] = useActionState(reactivateStaffLoginAccessAction, initialState);
   const [deactivateState, deactivateFormAction, deactivatePending] = useActionState(deactivateStaffProfileAction, initialState);
+  const loginAccessEnabled = staffProfile.user?.status === "ACTIVE";
 
   return (
     <div className="space-y-6">
@@ -178,11 +180,13 @@ export function StaffProfileEditForm({
         <div className="max-w-2xl">
           <h2 className="text-lg font-semibold text-slate-950">Login Access</h2>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            Staff sign in with School ID, email, and password. Profiles can exist without app login access.
+            Staff sign in with School ID, employee code or email, and a passkey or password. Profiles can exist without app login access.
           </p>
         </div>
-        {staffProfile.user ? (
+        {loginAccessEnabled ? (
           <span className="premium-muted-chip border-emerald-200 bg-emerald-50 text-emerald-700">Enabled</span>
+        ) : staffProfile.user ? (
+          <span className="premium-muted-chip border-amber-200 bg-amber-50 text-amber-700">Disabled</span>
         ) : (
           <span className="premium-muted-chip">No app access</span>
         )}
@@ -218,22 +222,49 @@ export function StaffProfileEditForm({
             </Link>
           </div>
           <FormMessage state={disableLoginState} />
-          <form action={disableLoginFormAction} className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
-            <input type="hidden" name="staffId" value={staffProfile.id} />
-            <label className="flex items-start gap-3 text-sm text-amber-950">
-              <input
-                type="checkbox"
-                name="confirmDisableLoginAccess"
-                className="mt-1 size-4 rounded border-amber-300 text-amber-600 focus:ring-amber-200"
-                disabled={disableLoginPending}
-              />
-              <span>Disable this staff member's app login access and revoke active sessions.</span>
-            </label>
-            <FieldErrorMessage id="disable-login-access-error" message={fieldError(disableLoginState, "confirmDisableLoginAccess")} />
-            <button type="submit" disabled={disableLoginPending} className="premium-danger-button mt-4 w-full sm:w-auto premium-focus">
-              {disableLoginPending ? "Disabling..." : "Disable Login Access"}
-            </button>
-          </form>
+          {loginAccessEnabled ? (
+            <form action={disableLoginFormAction} className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+              <input type="hidden" name="staffId" value={staffProfile.id} />
+              <label className="flex items-start gap-3 text-sm text-amber-950">
+                <input
+                  type="checkbox"
+                  name="confirmDisableLoginAccess"
+                  className="mt-1 size-4 rounded border-amber-300 text-amber-600 focus:ring-amber-200"
+                  disabled={disableLoginPending}
+                />
+                <span>Disable this staff member's app login access and revoke active sessions. The User link, roles, and branch access will be preserved.</span>
+              </label>
+              <FieldErrorMessage id="disable-login-access-error" message={fieldError(disableLoginState, "confirmDisableLoginAccess")} />
+              <button type="submit" disabled={disableLoginPending} className="premium-danger-button mt-4 w-full sm:w-auto premium-focus">
+                {disableLoginPending ? "Disabling..." : "Disable Login Access"}
+              </button>
+            </form>
+          ) : (
+            <form action={reactivateLoginFormAction} className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+              <input type="hidden" name="staffId" value={staffProfile.id} />
+              <FormMessage state={reactivateLoginState} />
+              <label className="flex items-start gap-3 text-sm text-emerald-950">
+                <input
+                  type="checkbox"
+                  name="confirmReactivateLoginAccess"
+                  className="mt-1 size-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-200"
+                  disabled={reactivateLoginPending || staffProfile.employmentStatus !== "ACTIVE"}
+                />
+                <span>Reactivate this linked user with the existing approved role and branch assignments.</span>
+              </label>
+              <FieldErrorMessage id="reactivate-login-access-error" message={fieldError(reactivateLoginState, "confirmReactivateLoginAccess")} />
+              {staffProfile.employmentStatus !== "ACTIVE" ? (
+                <p className="mt-3 text-sm text-emerald-900">Reactivate the staff profile before enabling login access.</p>
+              ) : null}
+              <button
+                type="submit"
+                disabled={reactivateLoginPending || staffProfile.employmentStatus !== "ACTIVE"}
+                className="premium-primary-button mt-4 w-full sm:w-auto premium-focus"
+              >
+                {reactivateLoginPending ? "Reactivating..." : "Reactivate Login Access"}
+              </button>
+            </form>
+          )}
         </div>
       ) : (
         <form action={loginAccessFormAction} className="mt-5 space-y-4">

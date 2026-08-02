@@ -1,8 +1,11 @@
 "use client";
 
+import { startAuthentication } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/server";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { PasswordInput } from "@/components/forms/password-input";
 import { FormField } from "@/components/ui/form-primitives";
 
@@ -11,15 +14,14 @@ type LoginFormProps = {
   schoolIdLocked: boolean;
   schoolName: string | null;
   logoUrl: string | null;
+  intent?: "standard" | "attendance";
+  successRedirect?: string;
 };
 
-type LoginMode = "password" | "otp";
-type PendingAction = "password" | "requestOtp" | "verifyOtp" | null;
+type PendingAction = "passkey" | "password" | null;
 
 const LOGIN_ERROR_MESSAGE = "Login failed. Please check your credentials.";
-const OTP_REQUEST_ERROR_MESSAGE = "Unable to request an OTP. Please try again.";
-const OTP_VERIFY_ERROR_MESSAGE = "OTP verification failed. Check the code and try again.";
-const OTP_RESEND_SECONDS = 60;
+const PASSKEY_ERROR_MESSAGE = "Passkey sign-in failed. Use your employee code and password.";
 
 function normalizeSchoolCodeInput(value: string) {
   return value
@@ -34,25 +36,26 @@ function normalizeSchoolCodeForSubmit(value: string) {
   return normalizeSchoolCodeInput(value.trim()).replace(/-+$/g, "");
 }
 
-function normalizeEmailInput(value: string) {
-  return value.toLowerCase();
-}
-
-function normalizeEmailForSubmit(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function normalizePhoneInput(value: string) {
-  const normalized = value.replace(/[^\d+]/g, "");
-  return normalized.startsWith("+")
-    ? `+${normalized.slice(1).replace(/\+/g, "")}`
-    : normalized.replace(/\+/g, "");
+function normalizeIdentifier(value: string) {
+  const trimmed = value.trim();
+  return trimmed.includes("@") ? trimmed.toLowerCase() : trimmed.toUpperCase();
 }
 
 function safeRedirect(value: unknown) {
   return typeof value === "string" && value.startsWith("/") && !value.startsWith("//")
     ? value
     : "/dashboard";
+}
+
+function resolvedLoginRedirect(serverRedirect: unknown, successRedirect?: string) {
+  const redirectTo = safeRedirect(serverRedirect);
+  if (
+    redirectTo.startsWith("/account/change-password") ||
+    redirectTo.startsWith("/administrator")
+  ) {
+    return redirectTo;
+  }
+  return successRedirect ? safeRedirect(successRedirect) : redirectTo;
 }
 
 function LoadingSpinner() {
@@ -72,39 +75,45 @@ function LoadingSpinner() {
   );
 }
 
-export function LoginForm({ schoolId, schoolIdLocked, schoolName, logoUrl }: LoginFormProps) {
-  const [mode, setMode] = useState<LoginMode>("password");
+function PasskeyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="8.5" cy="8.5" r="4.5" />
+      <path d="m12 12 8 8m-3-3 2-2m-5-1 2-2" />
+    </svg>
+  );
+}
+
+export function LoginForm({
+  schoolId,
+  schoolIdLocked,
+  schoolName,
+  logoUrl,
+  intent = "standard",
+  successRedirect
+}: LoginFormProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [schoolIdValue, setSchoolIdValue] = useState(schoolId ?? "");
-  const [emailValue, setEmailValue] = useState("");
-  const [phoneValue, setPhoneValue] = useState("");
-  const [otpValue, setOtpValue] = useState("");
-  const [otpRequested, setOtpRequested] = useState(false);
-  const [resendSeconds, setResendSeconds] = useState(0);
+  const [identifier, setIdentifier] = useState("");
   const isPending = pendingAction !== null;
   const displayName = schoolName ?? "your school";
   const recoveryHref = schoolId ? `/forgot-password?schoolId=${encodeURIComponent(schoolId)}` : "/forgot-password";
-
-  useEffect(() => {
-    if (resendSeconds <= 0) return;
-    const timer = window.setInterval(() => {
-      setResendSeconds((current) => Math.max(0, current - 1));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [resendSeconds]);
-
-  function selectMode(nextMode: LoginMode) {
-    if (isPending) return;
-    setMode(nextMode);
-    setError(null);
-    setNotice(null);
-  }
+  const attendanceIntent = intent === "attendance";
+  const attendanceLoginHref = schoolId
+    ? `/attendance-login?schoolId=${encodeURIComponent(schoolId)}`
+    : "/attendance-login";
+  const standardLoginHref = schoolId ? `/?schoolId=${encodeURIComponent(schoolId)}` : "/";
 
   function normalizedSchoolId() {
     const normalized = normalizeSchoolCodeForSubmit(schoolIdValue);
     if (!schoolIdLocked) setSchoolIdValue(normalized);
+    return normalized;
+  }
+
+  function normalizedIdentity() {
+    const normalized = normalizeIdentifier(identifier);
+    setIdentifier(normalized);
     return normalized;
   }
 
@@ -113,19 +122,15 @@ export function LoginForm({ schoolId, schoolIdLocked, schoolName, logoUrl }: Log
     if (isPending) return;
     setPendingAction("password");
     setError(null);
-    setNotice(null);
     const formData = new FormData(event.currentTarget);
-    const normalizedTenantSlug = normalizedSchoolId();
-    const normalizedEmail = normalizeEmailForSubmit(String(formData.get("email") ?? ""));
-    setEmailValue(normalizedEmail);
 
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          tenantSlug: normalizedTenantSlug,
-          email: normalizedEmail,
+          tenantSlug: normalizedSchoolId(),
+          identifier: normalizedIdentity(),
           password: formData.get("password")
         })
       });
@@ -135,140 +140,105 @@ export function LoginForm({ schoolId, schoolIdLocked, schoolName, logoUrl }: Log
         setPendingAction(null);
         return;
       }
-      window.location.href = safeRedirect(result.redirectTo);
+      window.location.assign(resolvedLoginRedirect(result.redirectTo, successRedirect));
     } catch {
       setError(LOGIN_ERROR_MESSAGE);
       setPendingAction(null);
     }
   }
 
-  async function requestOtp() {
-    if (isPending || (otpRequested && resendSeconds > 0)) return;
-    setPendingAction("requestOtp");
-    setError(null);
-    setNotice(null);
-
-    try {
-      const response = await fetch("/api/auth/otp/request", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          tenantSlug: normalizedSchoolId(),
-          phone: phoneValue,
-          purpose: "ADMIN_LOGIN"
-        })
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setError(OTP_REQUEST_ERROR_MESSAGE);
-        setPendingAction(null);
-        return;
-      }
-      setOtpRequested(true);
-      setOtpValue("");
-      setResendSeconds(OTP_RESEND_SECONDS);
-      setNotice(typeof result.message === "string" ? result.message : "If the number is registered, an OTP has been sent.");
-      setPendingAction(null);
-    } catch {
-      setError(OTP_REQUEST_ERROR_MESSAGE);
-      setPendingAction(null);
-    }
-  }
-
-  async function onOtpSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function onPasskeySignIn() {
     if (isPending) return;
-    if (!otpRequested) {
-      await requestOtp();
+    const tenantSlug = normalizedSchoolId();
+    const normalizedIdentifier = normalizedIdentity();
+    if (!tenantSlug || !normalizedIdentifier) {
+      setError("Enter your School ID and employee code or email.");
+      return;
+    }
+    if (!window.PublicKeyCredential || !navigator.credentials) {
+      setError("Passkeys are not available in this browser. Use your password.");
       return;
     }
 
-    setPendingAction("verifyOtp");
+    setPendingAction("passkey");
     setError(null);
     try {
-      const response = await fetch("/api/auth/otp/verify", {
+      const optionsResponse = await fetch("/api/auth/passkey/authentication/options", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tenantSlug, identifier: normalizedIdentifier })
+      });
+      const optionsResult = await optionsResponse.json().catch(() => ({}));
+      if (!optionsResponse.ok || !optionsResult.options) throw new Error("PASSKEY_OPTIONS_FAILED");
+
+      const options = optionsResult.options as PublicKeyCredentialRequestOptionsJSON;
+      const credential = await startAuthentication({ optionsJSON: options });
+      const verifyResponse = await fetch("/api/auth/passkey/authentication/verify", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          tenantSlug: normalizedSchoolId(),
-          phone: phoneValue,
-          otp: otpValue,
-          purpose: "ADMIN_LOGIN"
+          tenantSlug,
+          challenge: options.challenge,
+          response: credential
         })
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setError(OTP_VERIFY_ERROR_MESSAGE);
-        setPendingAction(null);
-        return;
-      }
-      window.location.href = safeRedirect(result.redirectTo);
+      const verifyResult = await verifyResponse.json().catch(() => ({}));
+      if (!verifyResponse.ok) throw new Error("PASSKEY_VERIFY_FAILED");
+      window.location.assign(resolvedLoginRedirect(verifyResult.redirectTo, successRedirect));
     } catch {
-      setError(OTP_VERIFY_ERROR_MESSAGE);
+      setError(PASSKEY_ERROR_MESSAGE);
       setPendingAction(null);
     }
   }
 
   return (
     <section
-      className="premium-glass-panel box-border w-[calc(100vw-2rem)] max-w-md overflow-hidden rounded-[1.75rem] p-5 shadow-[0_24px_70px_rgba(15,23,42,0.16)] sm:w-full sm:p-8"
+      className="auth-form-panel p-5 sm:p-8 lg:p-9"
       data-mobile-login-form="true"
+      data-auth-pending={isPending ? "true" : "false"}
+      aria-busy={isPending}
     >
-      <div className="text-center">
-        <div className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-[1.4rem] border border-white/80 bg-white/90 shadow-lg shadow-brand-900/10 ring-1 ring-slate-200/60">
-          <img src="/brand/jinacampus-mark-transparent.png" alt="JinaCampus logo" className="h-16 w-16 object-contain" />
+      <BrandLogo className="mx-auto hidden w-[17rem] lg:block" priority />
+      <div className="text-left lg:mt-7">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-semibold text-brand-700">Secure school access</p>
+          {attendanceIntent ? (
+            <p className="inline-flex min-h-8 items-center rounded-full border border-teal-200 bg-teal-50 px-3 text-xs font-semibold text-teal-800">
+              Fast attendance sign in
+            </p>
+          ) : null}
         </div>
-        <div className="mt-4 min-w-0">
-          <h1 className="text-3xl font-semibold tracking-normal text-slate-950">JinaCampus</h1>
-          <p className="mt-1 text-base font-semibold text-brand-700">The Complete School OS</p>
-          <p className="mt-1 max-w-full break-words text-sm leading-5 text-slate-500">powered by Parshav Insights</p>
-          <p className="mt-3 text-sm leading-5 text-slate-600">Secure access for your school account.</p>
-        </div>
+        <h1 className="mt-3 text-2xl font-semibold text-ink sm:text-3xl">Welcome back</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Use the School ID and account details provided by your institution.</p>
+        {attendanceIntent ? (
+          <p className="mt-3 text-sm font-medium leading-6 text-teal-800">
+            Use a registered passkey for the quickest route to staff attendance.
+          </p>
+        ) : null}
         {logoUrl || schoolName ? (
-          <div className="mt-5 flex min-h-12 items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white/78 px-3 py-2 text-left">
-            {logoUrl ? <img src={logoUrl} alt={`${displayName} logo`} className="h-9 w-9 shrink-0 rounded-xl border border-slate-100 object-cover" /> : null}
-            <p className="min-w-0 truncate text-sm font-semibold text-slate-700">{displayName}</p>
+          <div className="auth-context-row mt-5 flex min-h-14 items-center gap-3 px-4 py-3">
+            {logoUrl ? <img src={logoUrl} alt={`${displayName} logo`} className="h-11 w-11 shrink-0 rounded-[0.9rem] border border-white object-cover shadow-sm" /> : null}
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-slate-500">School workspace</p>
+              <p className="truncate text-sm font-semibold text-ink">{displayName}</p>
+            </div>
           </div>
         ) : null}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1" role="tablist" aria-label="Login method">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "password"}
-          disabled={isPending}
-          onClick={() => selectMode("password")}
-          className={`min-h-11 rounded-xl px-3 text-sm font-semibold transition premium-focus ${mode === "password" ? "bg-white text-brand-700 shadow-sm" : "text-slate-600"}`}
-        >
-          Email & password
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "otp"}
-          disabled={isPending}
-          onClick={() => selectMode("otp")}
-          className={`min-h-11 rounded-xl px-3 text-sm font-semibold transition premium-focus ${mode === "otp" ? "bg-white text-brand-700 shadow-sm" : "text-slate-600"}`}
-        >
-          OTP login
-        </button>
-      </div>
-
-      <div className="mt-5 space-y-4">
+      <form onSubmit={onPasswordSubmit} className="mt-6 space-y-4" aria-label="JinaCampus sign in">
         {schoolIdLocked ? (
           <>
             <input type="hidden" name="schoolId" value={schoolId ?? ""} />
-            <p className="rounded-2xl border border-brand-100 bg-brand-50/80 px-4 py-3 text-sm font-semibold text-brand-700">
-              School ID selected for this login: {schoolId}
+            <p className="rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 text-sm font-semibold text-brand-700">
+              School ID: {schoolId}
             </p>
           </>
         ) : (
           <FormField id="schoolId" label="School ID" required helpText="Use the School ID provided by your administrator.">
             <input
               id="schoolId"
-              className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-950 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-              name="schoolId"
+              className="auth-field-input w-full outline-none transition disabled:bg-slate-50"
               autoComplete="organization"
               autoCapitalize="none"
               autoCorrect="off"
@@ -283,113 +253,94 @@ export function LoginForm({ schoolId, schoolIdLocked, schoolName, logoUrl }: Log
           </FormField>
         )}
 
-        {mode === "password" ? (
-          <form onSubmit={onPasswordSubmit} className="space-y-4" aria-label="Email and password login">
-            <FormField id="email" label="Email" required>
-              <input
-                id="email"
-                className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-950 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-                name="email"
-                type="email"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                inputMode="email"
-                disabled={isPending}
-                required
-                value={emailValue}
-                onChange={(event) => setEmailValue(normalizeEmailInput(event.target.value))}
-                onBlur={() => setEmailValue((current) => normalizeEmailForSubmit(current))}
-              />
-            </FormField>
-            <FormField id="password" label="Password" required>
-              <PasswordInput
-                id="password"
-                className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-950 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-                name="password"
-                autoComplete="current-password"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                disabled={isPending}
-                required
-              />
-              <p className="mt-2 text-xs font-medium leading-5 text-slate-500">Password is case-sensitive. A and a are different.</p>
-            </FormField>
-            <div className="flex justify-end">
-              <Link href={recoveryHref} className="text-sm font-semibold text-brand-700 transition hover:text-brand-800 premium-focus">
-                Forgot password?
-              </Link>
-            </div>
-            <button type="submit" disabled={isPending} className="premium-primary-button min-h-12 w-full gap-2 text-base premium-focus disabled:cursor-not-allowed disabled:opacity-70" aria-live="polite">
-              {pendingAction === "password" ? <><LoadingSpinner />Signing in...</> : "Sign in"}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={onOtpSubmit} className="space-y-4" aria-label="Administrator OTP login">
-            <FormField id="otp-phone" label="Contact number" required helpText="OTP login is available to tenant owners and school admins.">
-              <input
-                id="otp-phone"
-                className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-950 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-50"
-                name="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                disabled={isPending || otpRequested}
-                required
-                value={phoneValue}
-                onChange={(event) => setPhoneValue(normalizePhoneInput(event.target.value))}
-                placeholder="+91 98765 43210"
-              />
-            </FormField>
-            {otpRequested ? (
-              <FormField id="otp-code" label="6-digit OTP" required>
-                <input
-                  id="otp-code"
-                  className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-xl font-semibold tracking-[0.35em] text-slate-950 shadow-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:bg-slate-50"
-                  name="otp"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  disabled={isPending}
-                  required
-                  value={otpValue}
-                  onChange={(event) => setOtpValue(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                />
-              </FormField>
-            ) : null}
-            <button type="submit" disabled={isPending} className="premium-primary-button min-h-12 w-full gap-2 text-base premium-focus disabled:cursor-not-allowed disabled:opacity-70" aria-live="polite">
-              {pendingAction === "requestOtp" ? <><LoadingSpinner />Sending OTP...</> : pendingAction === "verifyOtp" ? <><LoadingSpinner />Verifying...</> : otpRequested ? "Verify & sign in" : "Send OTP"}
-            </button>
-            {otpRequested ? (
-              <button
-                type="button"
-                onClick={requestOtp}
-                disabled={isPending || resendSeconds > 0}
-                className="premium-secondary-button min-h-11 w-full premium-focus disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {resendSeconds > 0 ? `Resend OTP in ${resendSeconds}s` : "Resend OTP"}
-              </button>
-            ) : null}
-          </form>
-        )}
+        <FormField
+          id="identifier"
+          label="Employee code or email"
+          required
+          helpText="Staff can use the employee code on their profile. Email login remains supported."
+        >
+          <input
+            id="identifier"
+            className="auth-field-input w-full outline-none transition disabled:bg-slate-50"
+            name="identifier"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            disabled={isPending}
+            required
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
+            onBlur={() => setIdentifier((current) => normalizeIdentifier(current))}
+          />
+        </FormField>
 
-        {notice ? <p role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-700">{notice}</p> : null}
-        {error ? <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold leading-6 text-red-700 shadow-sm">{error}</p> : null}
-        <div className="flex justify-center">
-          <Link href="/administrator/login" className="text-sm font-semibold text-slate-600 transition hover:text-brand-700 premium-focus">
-            Administrator Login
+        <button
+          type="button"
+          onClick={onPasskeySignIn}
+          disabled={isPending}
+          className="auth-action-button auth-action-primary premium-focus"
+          aria-live="polite"
+        >
+          {pendingAction === "passkey"
+            ? <><LoadingSpinner />Checking passkey...</>
+            : <><PasskeyIcon />{attendanceIntent ? "Open attendance with passkey" : "Sign in with passkey"}</>}
+        </button>
+
+        <div className="flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-slate-200" />
+          <span className="text-xs font-semibold uppercase text-slate-400">Password fallback</span>
+          <span className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <FormField id="password" label="Password" required>
+          <PasswordInput
+            id="password"
+            className="auth-field-input w-full outline-none transition disabled:bg-slate-50"
+            name="password"
+            autoComplete="current-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            disabled={isPending}
+            required
+          />
+          <p className="mt-2 text-xs font-medium leading-5 text-slate-500">Password is case-sensitive. A and a are different.</p>
+        </FormField>
+
+        <div className="flex justify-end">
+          <Link href={recoveryHref} className="inline-flex min-h-12 items-center text-sm font-semibold text-brand-700 transition hover:text-brand-800 premium-focus">
+            Forgot password?
           </Link>
         </div>
-      </div>
+        <button type="submit" disabled={isPending} className="auth-action-button auth-action-secondary premium-focus" aria-live="polite">
+          {pendingAction === "password"
+            ? <><LoadingSpinner />Signing in...</>
+            : attendanceIntent ? "Continue to attendance" : "Sign in with password"}
+        </button>
+
+        {error ? (
+          <p role="alert" className="rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold leading-6 text-red-700 shadow-sm">
+            {error}
+          </p>
+        ) : null}
+        <div className="flex justify-center">
+          {attendanceIntent ? (
+            <Link href={standardLoginHref} className="inline-flex min-h-12 items-center text-sm font-semibold text-slate-600 transition hover:text-brand-700 premium-focus">
+              Back to standard sign in
+            </Link>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <Link href={attendanceLoginHref} className="inline-flex min-h-12 items-center text-sm font-semibold text-teal-700 transition hover:text-teal-800 premium-focus">
+                Quick attendance sign in
+              </Link>
+              <Link href="/administrator/login" className="inline-flex min-h-12 items-center text-sm font-semibold text-slate-600 transition hover:text-brand-700 premium-focus">
+                Administrator Login
+              </Link>
+            </div>
+          )}
+        </div>
+      </form>
     </section>
   );
 }
