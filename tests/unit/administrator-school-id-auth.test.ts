@@ -217,4 +217,19 @@ describe("independent Administrator Portal and School ID login", () => {
     expect(form).not.toMatch(/submittedPassword\.(?:trim|toLowerCase|toUpperCase)\(/);
     expect(source("src/modules/campus-core/components/administrator-school-forms.tsx")).not.toMatch(/passwordHash|tokenHash/);
   });
+
+  it("loads local database configuration before the platform provisioning script", () => {
+    const packageJson = JSON.parse(source("package.json")) as {
+      scripts?: Record<string, string>;
+    };
+    const provisionCommand = packageJson.scripts?.["platform-admin:provision"] ?? "";
+    const provisionScript = source("scripts/provision-platform-administrator.ts");
+
+    expect(provisionCommand).toContain("--env-file-if-exists=.env");
+    expect(provisionCommand).toContain("--env-file-if-exists=.env.local");
+    expect(provisionCommand).toContain("--import tsx scripts/provision-platform-administrator.ts");
+    expect(provisionScript).toContain("PLATFORM_ADMIN_BOOTSTRAP_ENABLED");
+    expect(provisionScript).toContain("hashPassword(input.temporaryPassword)");
+    expect(provisionScript).not.toMatch(/JinaCampus@Admin|parshwainsights@gmail\.com/);
+  });
 });

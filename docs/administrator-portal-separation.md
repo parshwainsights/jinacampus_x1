@@ -61,7 +61,7 @@ No credential value belongs in Git, documentation, migration SQL, Vercel build l
 - The first disposable-school provisioning attempt exposed the default five-second Prisma interactive-transaction timeout. The transaction rolled back without creating a partial school.
 - A second attempt confirmed that increasing the timeout alone was insufficient because per-permission queries caused excessive managed-database round trips. Role and role-permission provisioning was converted to fixed-count bulk queries.
 - The final disposable-school smoke created default tenant dependencies, invoked exact-confirmation permanent deletion, found zero remaining tenant-owned rows across all tenant-scoped models, and confirmed that the platform audit row remained.
-- Temporary-credential reprovisioning with `mustChange=true` remains an operator step before final login smoke; credentials are not stored in this document.
+- The independent platform administrator was reprovisioned through the guarded command, prior platform sessions were revoked, and a non-sensitive read-only check confirmed `ACTIVE`, `mustChange=true`, and a retained provisioning audit. Credentials are not stored in this document.
 
 ## Rollback Note
 
