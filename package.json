@@ -19,6 +19,7 @@
     "db:migrate:status": "prisma migrate status",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
+    "brand:qr:generate": "node --import tsx scripts/generate-website-qr.ts",
     "demo:qa:reset": "tsx prisma/demo-qa-reset.ts",
     "platform-admin:provision": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx scripts/provision-platform-administrator.ts",
     "smoke:notifications:whatsapp": "tsx scripts/whatsapp-notification-db-smoke.ts",
