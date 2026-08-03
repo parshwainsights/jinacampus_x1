@@ -1,23 +1,26 @@
 import { redirect } from "next/navigation";
+
 import {
-  getTenantContext,
-  isPasswordChangeRequiredError,
-  type TenantContext
-} from "@/lib/tenant/context";
-import { hasPlatformAdminRole } from "@/lib/rbac/roles";
+  getPlatformAdministratorContext,
+  isPlatformAdministratorPasswordChangeRequiredError,
+  type PlatformAdministratorContext
+} from "@/lib/auth/platform-administrator-session";
 
-export async function requireAdministratorContext() {
-  let ctx: TenantContext;
-
+export async function requireAdministratorContext(): Promise<PlatformAdministratorContext> {
   try {
-    ctx = await getTenantContext();
+    return await getPlatformAdministratorContext();
   } catch (error) {
-    if (isPasswordChangeRequiredError(error)) {
-      redirect("/account/change-password?required=1");
+    if (isPlatformAdministratorPasswordChangeRequiredError(error)) {
+      redirect("/administrator/account/change-password?required=1");
     }
     redirect("/administrator/login");
   }
+}
 
-  if (!hasPlatformAdminRole(ctx.roleCodes ?? [])) redirect("/dashboard");
-  return ctx;
+export async function requireAdministratorContextForPasswordChange(): Promise<PlatformAdministratorContext> {
+  try {
+    return await getPlatformAdministratorContext({ allowPasswordChangeRequired: true });
+  } catch {
+    redirect("/administrator/login");
+  }
 }

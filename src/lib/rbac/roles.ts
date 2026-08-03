@@ -45,20 +45,6 @@ const userGovernancePermissions = [
   "campuscore.user.deactivate",
   "campuscore.user.reset_password"
 ] as const;
-const platformGovernancePermissions = [
-  "platform.dashboard.view",
-  "platform.tenant.manage",
-  "platform.institution.manage",
-  "platform.school.view",
-  "platform.school.create",
-  "platform.school.update",
-  "platform.school.deactivate",
-  "platform.school.delete",
-  "platform.school.update_school_id",
-  "platform.user.manage",
-  "platform.audit.view"
-] as const;
-
 export const PLATFORM_ADMIN_ROLE_CODES = ["ADMINISTRATOR"] as const;
 export const PRINCIPAL_ASSIGNABLE_ROLE_CODES = [
   "OFFICE_STAFF",
@@ -106,9 +92,6 @@ export function isOperationalRoleCode(roleCode: string): roleCode is Operational
 }
 
 export function canAssignRole(actorRoleCodes: readonly string[] = [], targetRoleCode: string) {
-  if (hasPlatformAdminRole(actorRoleCodes)) {
-    return SCHOOL_OPERATIONAL_ROLE_CODES.some((code) => code === targetRoleCode);
-  }
   if (!hasPrincipalRole(actorRoleCodes)) return false;
   return PRINCIPAL_ASSIGNABLE_ROLE_CODES.some((code) => code === targetRoleCode);
 }
@@ -145,11 +128,9 @@ const teacherPermissions = [
 ] as const satisfies readonly PermissionCode[];
 
 export const ROLE_PERMISSION_MAP: Record<KnownRoleCode, readonly PermissionCode[]> = {
-  ADMINISTRATOR: [
-    ...platformGovernancePermissions,
-    "campuscore.tenant.view",
-    "campuscore.audit.view"
-  ],
+  // Legacy tenant-role alias only. Platform administrators authenticate through
+  // platform_administrators and never receive tenant permissions.
+  ADMINISTRATOR: [],
   PRINCIPAL: principalPermissions,
   OFFICE_STAFF: [
     ...tenantContextPermission,

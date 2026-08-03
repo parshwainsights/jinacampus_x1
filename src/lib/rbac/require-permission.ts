@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { isPermissionCode, type PermissionCode } from "@/lib/rbac/permissions";
-import { hasPlatformAdminRole } from "@/lib/rbac/roles";
 import type { TenantContext } from "@/lib/tenant/context";
 
 type PermissionScopeInput = {
@@ -19,7 +18,7 @@ export async function getEffectivePermissions(input: PermissionScopeInput): Prom
   const now = new Date();
   const academicYearId = input.academicYearId ?? ctx.activeAcademicYearId;
 
-  if (branchId && !ctx.accessibleBranchIds.includes(branchId) && !hasPlatformAdminRole(ctx.roleCodes ?? [])) {
+  if (branchId && !ctx.accessibleBranchIds.includes(branchId)) {
     throw new Error("FORBIDDEN_BRANCH_ACCESS");
   }
 

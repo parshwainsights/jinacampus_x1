@@ -82,12 +82,6 @@ export default async function AdministratorSchoolsPage({ searchParams }: { searc
                 <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-500">{formatDate(school.updatedAt)}</td>
                 <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex flex-wrap gap-2">
-                    <TableActionLink
-                      href={`/administrator/schools/${school.id}/dashboard`}
-                      ariaLabel={`Open Administrator View dashboard for ${school.name}`}
-                    >
-                      Open School Dashboard
-                    </TableActionLink>
                     <TableActionLink href={`/administrator/schools/${school.id}`}>View</TableActionLink>
                     <TableActionLink href={`/administrator/schools/${school.id}/edit`}>Edit</TableActionLink>
                   </div>
@@ -110,7 +104,7 @@ export default async function AdministratorSchoolsPage({ searchParams }: { searc
       <AdministratorShell ctx={ctx} activeHref="/administrator/schools">
         <PermissionState
           title="School registry unavailable"
-          description="Your administrator account does not have permission to view schools."
+          description="The school registry could not be loaded. Verify the platform session and database availability."
         />
       </AdministratorShell>
     );

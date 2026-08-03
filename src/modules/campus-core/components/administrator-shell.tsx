@@ -1,14 +1,15 @@
-import { CirclePlus, LayoutDashboard, School, ShieldCheck, type LucideIcon } from "lucide-react";
+import { CirclePlus, LayoutDashboard, School, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
-import type { TenantContext } from "@/lib/tenant/context";
+import type { PlatformAdministratorContext } from "@/lib/auth/platform-administrator-session";
 
 const administratorNavItems: readonly { href: string; label: string; Icon: LucideIcon }[] = [
   { href: "/administrator", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/administrator/schools", label: "Schools", Icon: School },
-  { href: "/administrator/schools/create", label: "Create School", Icon: CirclePlus }
+  { href: "/administrator/schools/create", label: "Create School", Icon: CirclePlus },
+  { href: "/administrator/profile", label: "Profile", Icon: UserRound }
 ];
 
 function AdministratorNavigationLinks({ activeHref, desktop = false }: { activeHref?: string; desktop?: boolean }) {
@@ -67,7 +68,7 @@ export function AdministratorShell({
   children,
   activeHref
 }: {
-  ctx: TenantContext;
+  ctx: PlatformAdministratorContext;
   children: ReactNode;
   activeHref?: string;
 }) {
@@ -80,7 +81,7 @@ export function AdministratorShell({
             <div className="min-w-0 border-l-0 sm:border-l sm:border-campus-border sm:pl-4">
               <p className="premium-muted-chip">JinaCampus Administrator Portal</p>
               <h1 className="mt-2 text-xl font-semibold text-ink">School and tenant governance</h1>
-              <p className="mt-1 truncate text-sm text-slate-500">Signed in as {ctx.userEmail}</p>
+              <p className="mt-1 truncate text-sm text-slate-500">Signed in as {ctx.email}</p>
             </div>
           </div>
           <form action="/api/auth/administrator-logout" method="post">
@@ -103,7 +104,7 @@ export function AdministratorShell({
           <div className="flex shrink-0 items-center gap-3 rounded-[1.65rem] border border-white/90 bg-white/65 p-1.5 pl-4 shadow-[0_16px_42px_rgba(11,22,56,0.12),inset_0_1px_0_rgba(255,255,255,0.95)] backdrop-blur-2xl">
             <div className="min-w-0 text-right">
               <p className="text-[11px] font-medium text-slate-500">Signed in</p>
-              <p className="max-w-[15rem] truncate text-xs font-semibold text-ink">{ctx.userEmail}</p>
+              <p className="max-w-[15rem] truncate text-xs font-semibold text-ink">{ctx.email}</p>
             </div>
             <form action="/api/auth/administrator-logout" method="post">
               <button className="premium-secondary-button rounded-[1.2rem] border-transparent bg-white/90 premium-focus">Logout</button>
@@ -117,7 +118,7 @@ export function AdministratorShell({
           <nav aria-label="Administrator navigation" className="grid gap-2">
             <AdministratorNavigationLinks activeHref={activeHref} />
             <div className="mt-2 rounded-xl border border-dashed border-slate-200 bg-white/60 px-3 py-2 text-xs leading-5 text-slate-500">
-              Open a selected school dashboard from the Schools registry. Administrator view does not impersonate school users.
+              Platform administrators manage school records only. School workspaces and school user sessions remain separate.
             </div>
           </nav>
         </aside>

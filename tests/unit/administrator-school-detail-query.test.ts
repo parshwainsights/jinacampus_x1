@@ -8,23 +8,23 @@ const mocks = vi.hoisted(() => ({
       findUnique: vi.fn()
     }
   },
-  getEffectivePermissions: vi.fn(),
-  writeAuditLog: vi.fn(),
-  hashPassword: vi.fn()
+  writePlatformAuditLog: vi.fn(),
+  hashPassword: vi.fn(),
+  verifyPassword: vi.fn()
 }));
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
-vi.mock("@/lib/rbac/require-permission", () => ({
-  getEffectivePermissions: mocks.getEffectivePermissions
+vi.mock("@/lib/audit/platform-audit-log", () => ({ writePlatformAuditLog: mocks.writePlatformAuditLog }));
+vi.mock("@/lib/auth/password", () => ({
+  hashPassword: mocks.hashPassword,
+  verifyPassword: mocks.verifyPassword
 }));
-vi.mock("@/lib/audit/audit-log", () => ({ writeAuditLog: mocks.writeAuditLog }));
-vi.mock("@/lib/auth/password", () => ({ hashPassword: mocks.hashPassword }));
 
 import {
   getSchoolByIdForAdministrator,
   getSchoolDependencySummary
 } from "@/modules/campus-core/administrator-services";
-import type { TenantContext } from "@/lib/tenant/context";
+import type { PlatformAdministratorContext } from "@/lib/auth/platform-administrator-session";
 
 const dependencyCounts = {
   institutions: 1,
@@ -39,20 +39,16 @@ const dependencyCounts = {
   roles: 10
 };
 
-const administratorContext: TenantContext = {
-  tenantId: "platform-tenant-id",
-  userId: "platform-admin-id",
-  userEmail: "administrator@example.test",
-  userType: "OWNER",
-  activeBranchId: null,
-  accessibleBranchIds: [],
-  activeAcademicYearId: null,
-  roleCodes: ["ADMINISTRATOR"]
+const administratorContext: PlatformAdministratorContext = {
+  administratorId: "platform-admin-id",
+  sessionId: "platform-session-id",
+  email: "administrator@example.test",
+  displayName: "Platform Administrator",
+  passwordChangeRequired: false
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getEffectivePermissions.mockResolvedValue(new Set(["platform.school.view"]));
 });
 
 describe("administrator school detail query", () => {

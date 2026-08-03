@@ -1,8 +1,4 @@
-import {
-  hasPlatformAdminRole,
-  hasPrincipalRole,
-  hasTeacherRole
-} from "@/lib/rbac/roles";
+import { hasPrincipalRole, hasTeacherRole } from "@/lib/rbac/roles";
 
 function schoolWorkspaceCount(roleCodes: readonly string[]) {
   return [
@@ -14,7 +10,6 @@ function schoolWorkspaceCount(roleCodes: readonly string[]) {
 }
 
 export function getPostLoginRedirectPath(roleCodes: readonly string[] = []) {
-  if (hasPlatformAdminRole(roleCodes)) return "/administrator";
   if (schoolWorkspaceCount(roleCodes) > 1) return "/account/workspaces";
   if (hasPrincipalRole(roleCodes)) return "/dashboard";
   if (roleCodes.includes("OFFICE_STAFF")) return "/dashboard";

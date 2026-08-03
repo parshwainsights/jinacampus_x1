@@ -231,7 +231,7 @@ export function SchoolLifecycleActions({ school }: { school: Pick<SchoolFormReco
         <div>
           <h2 className="text-lg font-semibold text-rose-950">Lifecycle Controls</h2>
           <p className="mt-1 text-sm leading-6 text-rose-800">
-            Deactivation is the normal operating control. Hard delete is only allowed for schools with no dependent data.
+            Deactivation pauses school access. Permanent deletion removes the school and all tenant-owned data in one audited transaction.
           </p>
         </div>
         <span className="premium-muted-chip border-rose-200 bg-white/70 text-rose-700">Audit logged</span>
@@ -264,16 +264,16 @@ export function SchoolLifecycleActions({ school }: { school: Pick<SchoolFormReco
           <input type="hidden" name="tenantId" value={school.id} />
           <h3 className="text-sm font-semibold text-rose-950">Hard Delete</h3>
           <p className="mt-1 text-sm leading-6 text-rose-700">
-            Hard delete is blocked when users, roles, branches, institutions, audit logs, or attendance data exist.
+            This action permanently removes the school, users, academic records, attendance history, configuration, and tenant audit history. It cannot be undone.
           </p>
           <div className="mt-3">
             <FormMessage state={deleteState} />
           </div>
-          <FormField id="confirm-delete-school" label="Type DELETE SCHOOL" error={fieldError(deleteState, "confirmDelete")}>
-            <input id="confirm-delete-school" name="confirmDelete" className={inputClassName} />
+          <FormField id="confirm-delete-school" label="Type Delete School" error={fieldError(deleteState, "confirmDelete")}>
+            <input id="confirm-delete-school" name="confirmDelete" autoComplete="off" className={inputClassName} />
           </FormField>
           <button disabled={deletePending} className="premium-danger-button mt-4 w-full premium-focus sm:w-auto">
-            {deletePending ? "Checking..." : "Delete If Safe"}
+            {deletePending ? "Deleting..." : "Delete School Permanently"}
           </button>
         </form>
       </div>

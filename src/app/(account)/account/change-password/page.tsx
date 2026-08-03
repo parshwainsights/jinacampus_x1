@@ -1,6 +1,5 @@
 import { requireAuthForPasswordChange } from "@/lib/auth/require-auth";
 import { BrandLogo } from "@/components/brand/brand-logo";
-import { hasPlatformAdminRole } from "@/lib/rbac/roles";
 import { ChangeOwnPasswordForm } from "@/modules/campus-core/components/campus-core-profile-forms";
 import { PasskeyManager } from "@/modules/campus-core/components/passkey-manager";
 
@@ -18,7 +17,7 @@ export default async function ChangePasswordPage() {
         ) : null}
         <ChangeOwnPasswordForm
           userEmail={ctx.userEmail}
-          backHref={hasPlatformAdminRole(ctx.roleCodes ?? []) ? "/administrator" : "/dashboard"}
+          backHref="/dashboard"
         />
         {!ctx.passwordChangeRequired ? <PasskeyManager schoolId={ctx.tenantSlug} /> : null}
       </div>

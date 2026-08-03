@@ -126,8 +126,8 @@ export const reactivateSchoolSchema = z.object({
 
 export const deleteSchoolSchema = z.object({
   tenantId: uuid,
-  confirmDelete: z.string().trim().min(1)
-}).refine((value) => value.confirmDelete === "DELETE SCHOOL", {
-  message: "Type DELETE SCHOOL to confirm hard delete.",
+  confirmDelete: z.string().min(1)
+}).refine((value) => value.confirmDelete === "Delete School", {
+  message: "Type Delete School exactly to confirm permanent deletion.",
   path: ["confirmDelete"]
 });

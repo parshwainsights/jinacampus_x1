@@ -110,6 +110,8 @@ Acceptance criteria:
 Create explicit mappings for the approved five-role model:
 
 - [x] `ADMINISTRATOR` as a separately provisioned JinaCampus platform operator
+- [x] Separate platform administrator identity, credential, session cookie, profile, password flow, and retained audit log from every school tenant.
+- [x] Replace dependency-blocked school deletion with exact-confirmation transactional tenant teardown and retained platform audit.
 - [x] `PRINCIPAL`
 - [x] `OFFICE_STAFF`
 - [x] `TEACHER`

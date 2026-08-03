@@ -17,7 +17,7 @@ describe("attendance fast login and workspace selection", () => {
     expect(getPostLoginRedirectPath(["STAFF"])).toBe("/staffboard/attendance/scan");
     expect(getPostLoginRedirectPath(["TEACHER", "STAFF"])).toBe("/account/workspaces");
     expect(getPostLoginRedirectPath(["PRINCIPAL", "TEACHER"])).toBe("/account/workspaces");
-    expect(getPostLoginRedirectPath(["ADMINISTRATOR"])).toBe("/administrator");
+    expect(getPostLoginRedirectPath(["ADMINISTRATOR"])).toBe("/dashboard");
   });
 
   it("returns only workspaces authorized by merged server permissions", () => {

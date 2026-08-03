@@ -4,26 +4,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   db: {
-    user: { findMany: vi.fn(), update: vi.fn() },
-    session: { create: vi.fn() }
+    $transaction: vi.fn(),
+    platformAdministrator: { findUnique: vi.fn(), update: vi.fn() },
+    platformAdministratorSession: { create: vi.fn() }
   },
   verifyPassword: vi.fn(),
-  createRawSessionToken: vi.fn(),
-  getSessionExpiresAt: vi.fn(),
-  hashSessionToken: vi.fn(),
-  setSessionCookie: vi.fn(),
-  writeAuditLog: vi.fn()
+  createRawPlatformAdministratorSessionToken: vi.fn(),
+  getPlatformAdministratorSessionExpiresAt: vi.fn(),
+  hashPlatformAdministratorSessionToken: vi.fn(),
+  setPlatformAdministratorSessionCookie: vi.fn(),
+  writePlatformAuditLog: vi.fn()
 }));
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
 vi.mock("@/lib/auth/password", () => ({ verifyPassword: mocks.verifyPassword }));
-vi.mock("@/lib/auth/session", () => ({
-  createRawSessionToken: mocks.createRawSessionToken,
-  getSessionExpiresAt: mocks.getSessionExpiresAt,
-  hashSessionToken: mocks.hashSessionToken
+vi.mock("@/lib/auth/platform-administrator-session", () => ({
+  createRawPlatformAdministratorSessionToken: mocks.createRawPlatformAdministratorSessionToken,
+  getPlatformAdministratorSessionExpiresAt: mocks.getPlatformAdministratorSessionExpiresAt,
+  hashPlatformAdministratorSessionToken: mocks.hashPlatformAdministratorSessionToken,
+  setPlatformAdministratorSessionCookie: mocks.setPlatformAdministratorSessionCookie
 }));
-vi.mock("@/lib/auth/cookies", () => ({ setSessionCookie: mocks.setSessionCookie }));
-vi.mock("@/lib/audit/audit-log", () => ({ writeAuditLog: mocks.writeAuditLog }));
+vi.mock("@/lib/audit/platform-audit-log", () => ({
+  writePlatformAuditLog: mocks.writePlatformAuditLog
+}));
 
 import { POST } from "@/app/api/auth/administrator-login/route";
 import {
@@ -31,15 +34,12 @@ import {
   validateSchoolId
 } from "@/modules/campus-core/tenant-login-policy";
 
-const platformUser = {
-  id: "platform-admin-user-id",
-  tenantId: "platform-tenant-id",
-  email: "admin@demo.jinacampus.test",
-  userType: "OWNER",
+const platformAdministrator = {
+  id: "platform-administrator-id",
+  email: "operator@example.test",
+  displayName: "Platform Operator",
   status: "ACTIVE",
-  tenant: { id: "platform-tenant-id", name: "JinaCampus Platform", status: "ACTIVE" },
-  passwordCredential: { passwordHash: "stored-admin-hash", mustChange: false },
-  roleAssignments: [{ role: { code: "ADMINISTRATOR", isActive: true } }]
+  credential: { passwordHash: "stored-administrator-hash", mustChange: false }
 };
 
 function source(path: string) {
@@ -56,26 +56,24 @@ function adminLoginRequest(body: Record<string, unknown>) {
 
 async function postAdminLogin(body: Record<string, unknown>) {
   const response = await POST(adminLoginRequest(body));
-  return {
-    status: response.status,
-    body: await response.json()
-  };
+  return { status: response.status, body: await response.json() };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.db.user.findMany.mockResolvedValue([platformUser]);
-  mocks.db.user.update.mockResolvedValue({});
-  mocks.db.session.create.mockResolvedValue({});
+  mocks.db.platformAdministrator.findUnique.mockResolvedValue(platformAdministrator);
+  mocks.db.platformAdministrator.update.mockResolvedValue({});
+  mocks.db.platformAdministratorSession.create.mockResolvedValue({ id: "platform-session-id" });
+  mocks.db.$transaction.mockImplementation(async (callback: (client: typeof mocks.db) => unknown) => callback(mocks.db));
   mocks.verifyPassword.mockResolvedValue(true);
-  mocks.createRawSessionToken.mockReturnValue("raw-administrator-session-token");
-  mocks.hashSessionToken.mockResolvedValue("hashed-administrator-session-token");
-  mocks.getSessionExpiresAt.mockReturnValue(new Date("2026-06-03T00:00:00.000Z"));
-  mocks.setSessionCookie.mockResolvedValue(undefined);
-  mocks.writeAuditLog.mockResolvedValue(undefined);
+  mocks.createRawPlatformAdministratorSessionToken.mockReturnValue("raw-platform-session-token");
+  mocks.hashPlatformAdministratorSessionToken.mockResolvedValue("hashed-platform-session-token");
+  mocks.getPlatformAdministratorSessionExpiresAt.mockReturnValue(new Date("2026-08-03T00:00:00.000Z"));
+  mocks.setPlatformAdministratorSessionCookie.mockResolvedValue(undefined);
+  mocks.writePlatformAuditLog.mockResolvedValue(undefined);
 });
 
-describe("administrator portal and School ID login", () => {
+describe("independent Administrator Portal and School ID login", () => {
   it("validates School IDs with reserved platform words blocked", () => {
     expect(validateSchoolId(" JinaCampus-Demo ")).toEqual({ ok: true, schoolId: "jinacampus-demo" });
     expect(validateSchoolId("admin")).toEqual({
@@ -88,28 +86,34 @@ describe("administrator portal and School ID login", () => {
     });
   });
 
-  it("logs in platform administrators through the administrator route only", async () => {
+  it("logs in through the independent platform administrator table and session", async () => {
     const result = await postAdminLogin({
-      email: "admin@demo.jinacampus.test",
+      email: platformAdministrator.email,
       password: "correct-password"
     });
 
     expect(result).toEqual({ status: 200, body: { ok: true, redirectTo: "/administrator" } });
-    expect(mocks.db.user.findMany.mock.calls[0][0].where.roleAssignments.some.role.code.in).toEqual(["ADMINISTRATOR"]);
-    expect(mocks.db.session.create.mock.calls[0][0].data).toEqual(expect.objectContaining({
-      tenantId: platformUser.tenantId,
-      userId: platformUser.id,
-      tokenHash: "hashed-administrator-session-token"
+    expect(mocks.db.platformAdministrator.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { email: platformAdministrator.email }
     }));
-    expect(mocks.setSessionCookie).toHaveBeenCalledWith("raw-administrator-session-token", expect.any(Date));
-    expect(JSON.stringify(result.body)).not.toMatch(/passwordHash|tokenHash|tenantId|raw-administrator-session-token/i);
+    expect(mocks.db.platformAdministratorSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        administratorId: platformAdministrator.id,
+        tokenHash: "hashed-platform-session-token"
+      })
+    });
+    expect(mocks.setPlatformAdministratorSessionCookie).toHaveBeenCalledWith(
+      "raw-platform-session-token",
+      expect.any(Date)
+    );
+    expect(JSON.stringify(result.body)).not.toMatch(/passwordHash|tokenHash|tenantId|raw-platform-session-token/i);
   });
 
-  it("returns one safe administrator error shape for invalid administrator attempts", async () => {
-    mocks.db.user.findMany.mockResolvedValue([]);
+  it("returns one safe error shape without consulting tenant users", async () => {
+    mocks.db.platformAdministrator.findUnique.mockResolvedValue(null);
 
     const result = await postAdminLogin({
-      email: "principal@demo.jinacampus.test",
+      email: "principal@example.test",
       password: "candidate-password"
     });
 
@@ -117,128 +121,100 @@ describe("administrator portal and School ID login", () => {
     expect(JSON.stringify(result.body)).not.toMatch(/role|tenant|passwordHash|tokenHash|principal|teacher|staff/i);
   });
 
-  it("routes platform administrators with temporary credentials through forced password change", async () => {
-    mocks.db.user.findMany.mockResolvedValue([{
-      ...platformUser,
-      passwordCredential: { ...platformUser.passwordCredential, mustChange: true }
-    }]);
+  it("routes temporary platform credentials through the platform password page", async () => {
+    mocks.db.platformAdministrator.findUnique.mockResolvedValue({
+      ...platformAdministrator,
+      credential: { ...platformAdministrator.credential, mustChange: true }
+    });
 
     const result = await postAdminLogin({
-      email: platformUser.email,
+      email: platformAdministrator.email,
       password: "correct-password"
     });
 
     expect(result).toEqual({
       status: 200,
-      body: { ok: true, redirectTo: "/account/change-password?required=1" }
+      body: { ok: true, redirectTo: "/administrator/account/change-password?required=1" }
     });
   });
 
-  it("keeps school login and administrator login separated in routes and UI", () => {
-    expect(existsSync(resolve(process.cwd(), "src/app/administrator/login/page.tsx"))).toBe(true);
-    expect(existsSync(resolve(process.cwd(), "src/app/api/auth/administrator-login/route.ts"))).toBe(true);
-    expect(existsSync(resolve(process.cwd(), "src/app/api/auth/login/route.ts"))).toBe(true);
+  it("keeps school and platform authentication separate in schema, cookies, and routes", () => {
+    const schema = source("prisma/schema.prisma");
+    const proxy = source("proxy.ts");
+    const platformSession = source("src/lib/auth/platform-administrator-session.ts");
+    const loginRoute = source("src/app/api/auth/administrator-login/route.ts");
 
-    expect(source("src/components/auth/login-form.tsx")).toContain("Administrator Login");
-    expect(source("src/components/auth/login-form.tsx")).toContain("School ID");
-    expect(source("src/components/auth/administrator-login-form.tsx")).toContain("JinaCampus Administrator");
-    expect(source("src/components/auth/administrator-login-form.tsx")).not.toContain("School ID");
-    expect(source("src/app/api/auth/login/route.ts")).toContain("SCHOOL_LOGIN_ERROR_MESSAGE");
-    expect(source("src/app/api/auth/administrator-login/route.ts")).toContain("ADMINISTRATOR_LOGIN_ERROR_MESSAGE");
+    expect(schema).toContain("model PlatformAdministrator");
+    expect(schema).toContain("model PlatformAdministratorCredential");
+    expect(schema).toContain("model PlatformAdministratorSession");
+    expect(schema).toContain("model PlatformAuditLog");
+    expect(proxy).toContain("PLATFORM_SESSION_COOKIE_NAME");
+    expect(proxy).toContain("hasPlatformSession");
+    expect(platformSession).toContain("PLATFORM_SESSION_HASH_DOMAIN");
+    expect(loginRoute).toContain("db.platformAdministrator.findUnique");
+    expect(loginRoute).not.toContain("db.user");
+    expect(loginRoute).not.toContain("roleAssignments");
   });
 
-  it("keeps administrator credentials case-safe and rejects invisible paste artifacts", () => {
-    const form = source("src/components/auth/administrator-login-form.tsx");
-
-    expect(form).toContain('headers: { "content-type": "application/json" }');
-    expect(form).toContain('String(formData.get("email") ?? "")');
-    expect(form).toContain('String(formData.get("password") ?? "")');
-    expect(form).toContain("submittedEmail.trim().toLowerCase()");
-    expect(form).toContain("password: submittedPassword");
-    expect(form).toContain("hasPasswordFormattingIssue(submittedPassword)");
-    expect(form).toContain('autoCapitalize="none"');
-    expect(form).toContain('autoCorrect="off"');
-    expect(form).toContain("spellCheck={false}");
-    expect(form).not.toMatch(/submittedPassword\.(?:trim|toLowerCase|toUpperCase)\(/);
-  });
-
-  it("adds administrator school management routes with platform permission gates and audit events", () => {
+  it("keeps the Administrator Portal limited to school registry CRUD", () => {
     const services = source("src/modules/campus-core/administrator-services.ts");
-    const actions = source("src/modules/campus-core/administrator-actions.ts");
-    const auditEvents = source("src/modules/campus-core/audit-events.ts");
-    const middleware = source("proxy.ts");
-
-    for (const route of [
-      "src/app/administrator/page.tsx",
-      "src/app/administrator/schools/page.tsx",
-      "src/app/administrator/schools/create/page.tsx",
-      "src/app/administrator/schools/[tenantId]/page.tsx",
-      "src/app/administrator/schools/[tenantId]/edit/page.tsx",
-      "src/app/administrator/schools/[tenantId]/dashboard/page.tsx"
-    ]) {
-      expect(existsSync(resolve(process.cwd(), route))).toBe(true);
-    }
-
-    expect(services).toContain("platform.school.create");
-    expect(services).toContain("platform.school.update");
-    expect(services).toContain("platform.school.update_school_id");
-    expect(services).toContain("platform.school.deactivate");
-    expect(services).toContain("platform.school.delete");
-    expect(services).toContain("SCHOOL_DELETE_BLOCKED");
-    expect(services).toContain("SCHOOL_SELF_DEACTIVATE_BLOCKED");
-    expect(actions).toContain("createSchoolSchema.parse");
-    expect(actions).toContain("updateSchoolIdSchema.parse");
-    expect(auditEvents).toContain("school.created");
-    expect(auditEvents).toContain("school.school_id_updated");
-    expect(auditEvents).toContain("school.deactivated");
-    expect(middleware).toContain("/administrator/login");
-  });
-
-  it("adds selected-school administrator dashboard navigation without impersonation", () => {
-    const shell = source("src/modules/campus-core/components/administrator-shell.tsx");
     const schoolsPage = source("src/app/administrator/schools/page.tsx");
     const schoolDetailPage = source("src/app/administrator/schools/[tenantId]/page.tsx");
-    const schoolDashboardPage = source("src/app/administrator/schools/[tenantId]/dashboard/page.tsx");
-    const schoolServices = source("src/modules/campus-core/administrator-services.ts");
-    const appNavigation = source("src/components/app-shell/navigation.ts");
-    const auditEvents = source("src/modules/campus-core/audit-events.ts");
+    const legacyDashboardPage = source("src/app/administrator/schools/[tenantId]/dashboard/page.tsx");
+    const shell = source("src/modules/campus-core/components/administrator-shell.tsx");
 
-    expect(shell).toContain('{ href: "/administrator", label: "Dashboard", Icon: LayoutDashboard }');
     expect(shell).toContain('{ href: "/administrator/schools", label: "Schools", Icon: School }');
-    expect(shell).toContain("activeHref");
-    expect(shell).toContain('data-administrator-desktop-dock="true"');
-    expect(shell).toContain('aria-label="Administrator primary navigation"');
-    expect(shell).not.toContain('href="/dashboard"');
-    expect(appNavigation).not.toMatch(/administrator/i);
-
-    expect(schoolsPage).toContain("Open School Dashboard");
-    expect(schoolsPage).toContain("/administrator/schools/${school.id}/dashboard");
-    expect(schoolDetailPage).toContain("Open School Dashboard");
-    expect(schoolDashboardPage).toContain("Administrator View");
-    expect(schoolDashboardPage).toContain("You are viewing this school as Administrator.");
-    expect(schoolDashboardPage).toContain("does not impersonate school users");
-    expect(schoolDashboardPage).toContain("Return to Administrator Dashboard");
-    expect(schoolDashboardPage).toContain("Back to Schools");
-    expect(schoolDashboardPage).toContain("getSchoolDashboardForAdministrator");
-    expect(schoolDashboardPage).not.toMatch(/passwordHash|tokenHash|rawToken|accessTokenEncrypted|webhookVerifyTokenHash/i);
-
-    expect(schoolServices).toContain("export async function getSchoolDashboardForAdministrator(ctx: TenantContext, tenantId: string)");
-    expect(schoolServices).toContain('await requirePlatformPermission(ctx, "platform.school.view")');
-    expect(schoolServices).toContain("where: { id: tenantId }");
-    expect(schoolServices).toContain("attendanceDate: today");
-    expect(schoolServices).toContain("ADMINISTRATOR_SCHOOL_DASHBOARD_OPENED");
-    expect(auditEvents).toContain("administrator.school_dashboard_opened");
+    expect(shell).toContain('{ href: "/administrator/profile", label: "Profile", Icon: UserRound }');
+    expect(schoolsPage).not.toContain("Open School Dashboard");
+    expect(schoolDetailPage).not.toContain("Open School Dashboard");
+    expect(legacyDashboardPage).toContain("redirect(`/administrator/schools/${tenantId}`)");
+    expect(services).not.toContain("getSchoolDashboardForAdministrator");
+    expect(services).not.toContain("attendanceDate: today");
   });
 
-  it("labels the login identifier as School ID in customer-facing admin forms without exposing hashes", () => {
-    const forms = source("src/modules/campus-core/components/administrator-school-forms.tsx");
-    const pages = source("src/app/administrator/schools/page.tsx");
+  it("gives atomic school provisioning a bounded Supabase-safe transaction window", () => {
+    const services = source("src/modules/campus-core/administrator-services.ts");
+    const roleSeedBlock = services.slice(
+      services.indexOf("async function ensureDefaultRolesForTenant"),
+      services.indexOf("export async function getAdministratorDashboard")
+    );
+    const createSchoolBlock = services.slice(
+      services.indexOf("export async function createSchool"),
+      services.indexOf("export async function updateSchool")
+    );
 
-    expect(forms).toContain("School ID");
-    expect(forms).toContain("Changing the School ID changes the login code/URL for this school.");
-    expect(forms).toContain("PasswordInput");
-    expect(forms).not.toMatch(/passwordHash|tokenHash/);
-    expect(pages).toContain("School ID");
-    expect(pages).not.toContain("Tenant Slug");
+    expect(roleSeedBlock).toContain("tx.role.createMany");
+    expect(roleSeedBlock).toContain("tx.permission.findMany");
+    expect(roleSeedBlock).toContain("tx.rolePermission.createMany");
+    expect(roleSeedBlock).not.toContain("tx.permission.findUnique");
+    expect(createSchoolBlock).toContain("{ maxWait: 10_000, timeout: 60_000 }");
+  });
+
+  it("permanently deletes tenant-owned data with exact confirmation and retained platform audit", () => {
+    const schemas = source("src/modules/campus-core/administrator-schemas.ts");
+    const services = source("src/modules/campus-core/administrator-services.ts");
+    const forms = source("src/modules/campus-core/components/administrator-school-forms.tsx");
+
+    expect(schemas).toContain('value.confirmDelete === "Delete School"');
+    expect(forms).toContain("Delete School Permanently");
+    expect(forms).not.toContain("Delete If Safe");
+    expect(services).toContain("export async function deleteSchoolPermanently");
+    expect(services).toContain("tx.studentAttendanceRecord.deleteMany");
+    expect(services).toContain("tx.staffAttendanceRecord.deleteMany");
+    expect(services).toContain("tx.user.deleteMany");
+    expect(services).toContain("tx.tenant.delete");
+    expect(services).toContain("writePlatformAuditLog");
+    expect(services).not.toContain("SCHOOL_DELETE_BLOCKED_BY_DEPENDENCIES");
+  });
+
+  it("keeps login forms case-safe and hides credential internals", () => {
+    expect(existsSync(resolve(process.cwd(), "src/app/administrator/login/page.tsx"))).toBe(true);
+    expect(existsSync(resolve(process.cwd(), "src/app/administrator/profile/page.tsx"))).toBe(true);
+    const form = source("src/components/auth/administrator-login-form.tsx");
+
+    expect(form).toContain("submittedEmail.trim().toLowerCase()");
+    expect(form).toContain("password: submittedPassword");
+    expect(form).not.toMatch(/submittedPassword\.(?:trim|toLowerCase|toUpperCase)\(/);
+    expect(source("src/modules/campus-core/components/administrator-school-forms.tsx")).not.toMatch(/passwordHash|tokenHash/);
   });
 });

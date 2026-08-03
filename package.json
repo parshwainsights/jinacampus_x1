@@ -20,6 +20,7 @@
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
     "demo:qa:reset": "tsx prisma/demo-qa-reset.ts",
+    "platform-admin:provision": "tsx scripts/provision-platform-administrator.ts",
     "smoke:notifications:whatsapp": "tsx scripts/whatsapp-notification-db-smoke.ts",
     "test": "vitest run"
   },

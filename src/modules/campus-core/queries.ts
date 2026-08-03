@@ -2,21 +2,16 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac/require-permission";
 import {
   canAssignRole,
-  hasPlatformAdminRole,
   SCHOOL_OPERATIONAL_ROLE_CODES
 } from "@/lib/rbac/roles";
 import type { TenantContext } from "@/lib/tenant/context";
 
 const defaultListTake = 100;
 
-function isPlatformAdminContext(ctx: TenantContext) {
-  return hasPlatformAdminRole(ctx.roleCodes ?? []);
-}
-
 function scopedBranchWhere(ctx: TenantContext) {
   return {
     tenantId: ctx.tenantId,
-    ...(isPlatformAdminContext(ctx) ? {} : { id: { in: ctx.accessibleBranchIds } }),
+    id: { in: ctx.accessibleBranchIds },
     status: { not: "ARCHIVED" as const }
   };
 }
@@ -27,8 +22,6 @@ function scopedInstitutionWhere(ctx: TenantContext, institutionId?: string) {
     tenantId: ctx.tenantId,
     status: { not: "ARCHIVED" as const }
   };
-  if (isPlatformAdminContext(ctx)) return base;
-
   return {
     ...base,
     branches: {
@@ -42,7 +35,7 @@ function scopedInstitutionWhere(ctx: TenantContext, institutionId?: string) {
 }
 
 function hasBranchScope(ctx: TenantContext) {
-  return isPlatformAdminContext(ctx) || ctx.accessibleBranchIds.length > 0;
+  return ctx.accessibleBranchIds.length > 0;
 }
 
 function scopedUserWhere(ctx: TenantContext, userId?: string) {
@@ -51,7 +44,6 @@ function scopedUserWhere(ctx: TenantContext, userId?: string) {
     tenantId: ctx.tenantId,
     status: { not: "DEACTIVATED" as const }
   };
-  if (isPlatformAdminContext(ctx)) return base;
   return {
     ...base,
     OR: [
@@ -133,7 +125,7 @@ export async function listBranches(ctx: TenantContext) {
 
 export async function getBranchById(ctx: TenantContext, branchId: string) {
   await requirePermission({ ctx, permission: "campuscore.branch.manage", branchId });
-  if (!isPlatformAdminContext(ctx) && !ctx.accessibleBranchIds.includes(branchId)) return null;
+  if (!ctx.accessibleBranchIds.includes(branchId)) return null;
 
   return db.branch.findFirst({
     where: {
@@ -193,19 +185,15 @@ export async function listAcademicYears(ctx: TenantContext) {
     where: {
       tenantId: ctx.tenantId,
       status: { not: "ARCHIVED" },
-      ...(isPlatformAdminContext(ctx)
-        ? {}
-        : {
-            institution: {
-              branches: {
-                some: {
-                  tenantId: ctx.tenantId,
-                  id: { in: ctx.accessibleBranchIds },
-                  status: { not: "ARCHIVED" }
-                }
-              }
-            }
-          })
+      institution: {
+        branches: {
+          some: {
+            tenantId: ctx.tenantId,
+            id: { in: ctx.accessibleBranchIds },
+            status: { not: "ARCHIVED" }
+          }
+        }
+      }
     },
     select: {
       id: true,
@@ -345,7 +333,7 @@ export async function listAttendanceSettings(ctx: TenantContext) {
   return db.attendanceSetting.findMany({
     where: {
       tenantId: ctx.tenantId,
-      ...(isPlatformAdminContext(ctx) ? {} : { branchId: { in: ctx.accessibleBranchIds } })
+      branchId: { in: ctx.accessibleBranchIds }
     },
     select: {
       id: true,
@@ -375,9 +363,7 @@ export async function listAttendanceSettings(ctx: TenantContext) {
 
 export async function getAttendanceNotificationStatus(ctx: TenantContext) {
   await requirePermission({ ctx, permission: "campuscore.settings.manage" });
-  const scopedBranches = isPlatformAdminContext(ctx)
-    ? [ctx.activeBranchId].filter((branchId): branchId is string => Boolean(branchId))
-    : ctx.accessibleBranchIds;
+  const scopedBranches = ctx.accessibleBranchIds;
 
   const [integrations, templates] = await Promise.all([
     db.whatsAppIntegrationSetting.findMany({
@@ -437,7 +423,7 @@ export async function listAuditLogs(ctx: TenantContext) {
   return db.auditLog.findMany({
     where: {
       tenantId: ctx.tenantId,
-      ...(isPlatformAdminContext(ctx) ? {} : { OR: [{ branchId: null }, { branchId: { in: ctx.accessibleBranchIds } }] })
+      OR: [{ branchId: null }, { branchId: { in: ctx.accessibleBranchIds } }]
     },
     include: {
       actor: { select: { firstName: true, lastName: true, email: true } },

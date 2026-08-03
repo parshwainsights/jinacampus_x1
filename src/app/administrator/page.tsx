@@ -29,7 +29,7 @@ export default async function AdministratorHomePage() {
               <p className="premium-muted-chip">Platform Governance</p>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Administrator Overview</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                Manage school tenants, School IDs, platform role boundaries, and school lifecycle status from one restricted portal.
+                Create, update, deactivate, reactivate, and permanently delete school tenants from an identity that is independent of every school.
               </p>
             </div>
             <Link href="/administrator/schools/create" className="premium-primary-button w-full premium-focus sm:w-auto">
@@ -83,7 +83,7 @@ export default async function AdministratorHomePage() {
       <AdministratorShell ctx={ctx} activeHref="/administrator">
         <PermissionState
           title="Administrator access required"
-          description="This portal is available only to authorized JinaCampus Super Admin or Administrator users."
+          description="This portal is available only to an active JinaCampus platform administrator profile."
         />
       </AdministratorShell>
     );

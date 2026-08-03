@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { mapActionError } from "@/lib/errors";
-import { getTenantContext } from "@/lib/tenant/context";
+import { getPlatformAdministratorContext } from "@/lib/auth/platform-administrator-session";
 import {
   createSchoolSchema,
   deactivateSchoolSchema,
@@ -13,13 +13,15 @@ import {
 } from "@/modules/campus-core/administrator-schemas";
 import {
   createSchool,
+  changePlatformAdministratorPassword,
   deactivateSchool,
-  deleteSchoolIfSafe,
+  deleteSchoolPermanently,
   reactivateSchool,
   updateSchool,
   updateSchoolId
 } from "@/modules/campus-core/administrator-services";
 import type { CampusCoreFormActionState } from "@/modules/campus-core/actions";
+import { changeOwnPasswordSchema } from "@/modules/campus-core/schemas";
 
 function s(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -40,6 +42,11 @@ function req(formData: FormData, key: string) {
 
 function checked(formData: FormData, key: string) {
   return formData.get(key) === "on";
+}
+
+function passwordValue(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return typeof value === "string" ? value : "";
 }
 
 function formError(error: unknown, fallbackMessage: string): CampusCoreFormActionState {
@@ -82,7 +89,7 @@ export async function createSchoolAction(
       principalInitialPassword: s(formData, "principalInitialPassword"),
       confirmPrincipalInitialPassword: s(formData, "confirmPrincipalInitialPassword")
     });
-    const school = await createSchool(await getTenantContext(), input);
+    const school = await createSchool(await getPlatformAdministratorContext(), input);
     revalidateAdministratorSchoolRoutes(school.id);
     return { ok: true, message: "School created. Default institution, branch, roles, and attendance settings were prepared." };
   } catch (error) {
@@ -104,7 +111,7 @@ export async function updateSchoolAction(
       institutionDisplayName: nullableS(formData, "institutionDisplayName"),
       institutionLogoUrl: nullableS(formData, "institutionLogoUrl")
     });
-    await updateSchool(await getTenantContext(), input);
+    await updateSchool(await getPlatformAdministratorContext(), input);
     revalidateAdministratorSchoolRoutes(input.tenantId);
     return { ok: true, message: "School profile updated." };
   } catch (error) {
@@ -123,7 +130,7 @@ export async function updateSchoolIdAction(
       newSchoolId: req(formData, "newSchoolId"),
       confirmSchoolIdChange: checked(formData, "confirmSchoolIdChange")
     });
-    await updateSchoolId(await getTenantContext(), input);
+    await updateSchoolId(await getPlatformAdministratorContext(), input);
     revalidateAdministratorSchoolRoutes(input.tenantId);
     return { ok: true, message: "School ID updated. Users must use the new School ID for future login." };
   } catch (error) {
@@ -140,7 +147,7 @@ export async function deactivateSchoolAction(
       tenantId: req(formData, "tenantId"),
       confirmDeactivation: checked(formData, "confirmDeactivation")
     });
-    await deactivateSchool(await getTenantContext(), input);
+    await deactivateSchool(await getPlatformAdministratorContext(), input);
     revalidateAdministratorSchoolRoutes(input.tenantId);
     return { ok: true, message: "School deactivated. Active sessions for that school were revoked." };
   } catch (error) {
@@ -157,7 +164,7 @@ export async function reactivateSchoolAction(
       tenantId: req(formData, "tenantId"),
       confirmReactivation: checked(formData, "confirmReactivation")
     });
-    await reactivateSchool(await getTenantContext(), input);
+    await reactivateSchool(await getPlatformAdministratorContext(), input);
     revalidateAdministratorSchoolRoutes(input.tenantId);
     return { ok: true, message: "School reactivated." };
   } catch (error) {
@@ -172,12 +179,34 @@ export async function deleteSchoolAction(
   try {
     const input = deleteSchoolSchema.parse({
       tenantId: req(formData, "tenantId"),
-      confirmDelete: req(formData, "confirmDelete")
+      confirmDelete: passwordValue(formData, "confirmDelete")
     });
-    await deleteSchoolIfSafe(await getTenantContext(), input);
+    await deleteSchoolPermanently(await getPlatformAdministratorContext(), input);
     revalidateAdministratorSchoolRoutes(input.tenantId);
-    return { ok: true, message: "School deleted because no dependent data existed." };
+    return { ok: true, message: "School and all of its tenant-owned data were deleted permanently." };
   } catch (error) {
-    return formError(error, "Unable to delete school. Deactivation is the safer option when school data exists.");
+    return formError(error, "Unable to delete school. No data was removed; please retry or review server availability.");
+  }
+}
+
+export async function changePlatformAdministratorPasswordAction(
+  _state: CampusCoreFormActionState,
+  formData: FormData
+): Promise<CampusCoreFormActionState> {
+  try {
+    const input = changeOwnPasswordSchema.parse({
+      currentPassword: passwordValue(formData, "currentPassword"),
+      newPassword: passwordValue(formData, "newPassword"),
+      confirmNewPassword: passwordValue(formData, "confirmNewPassword")
+    });
+    await changePlatformAdministratorPassword(
+      await getPlatformAdministratorContext({ allowPasswordChangeRequired: true }),
+      input
+    );
+    revalidatePath("/administrator");
+    revalidatePath("/administrator/profile");
+    return { ok: true, message: "Administrator password was updated successfully." };
+  } catch (error) {
+    return formError(error, "Unable to update the administrator password. Please try again.");
   }
 }

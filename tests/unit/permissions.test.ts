@@ -54,13 +54,16 @@ describe("permission registry", () => {
     }
   });
 
-  it("keeps principal role assignment below platform-admin roles", () => {
+  it("keeps school role assignment within principal governance boundaries", () => {
     expect(canAssignRole(["PRINCIPAL"], "TEACHER")).toBe(true);
     expect(canAssignRole(["PRINCIPAL"], "OFFICE_STAFF")).toBe(true);
+    expect(canAssignRole(["PRINCIPAL"], "STAFF")).toBe(true);
+    expect(canAssignRole(["PRINCIPAL"], "PRINCIPAL")).toBe(false);
     expect(canAssignRole(["PRINCIPAL"], "ADMIN")).toBe(false);
     expect(canAssignRole(["PRINCIPAL"], "TENANT_OWNER")).toBe(false);
     expect(canAssignRole(["TENANT_OWNER"], "ADMIN")).toBe(false);
-    expect(canAssignRole(["ADMINISTRATOR"], "PRINCIPAL")).toBe(true);
+    expect(canAssignRole(["ADMINISTRATOR"], "PRINCIPAL")).toBe(false);
+    expect(canAssignRole(["ADMINISTRATOR"], "TEACHER")).toBe(false);
     expect(canAssignRole(["ADMINISTRATOR"], "ADMINISTRATOR")).toBe(false);
   });
 });

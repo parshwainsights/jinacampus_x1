@@ -2,12 +2,9 @@ import { AppChrome } from "@/components/app-shell/app-chrome";
 import { getMobileBottomNavigationItems, getVisibleNavigationGroups } from "@/components/app-shell/navigation";
 import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
-import { hasPlatformAdminRole } from "@/lib/rbac/roles";
-import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireAuth();
-  if (hasPlatformAdminRole(ctx.roleCodes ?? [])) redirect("/administrator");
   const permissions = await getEffectivePermissions({ ctx, branchId: ctx.activeBranchId });
   const navbarContext = {
     userEmail: ctx.userEmail,

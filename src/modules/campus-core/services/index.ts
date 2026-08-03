@@ -5,7 +5,6 @@ import type { TenantContext } from "@/lib/tenant/context";
 import { getEffectivePermissions, requirePermission } from "@/lib/rbac/require-permission";
 import {
   canAssignRole,
-  hasPlatformAdminRole,
   isPlatformAdminRoleCode,
   roleRequiresStaffProfile
 } from "@/lib/rbac/roles";
@@ -62,10 +61,6 @@ function tenantRoleScope(input: { scopeType?: "TENANT" | "BRANCH" | "ACADEMIC_YE
   };
 }
 
-function isPlatformAdminContext(ctx: TenantContext) {
-  return hasPlatformAdminRole(ctx.roleCodes ?? []);
-}
-
 type InstitutionScopeDbClient = Pick<typeof db, "institution">;
 
 async function requireAccessibleInstitution(
@@ -78,17 +73,13 @@ async function requireAccessibleInstitution(
       id: institutionId,
       tenantId: ctx.tenantId,
       status: { not: "ARCHIVED" },
-      ...(isPlatformAdminContext(ctx)
-        ? {}
-        : {
-            branches: {
-              some: {
-                tenantId: ctx.tenantId,
-                id: { in: ctx.accessibleBranchIds },
-                status: { not: "ARCHIVED" }
-              }
-            }
-          })
+      branches: {
+        some: {
+          tenantId: ctx.tenantId,
+          id: { in: ctx.accessibleBranchIds },
+          status: { not: "ARCHIVED" }
+        }
+      }
     }
   });
   if (!institution) throw notFound("INSTITUTION_NOT_FOUND");
@@ -101,8 +92,6 @@ function targetUserGovernanceWhere(ctx: TenantContext, userId: string) {
     tenantId: ctx.tenantId,
     status: { not: "DEACTIVATED" as const }
   };
-  if (isPlatformAdminContext(ctx)) return base;
-
   return {
     ...base,
     OR: [
@@ -165,7 +154,7 @@ async function assertCanDeactivateTargetUser(
     }
   });
   const targetHasPlatformAdminRole = roleAssignments.some((assignment) => isPlatformAdminRoleCode(assignment.role.code));
-  if (targetHasPlatformAdminRole && !isPlatformAdminContext(ctx)) {
+  if (targetHasPlatformAdminRole) {
     throw new AppError("USER_PLATFORM_ADMIN_DEACTIVATE_FORBIDDEN", "USER_PLATFORM_ADMIN_DEACTIVATE_FORBIDDEN", 403);
   }
 }
@@ -295,7 +284,7 @@ export async function updateBranchService(ctx: TenantContext, input: z.infer<typ
   await requirePermission({ ctx, permission: "campuscore.branch.manage", branchId: input.branchId });
   return db.$transaction(async (tx) => {
     const { branchId, institutionId } = input;
-    if (!isPlatformAdminContext(ctx) && !ctx.accessibleBranchIds.includes(branchId)) throw new Error("FORBIDDEN_BRANCH_ACCESS");
+    if (!ctx.accessibleBranchIds.includes(branchId)) throw new Error("FORBIDDEN_BRANCH_ACCESS");
 
     const before = await tx.branch.findFirst({
       where: { id: branchId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } }
@@ -381,12 +370,12 @@ export async function createUserService(ctx: TenantContext, input: z.infer<typeo
     const branchIds = unique(input.branchIds);
     const roleCodes = unique(input.roleCodes);
 
-    if (!isPlatformAdminContext(ctx) && branchIds.length === 0) {
+    if (branchIds.length === 0) {
       throw new AppError("USER_BRANCH_ACCESS_REQUIRED", "USER_BRANCH_ACCESS_REQUIRED", 400);
     }
 
     for (const branchId of branchIds) {
-      if (!isPlatformAdminContext(ctx) && !ctx.accessibleBranchIds.includes(branchId)) throw new Error("FORBIDDEN_BRANCH_ACCESS");
+      if (!ctx.accessibleBranchIds.includes(branchId)) throw new Error("FORBIDDEN_BRANCH_ACCESS");
     }
 
     if (branchIds.length) {
@@ -550,7 +539,7 @@ export async function assignUserRoleService(ctx: TenantContext, input: z.infer<t
   return db.$transaction(async (tx) => {
     const scope = tenantRoleScope(input);
     if (scope.scopeType === "BRANCH") {
-      if (!isPlatformAdminContext(ctx) && !ctx.accessibleBranchIds.includes(scope.scopeId)) throw new AppError("FORBIDDEN_BRANCH_ACCESS", "FORBIDDEN_BRANCH_ACCESS", 403);
+      if (!ctx.accessibleBranchIds.includes(scope.scopeId)) throw new AppError("FORBIDDEN_BRANCH_ACCESS", "FORBIDDEN_BRANCH_ACCESS", 403);
       const branch = await tx.branch.findFirst({
         where: { id: scope.scopeId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } },
         select: { id: true }
@@ -637,7 +626,7 @@ export async function removeUserRoleService(ctx: TenantContext, input: z.infer<t
   return db.$transaction(async (tx) => {
     const scope = tenantRoleScope(input);
     if (scope.scopeType === "BRANCH") {
-      if (!isPlatformAdminContext(ctx) && !ctx.accessibleBranchIds.includes(scope.scopeId)) throw new AppError("FORBIDDEN_BRANCH_ACCESS", "FORBIDDEN_BRANCH_ACCESS", 403);
+      if (!ctx.accessibleBranchIds.includes(scope.scopeId)) throw new AppError("FORBIDDEN_BRANCH_ACCESS", "FORBIDDEN_BRANCH_ACCESS", 403);
       const branch = await tx.branch.findFirst({
         where: { id: scope.scopeId, tenantId: ctx.tenantId, status: { not: "ARCHIVED" } },
         select: { id: true }
@@ -697,7 +686,7 @@ export async function removeUserRoleService(ctx: TenantContext, input: z.infer<t
 
 export async function assignUserBranchService(ctx: TenantContext, input: z.infer<typeof assignUserBranchSchema>) {
   await requirePermission({ ctx, permission: "campuscore.user.update", branchId: input.branchId });
-  if (!isPlatformAdminContext(ctx) && !ctx.accessibleBranchIds.includes(input.branchId)) throw new AppError("FORBIDDEN_BRANCH_ACCESS", "FORBIDDEN_BRANCH_ACCESS", 403);
+  if (!ctx.accessibleBranchIds.includes(input.branchId)) throw new AppError("FORBIDDEN_BRANCH_ACCESS", "FORBIDDEN_BRANCH_ACCESS", 403);
 
   return db.$transaction(async (tx) => {
     const user = await tx.user.findFirst({
@@ -742,7 +731,7 @@ export async function assignUserBranchService(ctx: TenantContext, input: z.infer
 
 export async function removeUserBranchService(ctx: TenantContext, input: z.infer<typeof removeUserBranchSchema>) {
   await requirePermission({ ctx, permission: "campuscore.user.update", branchId: input.branchId });
-  if (!isPlatformAdminContext(ctx) && !ctx.accessibleBranchIds.includes(input.branchId)) throw new AppError("FORBIDDEN_BRANCH_ACCESS", "FORBIDDEN_BRANCH_ACCESS", 403);
+  if (!ctx.accessibleBranchIds.includes(input.branchId)) throw new AppError("FORBIDDEN_BRANCH_ACCESS", "FORBIDDEN_BRANCH_ACCESS", 403);
 
   return db.$transaction(async (tx) => {
     const user = await tx.user.findFirst({
@@ -1016,18 +1005,14 @@ export async function updateAttendanceSettingsService(ctx: TenantContext, input:
 
 export async function getCampusCoreDashboardService(ctx: TenantContext) {
   await requirePermission({ ctx, permission: "campuscore.tenant.view" });
-  const branchScope = isPlatformAdminContext(ctx) ? {} : { id: { in: ctx.accessibleBranchIds } };
-  const userBranchScope = isPlatformAdminContext(ctx)
-    ? {}
-    : {
-      OR: [
-        { id: ctx.userId },
-        { branchAccesses: { some: { tenantId: ctx.tenantId, isActive: true, branchId: { in: ctx.accessibleBranchIds } } } }
-      ]
-    };
-  const auditBranchScope = isPlatformAdminContext(ctx)
-    ? {}
-    : { OR: [{ branchId: null }, { branchId: { in: ctx.accessibleBranchIds } }] };
+  const branchScope = { id: { in: ctx.accessibleBranchIds } };
+  const userBranchScope = {
+    OR: [
+      { id: ctx.userId },
+      { branchAccesses: { some: { tenantId: ctx.tenantId, isActive: true, branchId: { in: ctx.accessibleBranchIds } } } }
+    ]
+  };
+  const auditBranchScope = { OR: [{ branchId: null }, { branchId: { in: ctx.accessibleBranchIds } }] };
   const [totalBranches, activeAcademicYear, totalUsers, activeRoles, recentAuditLogs] = await Promise.all([
     db.branch.count({ where: { tenantId: ctx.tenantId, ...branchScope, status: "ACTIVE" } }),
     db.academicYear.findFirst({ where: { tenantId: ctx.tenantId, isActive: true, status: "ACTIVE" }, orderBy: { startDate: "desc" } }),

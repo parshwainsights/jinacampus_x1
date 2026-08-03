@@ -1,21 +1,12 @@
 import { Prisma } from "@prisma/client";
+import type { z } from "zod";
+
+import { writePlatformAuditLog } from "@/lib/audit/platform-audit-log";
+import type { PlatformAdministratorContext } from "@/lib/auth/platform-administrator-session";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
-import { writeAuditLog } from "@/lib/audit/audit-log";
-import { hashPassword } from "@/lib/auth/password";
-import { getEffectivePermissions } from "@/lib/rbac/require-permission";
-import {
-  hasPlatformAdminRole,
-  ROLE_PERMISSION_MAP,
-  SCHOOL_OPERATIONAL_ROLE_CODES
-} from "@/lib/rbac/roles";
-import type { PermissionCode } from "@/lib/rbac/permissions";
-import type { TenantContext } from "@/lib/tenant/context";
-import { CAMPUS_CORE_AUDIT_EVENTS } from "@/modules/campus-core/audit-events";
-import {
-  SCHOOL_ID_ERROR_MESSAGES,
-  validateSchoolId
-} from "@/modules/campus-core/tenant-login-policy";
+import { ROLE_PERMISSION_MAP, SCHOOL_OPERATIONAL_ROLE_CODES } from "@/lib/rbac/roles";
 import type {
   createSchoolSchema,
   deactivateSchoolSchema,
@@ -24,7 +15,12 @@ import type {
   updateSchoolIdSchema,
   updateSchoolSchema
 } from "@/modules/campus-core/administrator-schemas";
-import type { z } from "zod";
+import { PLATFORM_ADMINISTRATOR_AUDIT_EVENTS } from "@/modules/campus-core/platform-administrator-audit-events";
+import type { changeOwnPasswordSchema } from "@/modules/campus-core/schemas";
+import {
+  SCHOOL_ID_ERROR_MESSAGES,
+  validateSchoolId
+} from "@/modules/campus-core/tenant-login-policy";
 
 type SchoolDbClient = typeof db | Prisma.TransactionClient;
 
@@ -41,18 +37,7 @@ export type SchoolDependencySummary = {
   roles: number;
 };
 
-type SchoolDependencyCounts = {
-  institutions: number;
-  branches: number;
-  users: number;
-  students: number;
-  staffProfiles: number;
-  studentAttendanceRecords: number;
-  staffAttendanceRecords: number;
-  auditLogs: number;
-  notificationOutboxItems: number;
-  roles: number;
-};
+type SchoolDependencyCounts = SchoolDependencySummary;
 
 const schoolDependencyCountSelect = {
   institutions: true,
@@ -67,21 +52,6 @@ const schoolDependencyCountSelect = {
   roles: true
 } as const;
 
-function toSchoolDependencySummary(counts: SchoolDependencyCounts): SchoolDependencySummary {
-  return {
-    institutions: counts.institutions,
-    branches: counts.branches,
-    users: counts.users,
-    students: counts.students,
-    staffProfiles: counts.staffProfiles,
-    studentAttendanceRecords: counts.studentAttendanceRecords,
-    staffAttendanceRecords: counts.staffAttendanceRecords,
-    auditLogs: counts.auditLogs,
-    notificationOutboxItems: counts.notificationOutboxItems,
-    roles: counts.roles
-  };
-}
-
 const emptySchoolDependencySummary: SchoolDependencySummary = {
   institutions: 0,
   branches: 0,
@@ -95,23 +65,17 @@ const emptySchoolDependencySummary: SchoolDependencySummary = {
   roles: 0
 };
 
-function hasDependencies(summary: SchoolDependencySummary) {
-  return Object.values(summary).some((count) => count > 0);
+function toSchoolDependencySummary(counts: SchoolDependencyCounts): SchoolDependencySummary {
+  return { ...counts };
 }
 
-async function requirePlatformPermission(ctx: TenantContext, permission: PermissionCode) {
-  if (!hasPlatformAdminRole(ctx.roleCodes ?? [])) {
-    throw new AppError("ADMINISTRATOR_ACCESS_REQUIRED", "ADMINISTRATOR_ACCESS_REQUIRED", 403);
-  }
-  const permissions = await getEffectivePermissions({ ctx });
-  if (!permissions.has(permission)) throw new AppError(`FORBIDDEN_PERMISSION:${permission}`, `FORBIDDEN_PERMISSION:${permission}`, 403);
-}
-
-export async function assertSchoolIdAvailable(client: SchoolDbClient, schoolId: string, excludeTenantId?: string) {
+export async function assertSchoolIdAvailable(
+  client: SchoolDbClient,
+  schoolId: string,
+  excludeTenantId?: string
+) {
   const validation = validateSchoolId(schoolId);
-  if (!validation.ok) {
-    throw new AppError("INVALID_SCHOOL_ID", validation.message, 400);
-  }
+  if (!validation.ok) throw new AppError("INVALID_SCHOOL_ID", validation.message, 400);
 
   const existing = await client.tenant.findUnique({
     where: { slug: validation.schoolId },
@@ -122,67 +86,57 @@ export async function assertSchoolIdAvailable(client: SchoolDbClient, schoolId: 
   }
 }
 
-async function ensureDefaultRolesForTenant(tx: Prisma.TransactionClient, tenantId: string, actorUserId: string) {
-  for (const roleCode of SCHOOL_OPERATIONAL_ROLE_CODES) {
-    const role = await tx.role.upsert({
-      where: { tenantId_code: { tenantId, code: roleCode } },
-      create: {
-        tenantId,
-        code: roleCode,
-        name: roleCode
-          .toLowerCase()
-          .split("_")
-          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-          .join(" "),
-        isSystem: true,
-        isMutable: false,
-        createdById: actorUserId
-      },
-      update: { isActive: true }
-    });
+async function ensureDefaultRolesForTenant(tx: Prisma.TransactionClient, tenantId: string) {
+  const roleCodes = [...SCHOOL_OPERATIONAL_ROLE_CODES];
+  await tx.role.createMany({
+    data: roleCodes.map((roleCode) => ({
+      tenantId,
+      code: roleCode,
+      name: roleCode
+        .toLowerCase()
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" "),
+      isSystem: true,
+      isMutable: false
+    })),
+    skipDuplicates: true
+  });
+  await tx.role.updateMany({
+    where: { tenantId, code: { in: roleCodes } },
+    data: { isActive: true }
+  });
 
-    for (const permissionCode of ROLE_PERMISSION_MAP[roleCode]) {
-      const permission = await tx.permission.findUnique({ where: { code: permissionCode } });
-      if (!permission) continue;
-      await tx.rolePermission.upsert({
-        where: { tenantId_roleId_permissionId: { tenantId, roleId: role.id, permissionId: permission.id } },
-        create: { tenantId, roleId: role.id, permissionId: permission.id },
-        update: {}
-      });
-    }
+  const permissionCodes = Array.from(new Set(
+    roleCodes.flatMap((roleCode) => ROLE_PERMISSION_MAP[roleCode])
+  ));
+  const [roles, permissions] = await Promise.all([
+    tx.role.findMany({
+      where: { tenantId, code: { in: roleCodes } },
+      select: { id: true, code: true }
+    }),
+    tx.permission.findMany({
+      where: { code: { in: permissionCodes } },
+      select: { id: true, code: true }
+    })
+  ]);
+  const roleIdByCode = new Map(roles.map((role) => [role.code, role.id]));
+  const permissionIdByCode = new Map(permissions.map((permission) => [permission.code, permission.id]));
+  const rolePermissions = roleCodes.flatMap((roleCode) => {
+    const roleId = roleIdByCode.get(roleCode);
+    if (!roleId) return [];
+    return ROLE_PERMISSION_MAP[roleCode].flatMap((permissionCode) => {
+      const permissionId = permissionIdByCode.get(permissionCode);
+      return permissionId ? [{ tenantId, roleId, permissionId }] : [];
+    });
+  });
+
+  if (rolePermissions.length > 0) {
+    await tx.rolePermission.createMany({ data: rolePermissions, skipDuplicates: true });
   }
 }
 
-function administratorAuditContext(ctx: TenantContext): TenantContext {
-  return {
-    ...ctx,
-    activeBranchId: null,
-    activeAcademicYearId: null
-  };
-}
-
-const ADMINISTRATOR_DASHBOARD_TIME_ZONE = "Asia/Kolkata";
-
-function todayDateInTimeZone(timeZone = ADMINISTRATOR_DASHBOARD_TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-  const valueByType = new Map(parts.map((part) => [part.type, part.value]));
-  const year = Number(valueByType.get("year"));
-  const month = Number(valueByType.get("month"));
-  const day = Number(valueByType.get("day"));
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function toDateOnlyString(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-export async function getAdministratorDashboard(ctx: TenantContext) {
-  await requirePlatformPermission(ctx, "platform.dashboard.view");
+export async function getAdministratorDashboard(_ctx: PlatformAdministratorContext) {
   const [totalSchools, activeSchools, inactiveSchools, recentlyCreatedSchools, schoolsNeedingSetup] = await Promise.all([
     db.tenant.count(),
     db.tenant.count({ where: { status: "ACTIVE" } }),
@@ -206,140 +160,25 @@ export async function getAdministratorDashboard(ctx: TenantContext) {
   return { totalSchools, activeSchools, inactiveSchools, recentlyCreatedSchools, schoolsNeedingSetup };
 }
 
-export async function getSchoolDashboardForAdministrator(ctx: TenantContext, tenantId: string) {
-  await requirePlatformPermission(ctx, "platform.school.view");
-  const today = todayDateInTimeZone();
-  const [
-    school,
-    activeBranches,
-    activeUsers,
-    activeStudents,
-    activeStaff,
-    activeAcademicYears,
-    studentAttendanceMarkedToday,
-    staffAttendanceRecordedToday,
-    staffCheckedInToday,
-    attendanceNotificationBranches,
-    enabledWhatsAppProviders
-  ] = await Promise.all([
-    db.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        legalName: true,
-        supportEmail: true,
-        phone: true,
-        website: true,
-        createdAt: true,
-        updatedAt: true,
-        institutions: {
-          select: { id: true, name: true, displayName: true, status: true, logoUrl: true },
-          orderBy: { name: "asc" },
-          take: 5
-        },
-        branches: {
-          select: { id: true, name: true, code: true, status: true },
-          orderBy: { name: "asc" },
-          take: 5
-        },
-        _count: {
-          select: {
-            institutions: true,
-            branches: true,
-            users: true,
-            students: true,
-            staffProfiles: true,
-            notificationOutboxItems: true
-          }
-        }
-      }
-    }),
-    db.branch.count({ where: { tenantId, status: "ACTIVE" } }),
-    db.user.count({ where: { tenantId, status: "ACTIVE" } }),
-    db.student.count({ where: { tenantId, status: "ACTIVE" } }),
-    db.staffProfile.count({ where: { tenantId, employmentStatus: "ACTIVE" } }),
-    db.academicYear.count({ where: { tenantId, status: "ACTIVE", isActive: true } }),
-    db.studentAttendanceRecord.count({
-      where: {
-        tenantId,
-        attendanceDate: today,
-        status: { not: "NOT_MARKED" }
-      }
-    }),
-    db.staffAttendanceRecord.count({
-      where: {
-        tenantId,
-        attendanceDate: today
-      }
-    }),
-    db.staffAttendanceRecord.count({
-      where: {
-        tenantId,
-        attendanceDate: today,
-        checkInAt: { not: null }
-      }
-    }),
-    db.attendanceSetting.count({
-      where: {
-        tenantId,
-        OR: [
-          { studentAttendanceWhatsAppEnabled: true },
-          { staffMonthlySummaryWhatsAppEnabled: true }
-        ]
-      }
-    }),
-    db.whatsAppIntegrationSetting.count({ where: { tenantId, isEnabled: true } })
-  ]);
-
-  if (!school) return null;
-
-  await writeAuditLog({
-    ctx: administratorAuditContext(ctx),
-    action: CAMPUS_CORE_AUDIT_EVENTS.ADMINISTRATOR_SCHOOL_DASHBOARD_OPENED,
-    entityType: "Tenant",
-    entityId: school.id,
-    metadata: {
-      schoolId: school.slug,
-      route: "/administrator/schools/[tenantId]/dashboard"
+export async function getAdministratorProfile(ctx: PlatformAdministratorContext) {
+  return db.platformAdministrator.findUnique({
+    where: { id: ctx.administratorId },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      status: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true
     }
-  }).catch(() => null);
-
-  return {
-    school,
-    metrics: {
-      institutions: school._count.institutions,
-      branches: school._count.branches,
-      activeBranches,
-      users: school._count.users,
-      activeUsers,
-      students: school._count.students,
-      activeStudents,
-      staffProfiles: school._count.staffProfiles,
-      activeStaff,
-      activeAcademicYears,
-      notificationOutboxItems: school._count.notificationOutboxItems
-    },
-    todayAttendance: {
-      date: toDateOnlyString(today),
-      studentRecordsMarked: studentAttendanceMarkedToday,
-      staffRecords: staffAttendanceRecordedToday,
-      staffCheckedIn: staffCheckedInToday
-    },
-    notifications: {
-      attendanceNotificationBranches,
-      enabledWhatsAppProviders
-    }
-  };
+  });
 }
 
 export async function listSchoolsForAdministrator(
-  ctx: TenantContext,
+  _ctx: PlatformAdministratorContext,
   filters: { search?: string; status?: "ACTIVE" | "SUSPENDED" | "ARCHIVED" | "ALL" } = {}
 ) {
-  await requirePlatformPermission(ctx, "platform.school.view");
   const search = filters.search?.trim();
   return db.tenant.findMany({
     where: {
@@ -347,9 +186,9 @@ export async function listSchoolsForAdministrator(
       ...(search
         ? {
             OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { slug: { contains: search.toLowerCase(), mode: "insensitive" } },
-              { supportEmail: { contains: search, mode: "insensitive" } }
+              { name: { contains: search, mode: "insensitive" as const } },
+              { slug: { contains: search.toLowerCase(), mode: "insensitive" as const } },
+              { supportEmail: { contains: search, mode: "insensitive" as const } }
             ]
           }
         : {})
@@ -372,18 +211,15 @@ export async function listSchoolsForAdministrator(
 export async function getSchoolDependencySummary(tenantId: string): Promise<SchoolDependencySummary> {
   const school = await db.tenant.findUnique({
     where: { id: tenantId },
-    select: {
-      _count: {
-        select: schoolDependencyCountSelect
-      }
-    }
+    select: { _count: { select: schoolDependencyCountSelect } }
   });
-
   return school ? toSchoolDependencySummary(school._count) : { ...emptySchoolDependencySummary };
 }
 
-export async function getSchoolByIdForAdministrator(ctx: TenantContext, tenantId: string) {
-  await requirePlatformPermission(ctx, "platform.school.view");
+export async function getSchoolByIdForAdministrator(
+  _ctx: PlatformAdministratorContext,
+  tenantId: string
+) {
   const school = await db.tenant.findUnique({
     where: { id: tenantId },
     select: {
@@ -410,15 +246,13 @@ export async function getSchoolByIdForAdministrator(ctx: TenantContext, tenantId
       users: {
         where: {
           status: { not: "DEACTIVATED" },
-          roleAssignments: { some: { isActive: true, role: { code: { in: ["PRINCIPAL", "ADMIN"] } } } }
+          roleAssignments: { some: { isActive: true, role: { code: "PRINCIPAL" } } }
         },
         select: { id: true, email: true, displayName: true, firstName: true, lastName: true, status: true },
         orderBy: { firstName: "asc" },
         take: 10
       },
-      _count: {
-        select: schoolDependencyCountSelect
-      }
+      _count: { select: schoolDependencyCountSelect }
     }
   });
   if (!school) return null;
@@ -426,8 +260,10 @@ export async function getSchoolByIdForAdministrator(ctx: TenantContext, tenantId
   return { ...schoolDetails, dependencySummary: toSchoolDependencySummary(_count) };
 }
 
-export async function createSchool(ctx: TenantContext, input: z.infer<typeof createSchoolSchema>) {
-  await requirePlatformPermission(ctx, "platform.school.create");
+export async function createSchool(
+  ctx: PlatformAdministratorContext,
+  input: z.infer<typeof createSchoolSchema>
+) {
   await assertSchoolIdAvailable(db, input.schoolId);
 
   return db.$transaction(async (tx) => {
@@ -441,15 +277,16 @@ export async function createSchool(ctx: TenantContext, input: z.infer<typeof cre
         status: input.status
       }
     });
-    await tx.tenantSettings.create({ data: { tenantId: tenant.id, brandName: input.institutionDisplayName ?? input.name, createdById: ctx.userId } });
+    await tx.tenantSettings.create({
+      data: { tenantId: tenant.id, brandName: input.institutionDisplayName ?? input.name }
+    });
     const institution = await tx.institution.create({
       data: {
         tenantId: tenant.id,
         name: input.name,
         displayName: input.institutionDisplayName,
         code: "MAIN",
-        status: "ACTIVE",
-        createdById: ctx.userId
+        status: "ACTIVE"
       }
     });
     const branch = await tx.branch.create({
@@ -458,12 +295,11 @@ export async function createSchool(ctx: TenantContext, input: z.infer<typeof cre
         institutionId: institution.id,
         name: "Main Branch",
         code: "MAIN",
-        status: "ACTIVE",
-        createdById: ctx.userId
+        status: "ACTIVE"
       }
     });
-    await tx.attendanceSetting.create({ data: { tenantId: tenant.id, branchId: branch.id, createdById: ctx.userId } });
-    await ensureDefaultRolesForTenant(tx, tenant.id, ctx.userId);
+    await tx.attendanceSetting.create({ data: { tenantId: tenant.id, branchId: branch.id } });
+    await ensureDefaultRolesForTenant(tx, tenant.id);
 
     if (input.principalFirstName && input.principalEmail && input.principalInitialPassword) {
       const principalRole = await tx.role.findUnique({
@@ -471,6 +307,7 @@ export async function createSchool(ctx: TenantContext, input: z.infer<typeof cre
         select: { id: true }
       });
       if (!principalRole) throw new AppError("PRINCIPAL_ROLE_NOT_FOUND", "PRINCIPAL_ROLE_NOT_FOUND", 500);
+
       const principal = await tx.user.create({
         data: {
           tenantId: tenant.id,
@@ -480,8 +317,7 @@ export async function createSchool(ctx: TenantContext, input: z.infer<typeof cre
           displayName: [input.principalFirstName, input.principalLastName].filter(Boolean).join(" "),
           userType: "STAFF",
           status: "ACTIVE",
-          activatedAt: new Date(),
-          createdById: ctx.userId
+          activatedAt: new Date()
         }
       });
       await tx.passwordCredential.create({
@@ -492,34 +328,46 @@ export async function createSchool(ctx: TenantContext, input: z.infer<typeof cre
         }
       });
       await tx.userRoleAssignment.create({
-        data: { tenantId: tenant.id, userId: principal.id, roleId: principalRole.id, assignedById: ctx.userId }
+        data: { tenantId: tenant.id, userId: principal.id, roleId: principalRole.id }
       });
       await tx.userBranchAccess.create({
-        data: { tenantId: tenant.id, userId: principal.id, branchId: branch.id, isPrimary: true, grantedById: ctx.userId }
+        data: { tenantId: tenant.id, userId: principal.id, branchId: branch.id, isPrimary: true }
       });
-      await writeAuditLog({
-        ctx: administratorAuditContext(ctx),
-        action: CAMPUS_CORE_AUDIT_EVENTS.PRINCIPAL_CREATED,
+      await writePlatformAuditLog({
+        ctx,
+        action: PLATFORM_ADMINISTRATOR_AUDIT_EVENTS.PRINCIPAL_CREATED,
         entityType: "User",
         entityId: principal.id,
-        metadata: { targetSchoolId: input.schoolId, principalEmail: principal.email, initialPasswordSet: true }
+        metadata: {
+          targetTenantId: tenant.id,
+          schoolId: tenant.slug,
+          principalEmail: principal.email,
+          initialPasswordSet: true,
+          mustChange: true
+        }
       }, tx);
     }
 
-    await writeAuditLog({
-      ctx: administratorAuditContext(ctx),
-      action: CAMPUS_CORE_AUDIT_EVENTS.SCHOOL_CREATED,
+    await writePlatformAuditLog({
+      ctx,
+      action: PLATFORM_ADMINISTRATOR_AUDIT_EVENTS.SCHOOL_CREATED,
       entityType: "Tenant",
       entityId: tenant.id,
       after: { id: tenant.id, name: tenant.name, slug: tenant.slug, status: tenant.status },
-      metadata: { schoolId: tenant.slug, defaultInstitutionCreated: true, defaultBranchCreated: true }
+      metadata: {
+        schoolId: tenant.slug,
+        defaultInstitutionCreated: true,
+        defaultBranchCreated: true
+      }
     }, tx);
     return tenant;
-  });
+  }, { maxWait: 10_000, timeout: 60_000 });
 }
 
-export async function updateSchool(ctx: TenantContext, input: z.infer<typeof updateSchoolSchema>) {
-  await requirePlatformPermission(ctx, "platform.school.update");
+export async function updateSchool(
+  ctx: PlatformAdministratorContext,
+  input: z.infer<typeof updateSchoolSchema>
+) {
   return db.$transaction(async (tx) => {
     const before = await tx.tenant.findUnique({ where: { id: input.tenantId } });
     if (!before) throw notFound("SCHOOL_NOT_FOUND");
@@ -544,39 +392,54 @@ export async function updateSchool(ctx: TenantContext, input: z.infer<typeof upd
           where: { id: primaryInstitution.id },
           data: {
             displayName: input.institutionDisplayName,
-            logoUrl: input.institutionLogoUrl,
-            updatedById: ctx.userId
+            logoUrl: input.institutionLogoUrl
           }
         });
       }
     }
 
-    await writeAuditLog({
-      ctx: administratorAuditContext(ctx),
-      action: CAMPUS_CORE_AUDIT_EVENTS.SCHOOL_UPDATED,
+    await writePlatformAuditLog({
+      ctx,
+      action: PLATFORM_ADMINISTRATOR_AUDIT_EVENTS.SCHOOL_UPDATED,
       entityType: "Tenant",
       entityId: after.id,
-      before: { id: before.id, name: before.name, slug: before.slug, status: before.status, supportEmail: before.supportEmail },
-      after: { id: after.id, name: after.name, slug: after.slug, status: after.status, supportEmail: after.supportEmail }
+      before: {
+        id: before.id,
+        name: before.name,
+        slug: before.slug,
+        status: before.status,
+        supportEmail: before.supportEmail
+      },
+      after: {
+        id: after.id,
+        name: after.name,
+        slug: after.slug,
+        status: after.status,
+        supportEmail: after.supportEmail
+      }
     }, tx);
     return after;
   });
 }
 
-export async function updateSchoolId(ctx: TenantContext, input: z.infer<typeof updateSchoolIdSchema>) {
-  await requirePlatformPermission(ctx, "platform.school.update_school_id");
+export async function updateSchoolId(
+  ctx: PlatformAdministratorContext,
+  input: z.infer<typeof updateSchoolIdSchema>
+) {
   return db.$transaction(async (tx) => {
     const before = await tx.tenant.findUnique({ where: { id: input.tenantId } });
     if (!before) throw notFound("SCHOOL_NOT_FOUND");
-    if (before.slug !== input.currentSchoolId) throw new AppError("CURRENT_SCHOOL_ID_MISMATCH", "CURRENT_SCHOOL_ID_MISMATCH", 400);
+    if (before.slug !== input.currentSchoolId) {
+      throw new AppError("CURRENT_SCHOOL_ID_MISMATCH", "CURRENT_SCHOOL_ID_MISMATCH", 400);
+    }
     await assertSchoolIdAvailable(tx, input.newSchoolId, input.tenantId);
     const after = await tx.tenant.update({
       where: { id: input.tenantId },
       data: { slug: input.newSchoolId }
     });
-    await writeAuditLog({
-      ctx: administratorAuditContext(ctx),
-      action: CAMPUS_CORE_AUDIT_EVENTS.SCHOOL_ID_UPDATED,
+    await writePlatformAuditLog({
+      ctx,
+      action: PLATFORM_ADMINISTRATOR_AUDIT_EVENTS.SCHOOL_ID_UPDATED,
       entityType: "Tenant",
       entityId: after.id,
       before: { schoolId: before.slug },
@@ -587,36 +450,48 @@ export async function updateSchoolId(ctx: TenantContext, input: z.infer<typeof u
   });
 }
 
-export async function deactivateSchool(ctx: TenantContext, input: z.infer<typeof deactivateSchoolSchema>) {
-  await requirePlatformPermission(ctx, "platform.school.deactivate");
-  if (input.tenantId === ctx.tenantId) throw new AppError("SCHOOL_SELF_DEACTIVATE_BLOCKED", "SCHOOL_SELF_DEACTIVATE_BLOCKED", 400);
+export async function deactivateSchool(
+  ctx: PlatformAdministratorContext,
+  input: z.infer<typeof deactivateSchoolSchema>
+) {
   return db.$transaction(async (tx) => {
     const before = await tx.tenant.findUnique({ where: { id: input.tenantId } });
     if (!before) throw notFound("SCHOOL_NOT_FOUND");
-    const after = await tx.tenant.update({ where: { id: input.tenantId }, data: { status: "SUSPENDED" } });
-    await tx.session.updateMany({ where: { tenantId: input.tenantId, revokedAt: null }, data: { revokedAt: new Date() } });
-    await writeAuditLog({
-      ctx: administratorAuditContext(ctx),
-      action: CAMPUS_CORE_AUDIT_EVENTS.SCHOOL_DEACTIVATED,
+    const after = await tx.tenant.update({
+      where: { id: input.tenantId },
+      data: { status: "SUSPENDED" }
+    });
+    const revokedSessions = await tx.session.updateMany({
+      where: { tenantId: input.tenantId, revokedAt: null },
+      data: { revokedAt: new Date() }
+    });
+    await writePlatformAuditLog({
+      ctx,
+      action: PLATFORM_ADMINISTRATOR_AUDIT_EVENTS.SCHOOL_DEACTIVATED,
       entityType: "Tenant",
       entityId: after.id,
       before: { status: before.status },
       after: { status: after.status },
-      metadata: { schoolId: after.slug, sessionsRevoked: true }
+      metadata: { schoolId: after.slug, sessionsRevoked: revokedSessions.count }
     }, tx);
     return after;
   });
 }
 
-export async function reactivateSchool(ctx: TenantContext, input: z.infer<typeof reactivateSchoolSchema>) {
-  await requirePlatformPermission(ctx, "platform.school.deactivate");
+export async function reactivateSchool(
+  ctx: PlatformAdministratorContext,
+  input: z.infer<typeof reactivateSchoolSchema>
+) {
   return db.$transaction(async (tx) => {
     const before = await tx.tenant.findUnique({ where: { id: input.tenantId } });
     if (!before) throw notFound("SCHOOL_NOT_FOUND");
-    const after = await tx.tenant.update({ where: { id: input.tenantId }, data: { status: "ACTIVE" } });
-    await writeAuditLog({
-      ctx: administratorAuditContext(ctx),
-      action: CAMPUS_CORE_AUDIT_EVENTS.SCHOOL_REACTIVATED,
+    const after = await tx.tenant.update({
+      where: { id: input.tenantId },
+      data: { status: "ACTIVE" }
+    });
+    await writePlatformAuditLog({
+      ctx,
+      action: PLATFORM_ADMINISTRATOR_AUDIT_EVENTS.SCHOOL_REACTIVATED,
       entityType: "Tenant",
       entityId: after.id,
       before: { status: before.status },
@@ -627,30 +502,110 @@ export async function reactivateSchool(ctx: TenantContext, input: z.infer<typeof
   });
 }
 
-export async function deleteSchoolIfSafe(ctx: TenantContext, input: z.infer<typeof deleteSchoolSchema>) {
-  await requirePlatformPermission(ctx, "platform.school.delete");
-  if (input.tenantId === ctx.tenantId) throw new AppError("SCHOOL_SELF_DELETE_BLOCKED", "SCHOOL_SELF_DELETE_BLOCKED", 400);
-  const school = await db.tenant.findUnique({ where: { id: input.tenantId }, select: { id: true, slug: true } });
-  if (!school) throw notFound("SCHOOL_NOT_FOUND");
-  const dependencySummary = await getSchoolDependencySummary(input.tenantId);
-  if (hasDependencies(dependencySummary)) {
-    await writeAuditLog({
-      ctx: administratorAuditContext(ctx),
-      action: CAMPUS_CORE_AUDIT_EVENTS.SCHOOL_DELETE_BLOCKED,
+export async function deleteSchoolPermanently(
+  ctx: PlatformAdministratorContext,
+  input: z.infer<typeof deleteSchoolSchema>
+) {
+  return db.$transaction(async (tx) => {
+    const school = await tx.tenant.findUnique({
+      where: { id: input.tenantId },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        _count: { select: schoolDependencyCountSelect }
+      }
+    });
+    if (!school) throw notFound("SCHOOL_NOT_FOUND");
+
+    const dependencySummary = toSchoolDependencySummary(school._count);
+    const deletedRows = {
+      notificationDeliveryLogs: (await tx.notificationDeliveryLog.deleteMany({ where: { tenantId: school.id } })).count,
+      notificationOutboxItems: (await tx.notificationOutbox.deleteMany({ where: { tenantId: school.id } })).count,
+      whatsAppSettings: (await tx.whatsAppIntegrationSetting.deleteMany({ where: { tenantId: school.id } })).count,
+      notificationTemplates: (await tx.notificationTemplate.deleteMany({ where: { tenantId: school.id } })).count,
+      communicationPreferences: (await tx.communicationPreference.deleteMany({ where: { tenantId: school.id } })).count,
+      studentAttendanceRecords: (await tx.studentAttendanceRecord.deleteMany({ where: { tenantId: school.id } })).count,
+      staffAttendanceRecords: (await tx.staffAttendanceRecord.deleteMany({ where: { tenantId: school.id } })).count,
+      staffAttendanceQrTokens: (await tx.staffAttendanceQrToken.deleteMany({ where: { tenantId: school.id } })).count,
+      enrollments: (await tx.enrollment.deleteMany({ where: { tenantId: school.id } })).count,
+      studentGuardianLinks: (await tx.studentGuardianLink.deleteMany({ where: { tenantId: school.id } })).count,
+      classSections: (await tx.classSection.deleteMany({ where: { tenantId: school.id } })).count,
+      students: (await tx.student.deleteMany({ where: { tenantId: school.id } })).count,
+      guardians: (await tx.guardian.deleteMany({ where: { tenantId: school.id } })).count,
+      staffProfiles: (await tx.staffProfile.deleteMany({ where: { tenantId: school.id } })).count,
+      subjects: (await tx.subject.deleteMany({ where: { tenantId: school.id } })).count,
+      classes: (await tx.class.deleteMany({ where: { tenantId: school.id } })).count,
+      sections: (await tx.section.deleteMany({ where: { tenantId: school.id } })).count,
+      attendanceSettings: (await tx.attendanceSetting.deleteMany({ where: { tenantId: school.id } })).count,
+      auditLogs: (await tx.auditLog.deleteMany({ where: { tenantId: school.id } })).count,
+      passkeyChallenges: (await tx.passkeyChallenge.deleteMany({ where: { tenantId: school.id } })).count,
+      passkeyCredentials: (await tx.passkeyCredential.deleteMany({ where: { tenantId: school.id } })).count,
+      loginOtps: (await tx.loginOtp.deleteMany({ where: { tenantId: school.id } })).count,
+      sessions: (await tx.session.deleteMany({ where: { tenantId: school.id } })).count,
+      branchAccesses: (await tx.userBranchAccess.deleteMany({ where: { tenantId: school.id } })).count,
+      roleAssignments: (await tx.userRoleAssignment.deleteMany({ where: { tenantId: school.id } })).count,
+      rolePermissions: (await tx.rolePermission.deleteMany({ where: { tenantId: school.id } })).count,
+      users: (await tx.user.deleteMany({ where: { tenantId: school.id } })).count,
+      roles: (await tx.role.deleteMany({ where: { tenantId: school.id } })).count,
+      tenantSettings: (await tx.tenantSettings.deleteMany({ where: { tenantId: school.id } })).count,
+      academicYears: (await tx.academicYear.deleteMany({ where: { tenantId: school.id } })).count,
+      branches: (await tx.branch.deleteMany({ where: { tenantId: school.id } })).count,
+      institutions: (await tx.institution.deleteMany({ where: { tenantId: school.id } })).count
+    };
+
+    await tx.tenant.delete({ where: { id: school.id } });
+    await writePlatformAuditLog({
+      ctx,
+      action: PLATFORM_ADMINISTRATOR_AUDIT_EVENTS.SCHOOL_DELETED,
       entityType: "Tenant",
       entityId: school.id,
-      metadata: { schoolId: school.slug, dependencySummary }
-    }).catch(() => null);
-    throw new AppError("SCHOOL_DELETE_BLOCKED_BY_DEPENDENCIES", "SCHOOL_DELETE_BLOCKED_BY_DEPENDENCIES", 409);
-  }
+      before: { id: school.id, name: school.name, slug: school.slug, status: school.status },
+      metadata: { schoolId: school.slug, dependencySummary, deletedRows, permanent: true }
+    }, tx);
 
-  await db.tenant.delete({ where: { id: input.tenantId } });
-  await writeAuditLog({
-    ctx: administratorAuditContext(ctx),
-    action: CAMPUS_CORE_AUDIT_EVENTS.SCHOOL_DELETED,
-    entityType: "Tenant",
-    entityId: school.id,
-    metadata: { schoolId: school.slug }
-  }).catch(() => null);
-  return { tenantId: input.tenantId };
+    return { tenantId: school.id, deletedRows };
+  }, { maxWait: 10_000, timeout: 60_000 });
+}
+
+export async function changePlatformAdministratorPassword(
+  ctx: PlatformAdministratorContext,
+  input: z.infer<typeof changeOwnPasswordSchema>
+) {
+  return db.$transaction(async (tx) => {
+    const credential = await tx.platformAdministratorCredential.findUnique({
+      where: { administratorId: ctx.administratorId },
+      select: { passwordHash: true }
+    });
+    if (!credential) throw new AppError("ADMINISTRATOR_PASSWORD_NOT_SET", "ADMINISTRATOR_PASSWORD_NOT_SET", 400);
+    if (!(await verifyPassword(input.currentPassword, credential.passwordHash))) {
+      throw new AppError("CURRENT_PASSWORD_INCORRECT", "CURRENT_PASSWORD_INCORRECT", 400);
+    }
+
+    await tx.platformAdministratorCredential.update({
+      where: { administratorId: ctx.administratorId },
+      data: {
+        passwordHash: await hashPassword(input.newPassword),
+        passwordUpdatedAt: new Date(),
+        mustChange: false
+      }
+    });
+    const revokedSessions = await tx.platformAdministratorSession.updateMany({
+      where: {
+        administratorId: ctx.administratorId,
+        revokedAt: null,
+        id: { not: ctx.sessionId }
+      },
+      data: { revokedAt: new Date() }
+    });
+    await writePlatformAuditLog({
+      ctx,
+      action: PLATFORM_ADMINISTRATOR_AUDIT_EVENTS.PASSWORD_CHANGED,
+      entityType: "PlatformAdministrator",
+      entityId: ctx.administratorId,
+      metadata: { passwordUpdated: true, mustChange: false, sessionsRevoked: revokedSessions.count }
+    }, tx);
+    return { administratorId: ctx.administratorId };
+  });
 }

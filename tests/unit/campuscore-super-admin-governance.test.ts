@@ -27,7 +27,7 @@ describe("CampusCore five-role user governance", () => {
     ]));
   });
 
-  it("reserves platform access for Administrator while keeping legacy school roles principal-scoped", () => {
+  it("keeps the legacy Administrator tenant role permissionless after platform separation", () => {
     expect(hasPlatformAdminRole(["SUPER_ADMIN"])).toBe(false);
     expect(hasPlatformAdminRole(["ADMINISTRATOR"])).toBe(true);
     expect(hasPlatformAdminRole(["ADMIN"])).toBe(false);
@@ -36,16 +36,7 @@ describe("CampusCore five-role user governance", () => {
       "campuscore.user.reset_password"
     ]));
     expect(DEFAULT_ROLE_PERMISSION_MAP.SUPER_ADMIN).not.toContain("platform.school.create");
-    expect(DEFAULT_ROLE_PERMISSION_MAP.ADMINISTRATOR).toEqual(expect.arrayContaining([
-      "platform.dashboard.view",
-      "platform.school.view",
-      "platform.school.create",
-      "platform.school.update",
-      "platform.school.deactivate",
-      "platform.school.delete",
-      "platform.school.update_school_id",
-      "platform.audit.view"
-    ]));
+    expect(DEFAULT_ROLE_PERMISSION_MAP.ADMINISTRATOR).toEqual([]);
     expect(DEFAULT_ROLE_PERMISSION_MAP.ADMIN).toEqual(expect.arrayContaining([
       "campuscore.user.create",
       "campuscore.branch.manage",
@@ -66,7 +57,7 @@ describe("CampusCore five-role user governance", () => {
   });
 
   it("keeps principal, teacher, and staff role-assignment boundaries safe", () => {
-    expect(canAssignRole(["ADMINISTRATOR"], "PRINCIPAL")).toBe(true);
+    expect(canAssignRole(["ADMINISTRATOR"], "PRINCIPAL")).toBe(false);
     expect(canAssignRole(["ADMINISTRATOR"], "ADMINISTRATOR")).toBe(false);
     expect(canAssignRole(["ADMIN"], "ADMIN")).toBe(false);
     expect(canAssignRole(["SUPER_ADMIN"], "ADMINISTRATOR")).toBe(false);
@@ -82,6 +73,7 @@ describe("CampusCore five-role user governance", () => {
   });
 
   it("returns role-aware post-login destinations without creating role or institution logins", () => {
+    expect(getPostLoginRedirectPath(["ADMINISTRATOR"])).not.toBe("/administrator");
     expect(getPostLoginRedirectPath(["ADMIN"])).toBe("/dashboard");
     expect(getPostLoginRedirectPath(["PRINCIPAL"])).toBe("/dashboard");
     expect(getPostLoginRedirectPath(["CLASS_TEACHER"])).toBe("/academia/attendance/mark");

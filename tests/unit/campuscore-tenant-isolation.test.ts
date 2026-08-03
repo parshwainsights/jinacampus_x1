@@ -161,9 +161,9 @@ describe("CampusCore tenant isolation", () => {
     }));
   });
 
-  it("creates users and role assignments with tenantId from context, ignoring client-like tenant fields", async () => {
+  it("creates users with tenantId from context, ignoring client-like tenant fields", async () => {
     mocks.tx.branch.count.mockResolvedValue(1);
-    mocks.tx.role.findMany.mockResolvedValue([{ id: roleId, code: "PRINCIPAL" }]);
+    mocks.tx.role.findMany.mockResolvedValue([]);
     mocks.tx.user.create.mockResolvedValue({ id: newUserId, tenantId });
 
     const unsafeInput = {
@@ -172,17 +172,15 @@ describe("CampusCore tenant isolation", () => {
       email: "office@example.com",
       firstName: "Office",
       branchIds: [branchId],
-      roleCodes: ["PRINCIPAL"]
+      roleCodes: []
     } as unknown as Parameters<typeof createUserService>[1];
 
-    await createUserService({ ...ctx, roleCodes: ["ADMINISTRATOR"] }, unsafeInput);
+    await createUserService(ctx, unsafeInput);
 
     expect(mocks.tx.branch.count).toHaveBeenCalledWith({
       where: { tenantId, id: { in: [branchId] }, status: { not: "ARCHIVED" } }
     });
-    expect(mocks.tx.role.findMany).toHaveBeenCalledWith({
-      where: { tenantId, code: { in: ["PRINCIPAL"] }, isActive: true }
-    });
+    expect(mocks.tx.role.findMany).not.toHaveBeenCalled();
     expect(mocks.tx.user.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         tenantId,
@@ -193,9 +191,7 @@ describe("CampusCore tenant isolation", () => {
     expect(mocks.tx.userBranchAccess.create).toHaveBeenCalledWith({
       data: { tenantId, userId: newUserId, branchId, grantedById: actorUserId }
     });
-    expect(mocks.tx.userRoleAssignment.create).toHaveBeenCalledWith({
-      data: { tenantId, userId: newUserId, roleId, assignedById: actorUserId }
-    });
+    expect(mocks.tx.userRoleAssignment.create).not.toHaveBeenCalled();
     expect(JSON.stringify(mocks.tx.user.create.mock.calls[0][0])).not.toContain(otherTenantId);
   });
 

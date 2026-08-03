@@ -49,7 +49,7 @@ describe("five-role and passkey authentication foundation", () => {
     expect(hasSchoolLoginRole(["ADMIN"])).toBe(true);
     expect(hasSchoolLoginRole(["ADMINISTRATOR"])).toBe(false);
     expect(hasSchoolLoginRole(["ADMINISTRATOR", "PRINCIPAL"])).toBe(false);
-    expect(canAssignRole(["ADMINISTRATOR"], "PRINCIPAL")).toBe(true);
+    expect(canAssignRole(["ADMINISTRATOR"], "PRINCIPAL")).toBe(false);
     expect(canAssignRole(["ADMINISTRATOR"], "ADMINISTRATOR")).toBe(false);
     expect(canAssignRole(["PRINCIPAL"], "TEACHER")).toBe(true);
     expect(canAssignRole(["PRINCIPAL"], "PRINCIPAL")).toBe(false);
@@ -154,10 +154,13 @@ describe("five-role and passkey authentication foundation", () => {
     const passwordRoute = source("src/app/api/auth/login/route.ts");
     const passkeyService = source("src/modules/campus-core/passkey-auth.service.ts");
     const dashboardLayout = source("src/app/(dashboard)/layout.tsx");
+    const platformLoginRoute = source("src/app/api/auth/administrator-login/route.ts");
 
     expect(passwordRoute).toContain("hasSchoolLoginRole");
     expect(passkeyService).toContain("hasSchoolLoginRole");
-    expect(dashboardLayout).toContain('redirect("/administrator")');
+    expect(dashboardLayout).not.toContain("administrator");
+    expect(platformLoginRoute).toContain("db.platformAdministrator.findUnique");
+    expect(platformLoginRoute).not.toContain("db.user");
   });
 
   it("does not expose the retired phone-OTP login routes", () => {

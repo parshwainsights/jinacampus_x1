@@ -18,7 +18,7 @@ Institutions do not log in. Roles do not log in. A user signs in, then the serve
 - User belongs to a tenant.
 - User branch access is granted through `UserBranchAccess`.
 - User permissions come from active tenant/branch/academic-year role assignments.
-- The active branch is selected from authorized branch access. Platform-admin contexts may operate across tenant branches.
+- The active branch is selected from authorized branch access. Platform administrators do not have a tenant or branch context.
 
 ## Role Matrix
 
@@ -54,7 +54,7 @@ Teacher and staff roles do not receive user-management permissions.
 
 ## Administrator Governance
 
-JinaCampus Administrator users use `/administrator/login`. This login is separate from school user login and accepts email/password only.
+JinaCampus Administrator users use `/administrator/login`. This login is separate from school user login and accepts email/password only. Platform administrators are stored in independent platform identity, credential, session, and audit tables with no tenant foreign key.
 
 The administrator portal supports:
 
@@ -64,21 +64,9 @@ The administrator portal supports:
 - `/administrator/schools/[tenantId]`
 - `/administrator/schools/[tenantId]/edit`
 
-Administrator receives explicit platform governance permissions:
+Administrator Portal authorization comes from a server-derived `PlatformAdministratorSession`, not from tenant roles or permissions. The legacy tenant `ADMINISTRATOR` code remains a migration marker only, has no tenant permissions, and is never offered in school user-management forms.
 
-- `platform.dashboard.view`
-- `platform.tenant.manage`
-- `platform.institution.manage`
-- `platform.school.view`
-- `platform.school.create`
-- `platform.school.update`
-- `platform.school.deactivate`
-- `platform.school.delete`
-- `platform.school.update_school_id`
-- `platform.user.manage`
-- `platform.audit.view`
-
-Platform-style permissions are seeded as `SYSTEM` permissions and do not create an institution or role login. The Administrator role is operator-provisioned and is never offered in school user-management forms.
+The portal is limited to school registry create, read, update, lifecycle control, and permanent delete. It does not impersonate school users or expose school operational dashboards.
 
 ## Login / Logout
 
@@ -89,14 +77,13 @@ Platform-style permissions are seeded as `SYSTEM` permissions and do not create 
 - The legacy `/login?tenant=<schoolId>` query and `tenantSlug` request key remain compatibility aliases only.
 - Invalid school login returns the safe generic error: `Invalid School ID, email, or password.`
 - Invalid administrator login returns the safe generic error: `Invalid administrator credentials.`
-- Platform Administrators are rejected by the school password and passkey login
-  paths even if a tenant-scoped identifier is supplied.
-- Valid login creates a server session and stores only the session token hash server-side.
+- Platform Administrators are rejected by the school password and passkey login paths because they are not tenant users. Legacy tenant Administrator assignments are inactive and cannot authorize either login boundary.
+- Valid school login creates a tenant session; valid platform login creates a separate platform session. Both store only domain-appropriate token hashes server-side.
 - Login returns a server-derived destination: Principal and Office Staff land on the role-aware dashboard; Teacher lands on assigned student attendance; Staff lands on QR scan.
 - Logout is available from the account/topbar menu.
 - Logout revokes the session, clears the cookie, audits the event, and redirects to `/login`.
 - Protected route families include dashboard, CampusCore, Academia, StaffBoard, and account pages.
-- Administrator routes are protected separately and unauthenticated users are sent to `/administrator/login`.
+- Administrator routes require the separate platform cookie and unauthenticated users are sent to `/administrator/login`.
 
 ## Institution / Branch Context
 
@@ -134,6 +121,7 @@ Principal's server-derived branch access.
 - Invite email delivery and richer first-login onboarding remain future improvements.
 - Temporary-password users are now forced through `/account/change-password` before other protected workflows.
 - Passkey enrollment requires the current password and is unavailable until a required password change is complete.
+- Platform temporary passwords are changed at `/administrator/account/change-password`; the update uses the platform credential, revokes other platform sessions, and does not depend on a school tenant.
 
 `mustChange` is enforced by the central tenant-context and mobile-token
 resolvers. It is not only a navigation rule. Logout, `/api/auth/me`, and the

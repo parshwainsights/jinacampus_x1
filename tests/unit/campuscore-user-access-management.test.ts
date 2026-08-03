@@ -283,21 +283,18 @@ describe("CampusCore user access management", () => {
     expect(mocks.writeAuditLog).not.toHaveBeenCalled();
   });
 
-  it("allows platform admins to assign school roles but not another platform administrator", async () => {
+  it("does not let a legacy tenant administrator assign school or platform roles", async () => {
     mocks.tx.user.findFirst.mockResolvedValue({
       id: userId,
       email: "admin@example.test",
       staffProfile: { id: "staff-profile-id", tenantId }
     });
-    mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "PRINCIPAL", name: "Principal" });
-    mocks.tx.userRoleAssignment.findUnique.mockResolvedValue(null);
-    mocks.tx.userRoleAssignment.create.mockResolvedValue({ id: "assignment-id", userId, roleId, isActive: true });
+    mocks.tx.role.findFirst.mockResolvedValue({ id: roleId, code: "TEACHER", name: "Teacher" });
 
-    await assignUserRoleService({ ...ctx, roleCodes: ["ADMINISTRATOR"] }, roleInput);
+    await expect(assignUserRoleService({ ...ctx, roleCodes: ["ADMINISTRATOR"] }, roleInput))
+      .rejects.toThrow("ROLE_ASSIGNMENT_NOT_ALLOWED");
 
-    expect(mocks.tx.userRoleAssignment.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ tenantId, userId, roleId, assignedById: actorUserId })
-    });
+    expect(mocks.tx.userRoleAssignment.create).not.toHaveBeenCalled();
 
     resetMocks();
     mocks.tx.user.findFirst.mockResolvedValue({ id: userId, email: "admin@example.test" });

@@ -40,6 +40,12 @@ enum UserStatus {
   DEACTIVATED
 }
 
+enum PlatformAdministratorStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
 enum UserType {
   OWNER
   STAFF
@@ -312,6 +318,76 @@ model Tenant {
 
   @@index([status])
   @@map("tenants")
+}
+
+model PlatformAdministrator {
+  id          String                      @id @default(uuid()) @db.Uuid
+  email       String                      @unique
+  displayName String?
+  status      PlatformAdministratorStatus @default(ACTIVE)
+  lastLoginAt DateTime?
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+
+  credential PlatformAdministratorCredential?
+  sessions   PlatformAdministratorSession[]
+  auditLogs  PlatformAuditLog[]               @relation("PlatformAuditActor")
+
+  @@index([status])
+  @@map("platform_administrators")
+}
+
+model PlatformAdministratorCredential {
+  id                String   @id @default(uuid()) @db.Uuid
+  administratorId   String   @unique @db.Uuid
+  passwordHash      String
+  passwordUpdatedAt DateTime @default(now())
+  mustChange        Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  administrator PlatformAdministrator @relation(fields: [administratorId], references: [id], onDelete: Cascade)
+
+  @@map("platform_administrator_credentials")
+}
+
+model PlatformAdministratorSession {
+  id              String    @id @default(uuid()) @db.Uuid
+  administratorId String    @db.Uuid
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  administrator PlatformAdministrator @relation(fields: [administratorId], references: [id], onDelete: Cascade)
+
+  @@index([administratorId, revokedAt])
+  @@index([expiresAt])
+  @@map("platform_administrator_sessions")
+}
+
+model PlatformAuditLog {
+  id                   String   @id @default(uuid()) @db.Uuid
+  actorAdministratorId String?  @db.Uuid
+  action               String
+  entityType           String
+  entityId             String?
+  beforeJson           Json?
+  afterJson            Json?
+  metadataJson         Json?
+  ipAddress            String?
+  userAgent            String?
+  createdAt            DateTime @default(now())
+
+  actor PlatformAdministrator? @relation("PlatformAuditActor", fields: [actorAdministratorId], references: [id], onDelete: SetNull)
+
+  @@index([actorAdministratorId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+  @@map("platform_audit_logs")
 }
 
 model Institution {

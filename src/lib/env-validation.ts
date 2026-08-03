@@ -24,6 +24,7 @@ const environmentSchema = z.object({
   WEBAUTHN_ORIGIN: z.string().url().optional(),
   WEBAUTHN_RP_ID: optionalText,
   SESSION_COOKIE_NAME: z.string().min(1).default("jc_session"),
+  PLATFORM_SESSION_COOKIE_NAME: z.string().min(1).default("jc_platform_session"),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
   SESSION_SECRET: optionalText,
   PASSWORD_PEPPER: z.string().min(16),

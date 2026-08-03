@@ -141,17 +141,12 @@ describe("RBAC guard", () => {
     expect(mocks.db.userRoleAssignment.findMany).not.toHaveBeenCalled();
   });
 
-  it("allows platform-admin role contexts to evaluate branch-scoped permissions across tenant branches", async () => {
-    mocks.db.userRoleAssignment.findMany.mockResolvedValue([
-      assignment(["campuscore.branch.manage"])
-    ]);
-
-    const permissions = await getEffectivePermissions({
+  it("does not grant legacy tenant administrators a cross-branch bypass", async () => {
+    await expect(getEffectivePermissions({
       ctx: { ...ctx, accessibleBranchIds: [], roleCodes: ["ADMINISTRATOR"] },
       branchId
-    });
+    })).rejects.toThrow("FORBIDDEN_BRANCH_ACCESS");
 
-    expect(permissions.has("campuscore.branch.manage")).toBe(true);
-    expect(mocks.db.userRoleAssignment.findMany).toHaveBeenCalled();
+    expect(mocks.db.userRoleAssignment.findMany).not.toHaveBeenCalled();
   });
 });

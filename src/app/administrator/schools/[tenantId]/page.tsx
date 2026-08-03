@@ -49,9 +49,6 @@ export default async function AdministratorSchoolDetailPage({ params }: { params
               </div>
             </div>
             <div className="grid gap-2 sm:flex sm:items-center">
-              <Link href={`/administrator/schools/${school.id}/dashboard`} className="premium-primary-button w-full premium-focus sm:w-auto">
-                Open School Dashboard
-              </Link>
               <Link href={`/administrator/schools/${school.id}/edit`} className="premium-secondary-button w-full premium-focus sm:w-auto">
                 Edit School
               </Link>
@@ -101,7 +98,7 @@ export default async function AdministratorSchoolDetailPage({ params }: { params
         <section className="premium-card p-5">
           <h3 className="text-lg font-semibold text-slate-950">Dependency Summary</h3>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            Hard delete is blocked when dependent data exists. Deactivate schools that have live setup or history.
+            Counts are shown for deletion review. Confirmed permanent deletion removes these tenant-owned records atomically and retains a separate platform audit entry.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {dependencies.map(([label, value]) => (
