@@ -503,7 +503,7 @@ describe("StaffBoard Lite staff profile services and queries", () => {
     }), mocks.tx);
   });
 
-  it("does not introduce payroll, leave, or appraisal permissions", () => {
-    expect(STAFFBOARD_LITE_PERMISSIONS.join(" ")).not.toMatch(/payroll|leave|appraisal/i);
+  it("does not introduce payroll or appraisal permissions", () => {
+    expect(STAFFBOARD_LITE_PERMISSIONS.join(" ")).not.toMatch(/payroll|appraisal/i);
   });
 });

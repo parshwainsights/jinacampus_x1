@@ -30,7 +30,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   ]);
   const templateKeys = new Set(notificationStatus.templates.map((template) => template.templateKey));
   const hasStudentTemplate = templateKeys.has("student_daily_attendance_alert");
-  const hasStaffTemplate = templateKeys.has("staff_monthly_attendance_summary");
+  const hasStaffWeeklyTemplate = templateKeys.has("staff_weekly_attendance_summary");
+  const hasStaffMonthlyTemplate = templateKeys.has("staff_monthly_attendance_summary");
+  const hasAllAttendanceTemplates = hasStudentTemplate && hasStaffWeeklyTemplate && hasStaffMonthlyTemplate;
   const providerStatusLabel = notificationStatus.isEnabled && notificationStatus.hasProviderIdentity
     ? notificationStatus.provider
     : "DRY_RUN / provider not configured";
@@ -48,11 +50,44 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           Attendance settings saved.
         </div>
       ) : null}
-      <form action={updateTenantSettingsAction} className="premium-card grid gap-3 p-5 md:grid-cols-4">
-        <input name="brandName" defaultValue={settings?.brandName ?? "JinaCampus"} />
-        <input name="brandByline" defaultValue={settings?.brandByline ?? "powered by Parshwa Insights"} />
-        <input name="timezone" defaultValue={settings?.timezone ?? "Asia/Kolkata"} />
-        <button className="bg-brand-700 px-4 py-2 text-sm font-medium text-white">Save</button>
+      <form action={updateTenantSettingsAction} className="premium-card grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
+        <label className="text-xs font-medium text-slate-600">
+          Product display name
+          <input name="brandName" defaultValue={settings?.brandName ?? "JinaCampus"} className="mt-1 min-h-11 w-full" />
+        </label>
+        <label className="text-xs font-medium text-slate-600">
+          Product byline
+          <input name="brandByline" defaultValue={settings?.brandByline ?? "powered by Parshwa Insights"} className="mt-1 min-h-11 w-full" />
+        </label>
+        <label className="text-xs font-medium text-slate-600">
+          Institutional time zone
+          <input name="timezone" defaultValue={settings?.timezone ?? "Asia/Kolkata"} list="institution-timezones" className="mt-1 min-h-11 w-full" />
+          <span className="mt-1 block text-[11px] leading-4 text-slate-500">Use an IANA value such as Asia/Kolkata. A branch-specific time zone takes precedence.</span>
+        </label>
+        <datalist id="institution-timezones">
+          <option value="Asia/Kolkata" />
+          <option value="Asia/Dubai" />
+          <option value="Asia/Singapore" />
+          <option value="Europe/London" />
+          <option value="America/New_York" />
+        </datalist>
+        <label className="text-xs font-medium text-slate-600">
+          Locale
+          <input name="locale" defaultValue={settings?.locale ?? "en-IN"} className="mt-1 min-h-11 w-full" />
+        </label>
+        <label className="text-xs font-medium text-slate-600">
+          Date format
+          <input name="dateFormat" defaultValue={settings?.dateFormat ?? "dd/MM/yyyy"} className="mt-1 min-h-11 w-full" />
+        </label>
+        <label className="text-xs font-medium text-slate-600">
+          Currency
+          <input name="currency" defaultValue={settings?.currency ?? "INR"} maxLength={3} className="mt-1 min-h-11 w-full uppercase" />
+        </label>
+        <label className="flex min-h-11 items-center gap-2 self-end text-sm text-slate-600">
+          <input type="checkbox" name="allowMultipleActiveAcademicYears" defaultChecked={settings?.allowMultipleActiveAcademicYears ?? false} />
+          Allow multiple active academic years
+        </label>
+        <button className="min-h-11 rounded-lg bg-brand-700 px-4 py-2 text-sm font-medium text-white md:col-span-2 xl:col-span-4 xl:justify-self-end">Save institution settings</button>
       </form>
       <section className="premium-card space-y-4 p-5">
         <div>
@@ -81,10 +116,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Template mapping</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {hasStudentTemplate && hasStaffTemplate ? "Student and staff templates active" : "Template setup incomplete"}
+              {hasAllAttendanceTemplates ? "Student, weekly, and monthly templates active" : "Template setup incomplete"}
             </p>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              Student daily alerts and staff monthly summaries use tenant-scoped template mappings.
+              Student daily alerts plus staff weekly and monthly reports use tenant-scoped template mappings.
             </p>
           </div>
         </div>
@@ -135,8 +170,21 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                 </span>
               </label>
               <label className="text-xs font-medium text-slate-600">
-                Staff summary day
+                Monthly report day
                 <input name="staffMonthlySummarySendDay" defaultValue={s.staffMonthlySummarySendDay} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-xs font-medium text-slate-600">
+                Weekly report day
+                <select name="staffWeeklySummarySendDay" defaultValue={s.staffWeeklySummarySendDay} disabled={!canManageNotificationSettings} className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                  <option value="7">Sunday</option>
+                </select>
+                {!canManageNotificationSettings ? <input type="hidden" name="staffWeeklySummarySendDay" value={s.staffWeeklySummarySendDay} /> : null}
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" name="studentAutoLockEnabled" defaultChecked={s.studentAutoLockEnabled} />
@@ -144,11 +192,11 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" name="sendStudentAbsentAlert" defaultChecked={s.sendStudentAbsentAlert} />
-                Legacy absence alert flag
+                Send absence alerts
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" name="sendStudentLateAlert" defaultChecked={s.sendStudentLateAlert} />
-                Legacy late alert flag
+                Send late alerts
               </label>
               <label className="flex items-center gap-2 text-sm text-slate-600">
                 <input type="checkbox" name="staffQrAttendanceEnabled" defaultChecked={s.staffQrAttendanceEnabled} />
@@ -161,6 +209,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                     Student WhatsApp alerts
                   </label>
                   <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <input type="checkbox" name="staffWeeklySummaryWhatsAppEnabled" defaultChecked={s.staffWeeklySummaryWhatsAppEnabled} />
+                    Staff weekly WhatsApp
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600">
                     <input type="checkbox" name="staffMonthlySummaryWhatsAppEnabled" defaultChecked={s.staffMonthlySummaryWhatsAppEnabled} />
                     Staff monthly WhatsApp
                   </label>
@@ -168,11 +220,16 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               ) : (
                 <>
                   <input type="hidden" name="studentAttendanceWhatsAppEnabled" value={s.studentAttendanceWhatsAppEnabled ? "on" : ""} />
+                  <input type="hidden" name="staffWeeklySummaryWhatsAppEnabled" value={s.staffWeeklySummaryWhatsAppEnabled ? "on" : ""} />
                   <input type="hidden" name="staffMonthlySummaryWhatsAppEnabled" value={s.staffMonthlySummaryWhatsAppEnabled ? "on" : ""} />
                 </>
               )}
               <label className="text-xs font-medium text-slate-600 md:col-span-2">
-                Staff summary time
+                Weekly report time
+                <input name="staffWeeklySummarySendTime" defaultValue={s.staffWeeklySummarySendTime} readOnly={!canManageNotificationSettings} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+              </label>
+              <label className="text-xs font-medium text-slate-600 md:col-span-2">
+                Monthly report time
                 <input name="staffMonthlySummarySendTime" defaultValue={s.staffMonthlySummarySendTime} readOnly={!canManageNotificationSettings} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
               </label>
               <button className="bg-brand-700 px-4 py-2 text-sm font-medium text-white md:col-span-2">Save</button>

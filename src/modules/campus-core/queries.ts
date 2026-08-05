@@ -321,7 +321,11 @@ export async function getTenantSettings(ctx: TenantContext) {
     select: {
       brandName: true,
       brandByline: true,
-      timezone: true
+      timezone: true,
+      locale: true,
+      dateFormat: true,
+      currency: true,
+      allowMultipleActiveAcademicYears: true
     }
   });
 }
@@ -351,6 +355,9 @@ export async function listAttendanceSettings(ctx: TenantContext) {
       staffHalfDayBeforeMinutes: true,
       staffMinimumWorkingMinutes: true,
       staffQrTokenValiditySeconds: true,
+      staffWeeklySummaryWhatsAppEnabled: true,
+      staffWeeklySummarySendDay: true,
+      staffWeeklySummarySendTime: true,
       staffMonthlySummaryWhatsAppEnabled: true,
       staffMonthlySummarySendDay: true,
       staffMonthlySummarySendTime: true,
@@ -387,7 +394,7 @@ export async function getAttendanceNotificationStatus(ctx: TenantContext) {
       where: {
         tenantId: ctx.tenantId,
         channel: "WHATSAPP",
-        templateKey: { in: ["student_daily_attendance_alert", "staff_monthly_attendance_summary"] },
+        templateKey: { in: ["student_daily_attendance_alert", "staff_weekly_attendance_summary", "staff_monthly_attendance_summary"] },
         isActive: true
       },
       select: {

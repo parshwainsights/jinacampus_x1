@@ -66,11 +66,12 @@ describe("StaffBoard Lite Prisma schema", () => {
   it("defines daily staff attendance uniqueness, sources, and correction fields", () => {
     const model = getModelBlock("StaffAttendanceRecord");
 
-    expect(model).toContain("attendanceDate    DateTime");
-    expect(model).toContain("status            StaffAttendanceStatus");
-    expect(model).toContain("checkInSource     StaffAttendanceSource?");
-    expect(model).toContain("checkOutSource    StaffAttendanceSource?");
-    expect(model).toContain("correctionReason  String?");
+    expect(model).toMatch(/attendanceDate\s+DateTime/);
+    expect(model).toMatch(/status\s+StaffAttendanceStatus/);
+    expect(model).toMatch(/checkInSource\s+StaffAttendanceSource\?/);
+    expect(model).toMatch(/checkOutSource\s+StaffAttendanceSource\?/);
+    expect(model).toMatch(/correctionReason\s+String\?/);
+    expect(model).toMatch(/leaveApplicationId\s+String\?/);
     expect(model).toContain("@@unique([tenantId, branchId, staffId, attendanceDate])");
     expect(model).toContain("@@index([tenantId, branchId, attendanceDate])");
     expect(model).toContain("@@index([tenantId, staffId])");

@@ -102,6 +102,44 @@ export function getUserSafeErrorMessage(errorOrCode: unknown, fallback = DEFAULT
       return "This record already exists.";
     case "STUDENT_ADMISSION_NUMBER_EXISTS":
       return "A student with this admission number already exists. Please use a different admission number.";
+    case "STUDENT_DOCUMENT_STORAGE_UNAVAILABLE":
+    case "STUDENT_DOCUMENT_BUCKET_MUST_BE_PRIVATE":
+      return "Student document storage is not available. Ask an administrator to check the secure storage configuration.";
+    case "STUDENT_DOCUMENT_FILE_REQUIRED":
+      return "Choose a student document to upload.";
+    case "STUDENT_DOCUMENT_TOO_LARGE":
+      return "This file exceeds the configured student document size limit.";
+    case "STUDENT_DOCUMENT_TYPE_NOT_ALLOWED":
+    case "STUDENT_PHOTO_MUST_BE_IMAGE":
+      return "Use a valid PDF, JPEG, PNG, or WebP file. Passport photographs must be images.";
+    case "STUDENT_DOCUMENT_UPLOAD_FAILED":
+      return "The document could not be stored securely. Please try again.";
+    case "STUDENT_DOCUMENT_DOWNLOAD_FAILED":
+      return "The document could not be opened. Please try again.";
+    case "STUDENT_DOCUMENT_DELETE_FAILED":
+      return "The document could not be deleted. Please try again.";
+    case "INSTITUTION_LOGO_STORAGE_UNAVAILABLE":
+    case "INSTITUTION_LOGO_BUCKET_MUST_BE_PUBLIC":
+      return "Institution logo storage is not available. Check the public branding storage configuration.";
+    case "INSTITUTION_LOGO_FILE_REQUIRED":
+      return "Choose an institution logo to upload.";
+    case "INSTITUTION_LOGO_TOO_LARGE":
+      return "The institution logo exceeds the configured 2 MB size limit.";
+    case "INSTITUTION_LOGO_TYPE_NOT_ALLOWED":
+      return "Use a valid JPEG, PNG, or WebP institution logo.";
+    case "INSTITUTION_LOGO_UPLOAD_FAILED":
+      return "The institution logo could not be uploaded. Please try again.";
+    case "WHATSAPP_NUMBER_REQUIRED":
+      return "Add a valid WhatsApp number before enabling attendance communication.";
+    case "STUDENT_IMPORT_FILE_REQUIRED":
+      return "Choose an Excel or CSV student file.";
+    case "STUDENT_IMPORT_FILE_SIZE_INVALID":
+      return "The student file is empty or exceeds the 4 MB upload limit.";
+    case "STUDENT_IMPORT_FILE_TYPE_INVALID":
+    case "STUDENT_IMPORT_FILE_INVALID":
+      return "Use a valid .xlsx or .csv student file.";
+    case "STUDENT_IMPORT_SHEET_MISSING":
+      return "The spreadsheet does not contain a Students sheet.";
     case "STUDENT_ATTENDANCE_LOCKED":
     case "STUDENT_ATTENDANCE_CUTOFF_PASSED":
       return "Attendance is locked. Please contact an administrator for correction.";
@@ -150,6 +188,68 @@ export function getUserSafeErrorMessage(errorOrCode: unknown, fallback = DEFAULT
       return "The requested attendance record was not found or is no longer accessible.";
     case "STAFF_ATTENDANCE_CHECK_OUT_BEFORE_CHECK_IN":
       return "Check-out time must be after check-in time.";
+    case "STAFF_ATTENDANCE_MANAGED_BY_LEAVE":
+      return "This attendance record is managed by an approved leave application. Cancel or revise the leave first.";
+    case "STAFF_ON_APPROVED_LEAVE":
+      return "You have approved leave for today. Contact an authorised approver if the leave needs to be cancelled.";
+    case "STAFF_LEAVE_TYPE_NOT_FOUND":
+      return "Select an active leave type configured for your branch.";
+    case "STAFF_LEAVE_APPLICATION_NOT_FOUND":
+      return "The leave application was not found or is no longer accessible.";
+    case "STAFF_LEAVE_BACKDATED_NOT_ALLOWED":
+      return "Backdated leave applications are not allowed for this branch.";
+    case "STAFF_LEAVE_NOTICE_REQUIRED":
+      return "This leave application does not meet the branch notice period.";
+    case "STAFF_LEAVE_MAXIMUM_DAYS_EXCEEDED":
+      return "This leave exceeds the maximum consecutive duration configured for the branch.";
+    case "STAFF_LEAVE_HALF_DAY_NOT_ALLOWED":
+      return "Half-day leave is not allowed for this leave type or branch.";
+    case "STAFF_LEAVE_NO_WORKING_DAYS":
+      return "The selected range contains no configured working days.";
+    case "STAFF_LEAVE_OVERLAP":
+      return "An active leave application already overlaps this date range.";
+    case "STAFF_LEAVE_NOT_EDITABLE":
+      return "Only pending applications or clarification requests can be edited.";
+    case "STAFF_LEAVE_ALREADY_ACTIONED":
+      return "This leave application has already been actioned.";
+    case "STAFF_LEAVE_NOT_WITHDRAWABLE":
+      return "Only pending applications or clarification requests can be withdrawn.";
+    case "STAFF_LEAVE_NOT_CANCELLABLE":
+      return "Only approved leave can be cancelled by an authorised approver.";
+    case "STAFF_LEAVE_PAST_CANCELLATION_BLOCKED":
+      return "Leave that has already started cannot be cancelled from this workflow.";
+    case "STAFF_LEAVE_APPROVER_REQUIRED":
+      return "You are not a designated leave approver for this branch.";
+    case "STAFF_LEAVE_DESIGNATED_APPROVER_REQUIRED":
+      return "Add at least one active designated approver before using designated-approver mode.";
+    case "STAFF_LEAVE_APPROVER_USER_NOT_FOUND":
+      return "Select an active Principal or Office Staff user assigned to this branch.";
+    case "STAFF_LEAVE_BALANCE_INSUFFICIENT":
+      return "The staff member does not have enough leave balance for this application.";
+    case "STAFF_LEAVE_BALANCE_CONFLICT":
+    case "STAFF_LEAVE_BALANCE_BELOW_USED":
+      return "This balance change conflicts with leave that has already been used.";
+    case "STAFF_LEAVE_ATTENDANCE_CONFLICT":
+      return "Attendance already exists for one or more selected dates. Resolve it before approving or cancelling leave.";
+    case "STAFF_LEAVE_DOCUMENT_REQUIRED":
+      return "Upload the required supporting document before approving this leave.";
+    case "STAFF_LEAVE_DOCUMENT_NOT_EDITABLE":
+      return "Supporting documents can be changed only while leave is pending or awaiting clarification.";
+    case "STAFF_LEAVE_DOCUMENT_STORAGE_UNAVAILABLE":
+    case "STAFF_LEAVE_DOCUMENT_BUCKET_MUST_BE_PRIVATE":
+      return "Leave document storage is not available. Ask an administrator to check the private storage configuration.";
+    case "STAFF_LEAVE_DOCUMENT_FILE_REQUIRED":
+      return "Choose a supporting document to upload.";
+    case "STAFF_LEAVE_DOCUMENT_TOO_LARGE":
+      return "This supporting document exceeds the configured size limit.";
+    case "STAFF_LEAVE_DOCUMENT_TYPE_NOT_ALLOWED":
+      return "Use a valid PDF, JPEG, PNG, or WebP supporting document.";
+    case "STAFF_LEAVE_DOCUMENT_UPLOAD_FAILED":
+      return "The supporting document could not be stored securely. Please try again.";
+    case "STAFF_LEAVE_DOCUMENT_DOWNLOAD_FAILED":
+      return "The supporting document could not be opened. Please try again.";
+    case "STAFF_LEAVE_DOCUMENT_DELETE_FAILED":
+      return "The supporting document could not be deleted. Please try again.";
     case "CURRENT_PASSWORD_INCORRECT":
       return "Current password is incorrect.";
     case "USER_PASSWORD_NOT_SET":

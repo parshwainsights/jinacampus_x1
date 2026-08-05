@@ -187,10 +187,11 @@ const defaultProcessDeps: ProcessOutboxDeps = {
     });
   },
   async markSending(input) {
-    await db.notificationOutbox.updateMany({
+    const claimed = await db.notificationOutbox.updateMany({
       where: { id: input.id, tenantId: input.tenantId, status: "QUEUED" },
       data: { status: "SENDING" }
     });
+    if (claimed.count !== 1) return null;
     return db.notificationOutbox.findFirst({
       where: { id: input.id, tenantId: input.tenantId, status: "SENDING" },
       select: {

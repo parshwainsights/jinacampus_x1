@@ -2,7 +2,10 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_ROLE_PERMISSION_MAP } from "@/lib/rbac/roles";
 import { isPermissionCode, NOTIFICATION_PERMISSIONS, PERMISSION_DEFINITIONS } from "@/lib/rbac/permissions";
-import { updateNotificationAttendanceSettingsSchema } from "@/modules/notifications/schemas";
+import {
+  updateCommunicationPreferenceSchema,
+  updateNotificationAttendanceSettingsSchema
+} from "@/modules/notifications/schemas";
 import {
   queueStudentAttendanceWhatsAppNotifications
 } from "@/modules/notifications/services/attendance-whatsapp-notification.service";
@@ -10,6 +13,9 @@ import {
   calculateStaffMonthlySummary,
   queueStaffMonthlyAttendanceWhatsAppSummaries
 } from "@/modules/notifications/services/staff-monthly-whatsapp-summary.service";
+import {
+  queueStaffWeeklyAttendanceWhatsAppSummaries
+} from "@/modules/notifications/services/staff-weekly-whatsapp-summary.service";
 import {
   notificationPayloadVariables,
   processNotificationOutbox,
@@ -48,18 +54,22 @@ function studentRecord(status: "PRESENT" | "ABSENT" | "LATE" | "HALF_DAY" | "ON_
     branchId,
     academicYearId,
     attendanceDate,
+    markedAt: new Date("2026-04-03T03:30:00.000Z"),
+    updatedAt: new Date("2026-04-03T03:30:00.000Z"),
     status,
     student: {
       id: "00000000-0000-0000-0000-000000000020",
+      admissionNumber: "SCH-001",
       firstName: "Aditi",
       middleName: null,
       lastName: "Demo",
       displayName: "Aditi Demo",
-      guardianLinks: [{ guardian: { id: guardianId, phone: null } }]
+      guardianLinks: [{ isPrimary: true, relation: "FATHER", guardian: { id: guardianId, phone: null } }]
     },
     classSection: {
       displayName: "Class 1-A",
       branch: {
+        timezone: "Asia/Kolkata",
         institution: {
           name: "JinaCampus Demo Institution",
           displayName: "JinaCampus Demo School"
@@ -73,7 +83,12 @@ function studentDeps(overrides: Partial<{
   enabled: boolean;
   mode: "DISABLED" | "EXCEPTION_ONLY" | "ALL_STATUSES";
   template: boolean;
-  preference: { whatsappEnabled: boolean; whatsappNumber: string | null; attendanceAlertsEnabled: boolean } | null;
+  preference: {
+    whatsappEnabled: boolean;
+    whatsappNumber: string | null;
+    attendanceAlertsEnabled: boolean;
+    consentCapturedAt: Date | null;
+  } | null;
   records: ReturnType<typeof studentRecord>[];
   queueStatus: "queued" | "alreadyQueued";
   queueThrows: boolean;
@@ -87,7 +102,9 @@ function studentDeps(overrides: Partial<{
     async loadSettings() {
       return {
         studentAttendanceWhatsAppEnabled: settings.enabled,
-        studentAttendanceNotificationMode: settings.mode
+        studentAttendanceNotificationMode: settings.mode,
+        sendStudentAbsentAlert: true,
+        sendStudentLateAlert: true
       };
     },
     async loadTemplate() {
@@ -98,7 +115,12 @@ function studentDeps(overrides: Partial<{
     },
     async loadCommunicationPreference() {
       return overrides.preference === undefined
-        ? { whatsappEnabled: true, whatsappNumber: "919999999999", attendanceAlertsEnabled: true }
+        ? {
+            whatsappEnabled: true,
+            whatsappNumber: "919999999999",
+            attendanceAlertsEnabled: true,
+            consentCapturedAt: new Date("2026-04-01T00:00:00.000Z")
+          }
         : overrides.preference;
     },
     async queueOutbox(input: unknown) {
@@ -127,7 +149,7 @@ describe("student attendance WhatsApp notification rules", () => {
       templateKey: WHATSAPP_TEMPLATE_KEYS.STUDENT_DAILY_ATTENDANCE_ALERT,
       recipientType: "GUARDIAN",
       recipientId: guardianId,
-      idempotencyKey: expect.stringContaining("student-daily-attendance")
+      idempotencyKey: expect.stringContaining("student-absence")
     });
   });
 
@@ -153,13 +175,27 @@ describe("student attendance WhatsApp notification rules", () => {
   });
 
   it("skips guardian without WhatsApp consent", async () => {
-    const { deps } = studentDeps({ preference: { whatsappEnabled: false, whatsappNumber: "919999999999", attendanceAlertsEnabled: true } });
+    const { deps } = studentDeps({
+      preference: {
+        whatsappEnabled: false,
+        whatsappNumber: "919999999999",
+        attendanceAlertsEnabled: true,
+        consentCapturedAt: new Date("2026-04-01T00:00:00.000Z")
+      }
+    });
     const result = await queueStudentAttendanceWhatsAppNotifications({ tenantId, branchId, academicYearId, classSectionId, attendanceDate }, deps);
     expect(result.skippedNoConsent).toBe(1);
   });
 
   it("skips guardian without WhatsApp phone", async () => {
-    const { deps } = studentDeps({ preference: { whatsappEnabled: true, whatsappNumber: null, attendanceAlertsEnabled: true } });
+    const { deps } = studentDeps({
+      preference: {
+        whatsappEnabled: true,
+        whatsappNumber: null,
+        attendanceAlertsEnabled: true,
+        consentCapturedAt: new Date("2026-04-01T00:00:00.000Z")
+      }
+    });
     const result = await queueStudentAttendanceWhatsAppNotifications({ tenantId, branchId, academicYearId, classSectionId, attendanceDate }, deps);
     expect(result.skippedNoPhone).toBe(1);
   });
@@ -181,7 +217,7 @@ describe("student attendance WhatsApp notification rules", () => {
 describe("staff monthly WhatsApp summary", () => {
   it("calculates monthly summary counts and working minutes", () => {
     const summary = calculateStaffMonthlySummary(
-      { id: staffId, firstName: "Anaya", middleName: null, lastName: "Teacher" },
+      { id: staffId, firstName: "Anaya", middleName: null, lastName: "Teacher", phone: null },
       [
         { staffId, status: "PRESENT", workingMinutes: 480 },
         { staffId, status: "LATE", workingMinutes: 450 },
@@ -195,7 +231,10 @@ describe("staff monthly WhatsApp summary", () => {
       lateDays: 1,
       halfDayDays: 1,
       leaveDays: 1,
-      absentDays: 1,
+      absentDays: 0,
+      notMarkedDays: 1,
+      workingDays: 5,
+      markedDays: 5,
       totalWorkingMinutes: 1150
     });
   });
@@ -210,11 +249,18 @@ describe("staff monthly WhatsApp summary", () => {
     }, {
       async loadSettings() { return { staffMonthlySummaryWhatsAppEnabled: true }; },
       async loadTemplate() { return { id: "template-id" }; },
-      async loadActiveStaff() { return [{ id: staffId, firstName: "Anaya", middleName: null, lastName: "Teacher" }]; },
+      async loadActiveStaff() { return [{ id: staffId, firstName: "Anaya", middleName: null, lastName: "Teacher", phone: null }]; },
       async loadAttendanceRecords() { return [{ staffId, status: "PRESENT", workingMinutes: 480 }]; },
-      async loadCommunicationPreference() { return { whatsappEnabled: true, whatsappNumber: "919888888888", monthlySummaryEnabled: true }; },
+      async loadCommunicationPreference() {
+        return {
+          whatsappEnabled: true,
+          whatsappNumber: "919888888888",
+          monthlySummaryEnabled: true,
+          consentCapturedAt: new Date("2026-04-01T00:00:00.000Z")
+        };
+      },
       async queueOutbox(input) { queued.push(input); return { status: "queued", outboxId: "outbox-id" }; },
-      async getInstitutionName() { return "JinaCampus Demo School"; }
+      async getInstitutionContext() { return { name: "JinaCampus Demo School", timeZone: "Asia/Kolkata" }; }
     });
     expect(result.queued).toBe(1);
     expect(queued[0]).toMatchObject({
@@ -228,19 +274,33 @@ describe("staff monthly WhatsApp summary", () => {
     const baseDeps = {
       async loadSettings() { return { staffMonthlySummaryWhatsAppEnabled: true }; },
       async loadTemplate() { return { id: "template-id" }; },
-      async loadActiveStaff() { return [{ id: staffId, firstName: "Anaya", middleName: null, lastName: "Teacher" }]; },
+      async loadActiveStaff() { return [{ id: staffId, firstName: "Anaya", middleName: null, lastName: "Teacher", phone: null }]; },
       async loadAttendanceRecords() { return []; },
       async queueOutbox() { return { status: "queued" as const, outboxId: "outbox-id" }; },
-      async getInstitutionName() { return "JinaCampus Demo School"; }
+      async getInstitutionContext() { return { name: "JinaCampus Demo School", timeZone: "Asia/Kolkata" }; }
     };
 
     const noConsent = await queueStaffMonthlyAttendanceWhatsAppSummaries({ tenantId, branchId, year: 2026, month: 4 }, {
       ...baseDeps,
-      async loadCommunicationPreference() { return { whatsappEnabled: false, whatsappNumber: "919888888888", monthlySummaryEnabled: true }; }
+      async loadCommunicationPreference() {
+        return {
+          whatsappEnabled: false,
+          whatsappNumber: "919888888888",
+          monthlySummaryEnabled: true,
+          consentCapturedAt: new Date("2026-04-01T00:00:00.000Z")
+        };
+      }
     });
     const noPhone = await queueStaffMonthlyAttendanceWhatsAppSummaries({ tenantId, branchId, year: 2026, month: 4 }, {
       ...baseDeps,
-      async loadCommunicationPreference() { return { whatsappEnabled: true, whatsappNumber: null, monthlySummaryEnabled: true }; }
+      async loadCommunicationPreference() {
+        return {
+          whatsappEnabled: true,
+          whatsappNumber: null,
+          monthlySummaryEnabled: true,
+          consentCapturedAt: new Date("2026-04-01T00:00:00.000Z")
+        };
+      }
     });
 
     expect(noConsent.skippedNoConsent).toBe(1);
@@ -256,14 +316,100 @@ describe("staff monthly WhatsApp summary", () => {
     }, {
       async loadSettings() { return { staffMonthlySummaryWhatsAppEnabled: true }; },
       async loadTemplate() { return { id: "template-id" }; },
-      async loadActiveStaff() { return [{ id: staffId, firstName: "Active", middleName: null, lastName: "Staff" }]; },
+      async loadActiveStaff() { return [{ id: staffId, firstName: "Active", middleName: null, lastName: "Staff", phone: null }]; },
       async loadAttendanceRecords() { return []; },
-      async loadCommunicationPreference() { return { whatsappEnabled: true, whatsappNumber: "919888888888", monthlySummaryEnabled: true }; },
+      async loadCommunicationPreference() {
+        return {
+          whatsappEnabled: true,
+          whatsappNumber: "919888888888",
+          monthlySummaryEnabled: true,
+          consentCapturedAt: new Date("2026-04-01T00:00:00.000Z")
+        };
+      },
       async queueOutbox() { return { status: "alreadyQueued", outboxId: "outbox-id" }; },
-      async getInstitutionName() { return "JinaCampus Demo School"; }
+      async getInstitutionContext() { return { name: "JinaCampus Demo School", timeZone: "Asia/Kolkata" }; }
     });
     expect(result.checked).toBe(1);
     expect(result.alreadyQueued).toBe(1);
+  });
+});
+
+describe("staff weekly WhatsApp summary", () => {
+  it("queues a consented weekly report with a stable date-range key", async () => {
+    const queued: unknown[] = [];
+    const startDate = new Date("2026-03-23T00:00:00.000Z");
+    const endDate = new Date("2026-03-29T00:00:00.000Z");
+
+    const result = await queueStaffWeeklyAttendanceWhatsAppSummaries({
+      tenantId,
+      branchId,
+      startDate,
+      endDate
+    }, {
+      async loadSettings() { return { staffWeeklySummaryWhatsAppEnabled: true }; },
+      async loadTemplate() { return { id: "template-id" }; },
+      async loadActiveStaff() {
+        return [{ id: staffId, firstName: "Anaya", middleName: null, lastName: "Teacher", phone: "919777777777" }];
+      },
+      async loadAttendanceRecords() {
+        return [
+          { staffId, status: "PRESENT" as const, workingMinutes: 480 },
+          { staffId, status: "LATE" as const, workingMinutes: 450 },
+          { staffId, status: "ABSENT" as const, workingMinutes: null }
+        ];
+      },
+      async loadCommunicationPreference() {
+        return {
+          whatsappEnabled: true,
+          whatsappNumber: null,
+          weeklySummaryEnabled: true,
+          consentCapturedAt: new Date("2026-03-01T00:00:00.000Z")
+        };
+      },
+      async queueOutbox(input) { queued.push(input); return { status: "queued", outboxId: "outbox-id" }; },
+      async getInstitutionContext() { return { name: "JinaCampus Demo School", timeZone: "Asia/Kolkata" }; }
+    });
+
+    expect(result).toMatchObject({ checked: 1, queued: 1, skippedNoConsent: 0 });
+    expect(queued[0]).toMatchObject({
+      templateKey: WHATSAPP_TEMPLATE_KEYS.STAFF_WEEKLY_ATTENDANCE_SUMMARY,
+      recipientPhone: "919777777777",
+      idempotencyKey: `staff-weekly-summary:${tenantId}:${staffId}:2026-03-23:2026-03-29`,
+      payload: expect.objectContaining({
+        working_days: 3,
+        present_days: 1,
+        late_days: 1,
+        absent_days: 1
+      })
+    });
+  });
+
+  it("does not queue weekly reports without explicit consent", async () => {
+    const result = await queueStaffWeeklyAttendanceWhatsAppSummaries({
+      tenantId,
+      branchId,
+      startDate: new Date("2026-03-23T00:00:00.000Z"),
+      endDate: new Date("2026-03-29T00:00:00.000Z")
+    }, {
+      async loadSettings() { return { staffWeeklySummaryWhatsAppEnabled: true }; },
+      async loadTemplate() { return { id: "template-id" }; },
+      async loadActiveStaff() {
+        return [{ id: staffId, firstName: "Anaya", middleName: null, lastName: "Teacher", phone: "919777777777" }];
+      },
+      async loadAttendanceRecords() { return []; },
+      async loadCommunicationPreference() {
+        return {
+          whatsappEnabled: true,
+          whatsappNumber: null,
+          weeklySummaryEnabled: true,
+          consentCapturedAt: null
+        };
+      },
+      async queueOutbox() { return { status: "queued", outboxId: "outbox-id" }; },
+      async getInstitutionContext() { return { name: "JinaCampus Demo School", timeZone: "Asia/Kolkata" }; }
+    });
+
+    expect(result).toMatchObject({ queued: 0, skippedNoConsent: 1 });
   });
 });
 
@@ -450,24 +596,44 @@ describe("webhook and security boundaries", () => {
       tenantId,
       actorUserId: "00000000-0000-0000-0000-000000000099"
     }).success).toBe(false);
+
+    expect(updateCommunicationPreferenceSchema.safeParse({
+      ownerType: "STAFF",
+      ownerId: staffId,
+      whatsappEnabled: true,
+      weeklySummaryEnabled: true,
+      monthlySummaryEnabled: false,
+      attendanceAlertsEnabled: false,
+      consentConfirmed: true,
+      whatsappNumber: "919888888888",
+      tenantId
+    }).success).toBe(false);
   });
 
   it("template payloads avoid sensitive forbidden fields", () => {
     const studentPayload = buildStudentAttendanceTemplatePayload({
       studentName: "Aditi Demo",
+      scholarNumber: "SCH-001",
       classSection: "Class 1-A",
       attendanceStatus: "ABSENT",
       attendanceDate: "2026-04-03",
+      attendanceMarkingTime: "09:00 AM",
       institutionName: "JinaCampus Demo School"
     });
     const staffPayload = buildStaffMonthlySummaryTemplatePayload({
       staffName: "Anaya Teacher",
       month: "April 2026",
+      workingDays: 22,
+      markedDays: 22,
       presentDays: 20,
       lateDays: 1,
       halfDayDays: 1,
       leaveDays: 0,
       absentDays: 0,
+      notMarkedDays: 0,
+      weekOffDays: 4,
+      holidayDays: 1,
+      totalWorkingMinutes: 9600,
       institutionName: "JinaCampus Demo School"
     });
     expect(JSON.stringify(studentPayload)).not.toMatch(/tenantId|passwordHash|tokenHash|remarks/i);

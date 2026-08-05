@@ -84,12 +84,12 @@ function hasQueryFailure(results: readonly PromiseSettledResult<unknown>[]) {
   return results.some((result) => result.status === "rejected");
 }
 
-function formatDashboardTime(value: string | null) {
+function formatDashboardTime(value: string | null, timeZone?: string) {
   if (!value) return "Not recorded";
   return new Intl.DateTimeFormat("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Asia/Kolkata"
+    timeZone: timeZone ?? "Asia/Kolkata"
   }).format(new Date(value));
 }
 
@@ -163,13 +163,13 @@ function buildAttendanceAttentionItems(
 export default async function DashboardPage() {
   const ctx = await requireAuth();
   const permissions = await getEffectivePermissions({ ctx, branchId: ctx.activeBranchId });
-  const dateLabel = formatDashboardDate(new Date());
+  const dateLabel = formatDashboardDate(new Date(), ctx.timeZone);
   const branchLabel = branchContextLabel(ctx);
 
   if (!canViewDashboard(permissions)) {
     return (
       <div className="space-y-6">
-        <DashboardPageHeader activeAcademicYearName={null} branchLabel={branchLabel} dateLabel={dateLabel} />
+        <DashboardPageHeader activeAcademicYearName={null} branchLabel={branchLabel} dateLabel={dateLabel} timeZone={ctx.timeZone} />
         <PermissionState
           title="Dashboard unavailable"
           description="Your account does not have permission to view dashboard metrics."
@@ -230,7 +230,7 @@ export default async function DashboardPage() {
   const navigationAudience = getNavigationAudience(permissions, ctx.roleCodes ?? []);
   const adminOperations = getVisibleAdminMobileActions(permissions, ADMIN_MOBILE_OPERATIONS);
   const adminTools = getVisibleAdminMobileActions(permissions, ADMIN_MOBILE_TOOLS);
-  const resolvedDateLabel = formatDashboardDate(studentAttendance?.date ?? staffAttendance?.date ?? new Date());
+  const resolvedDateLabel = formatDashboardDate(studentAttendance?.date ?? staffAttendance?.date ?? new Date(), ctx.timeZone);
   const attentionItems = buildAttendanceAttentionItems(studentAttendance, staffAttendance);
   const queryFailure = hasQueryFailure(results);
   const studentPresenceCount = studentAttendance
@@ -260,6 +260,7 @@ export default async function DashboardPage() {
         canViewSelfAttendance={canViewSelfAttendance}
         selfAttendance={selfAttendance?.attendance ?? null}
         dateLabel={resolvedDateLabel}
+        timeZone={ctx.timeZone}
         hasActiveAcademicYear={Boolean(ctx.activeAcademicYearId)}
         hasBranchAccess={ctx.accessibleBranchIds.length > 0}
         hasQueryFailure={queryFailure}
@@ -273,6 +274,7 @@ export default async function DashboardPage() {
           activeAcademicYearName={campusCore?.activeAcademicYearName ?? null}
           branchLabel={branchLabel}
           dateLabel={resolvedDateLabel}
+          timeZone={ctx.timeZone}
         />
 
         {queryFailure ? (
@@ -410,13 +412,13 @@ export default async function DashboardPage() {
                 />
                 <DashboardMetricCard
                   label="Check in"
-                  value={formatDashboardTime(selfAttendance.attendance.checkInAt)}
+                  value={formatDashboardTime(selfAttendance.attendance.checkInAt, ctx.timeZone)}
                   icon={LogIn}
                   tone="sky"
                 />
                 <DashboardMetricCard
                   label="Check out"
-                  value={formatDashboardTime(selfAttendance.attendance.checkOutAt)}
+                  value={formatDashboardTime(selfAttendance.attendance.checkOutAt, ctx.timeZone)}
                   icon={Clock3}
                   tone="slate"
                 />

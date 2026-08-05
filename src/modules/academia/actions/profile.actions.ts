@@ -40,6 +40,7 @@ export type ProfileFormActionState = {
   message?: string;
   error?: string;
   fieldErrors?: Record<string, string[]>;
+  studentId?: string;
 };
 
 const duplicateStudentAdmissionMessage =
@@ -453,11 +454,16 @@ export async function createStudentAction(
         : undefined
     });
     const ctx = await getTenantContext();
-    await createStudentRegistration(ctx, input);
+    const registration = await createStudentRegistration(ctx, input);
     revalidatePath("/academia");
     revalidatePath("/academia/students");
+    revalidatePath(`/academia/students/${registration.student.id}`);
     revalidatePath("/dashboard");
-    return { ok: true, message: "Student created." };
+    return {
+      ok: true,
+      message: "Student created.",
+      studentId: registration.student.id
+    };
   } catch (error) {
     return createStudentFormError(error);
   }

@@ -17,7 +17,11 @@ const routeFiles = [
   "src/app/(dashboard)/staffboard/attendance/page.tsx",
   "src/app/(dashboard)/staffboard/attendance/qr/page.tsx",
   "src/app/(dashboard)/staffboard/attendance/scan/page.tsx",
-  "src/app/(dashboard)/staffboard/attendance/reports/page.tsx"
+  "src/app/(dashboard)/staffboard/attendance/reports/page.tsx",
+  "src/app/(dashboard)/staffboard/leave/page.tsx",
+  "src/app/(dashboard)/staffboard/leave/apply/page.tsx",
+  "src/app/(dashboard)/staffboard/leave/review/page.tsx",
+  "src/app/(dashboard)/staffboard/leave/settings/page.tsx"
 ] as const;
 
 describe("StaffBoard Lite UI route config", () => {
@@ -29,7 +33,9 @@ describe("StaffBoard Lite UI route config", () => {
       attendance: "/staffboard/attendance",
       qr: "/staffboard/attendance/qr",
       scan: "/staffboard/attendance/scan",
-      reports: "/staffboard/attendance/reports"
+      reports: "/staffboard/attendance/reports",
+      leave: "/staffboard/leave",
+      leaveReview: "/staffboard/leave/review"
     });
   });
 
@@ -46,7 +52,9 @@ describe("StaffBoard Lite UI route config", () => {
       "/staffboard/attendance/qr",
       "/staffboard/attendance/scan",
       "/staffboard/attendance",
-      "/staffboard/attendance/reports"
+      "/staffboard/attendance/reports",
+      "/staffboard/leave",
+      "/staffboard/leave/review"
     ]);
     expect(staffboardModuleCards.map((card) => card.key)).toContain("attendance");
     expect(staffboardModuleCards.map((card) => card.title)).toContain("Staff QR Display");
@@ -93,7 +101,7 @@ describe("StaffBoard Lite UI route config", () => {
     expect(staffCategoryCards.map((category) => category.value).join(" ")).not.toMatch(/PAYROLL|LEAVE|APPRAISAL/i);
   });
 
-  it("adds StaffBoard navigation without payroll, leave, or appraisal links", () => {
+  it("adds StaffBoard attendance and approved leave navigation without payroll or appraisal links", () => {
     const navigationSource = readFileSync(resolve(process.cwd(), "src/components/app-shell/navigation.ts"), "utf8");
 
     expect(navigationSource).toContain("StaffBoard Lite");
@@ -102,12 +110,15 @@ describe("StaffBoard Lite UI route config", () => {
     expect(navigationSource).toContain("QR Display");
     expect(navigationSource).toContain("Scan QR");
     expect(navigationSource).toContain("Staff Reports");
+    expect(navigationSource).toContain("My Leave");
+    expect(navigationSource).toContain("Leave Review");
     expect(navigationSource).toContain("/staffboard/staff");
     expect(navigationSource).toContain("/staffboard/categories");
     expect(navigationSource).toContain("/staffboard/attendance/qr");
     expect(navigationSource).toContain("/staffboard/attendance/scan");
     expect(navigationSource).toContain("/staffboard/attendance/reports");
-    expect(navigationSource).not.toMatch(/payroll|leave|appraisal/i);
+    expect(navigationSource).toContain("/staffboard/leave");
+    expect(navigationSource).not.toMatch(/payroll|appraisal/i);
   });
 
   it("protects StaffBoard routes through middleware", () => {

@@ -238,11 +238,11 @@ export function StaffQrDisplay({ branchOptions, defaultBranchId }: StaffQrDispla
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white/[0.72] p-4 shadow-sm">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Valid from</dt>
-              <dd className="mt-2 text-sm font-semibold text-slate-950">{qr ? formatQrDateTime(qr.validFrom) : "-"}</dd>
+              <dd className="mt-2 text-sm font-semibold text-slate-950">{qr ? formatQrDateTime(qr.validFrom, selectedBranch?.timezone) : "-"}</dd>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white/[0.72] p-4 shadow-sm">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Valid until</dt>
-              <dd className="mt-2 text-sm font-semibold text-slate-950">{qr ? formatQrDateTime(qr.validUntil) : "-"}</dd>
+              <dd className="mt-2 text-sm font-semibold text-slate-950">{qr ? formatQrDateTime(qr.validUntil, selectedBranch?.timezone) : "-"}</dd>
             </div>
             <div className="rounded-2xl border border-slate-200/80 bg-white/[0.72] p-4 shadow-sm sm:col-span-2">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Validity window</dt>

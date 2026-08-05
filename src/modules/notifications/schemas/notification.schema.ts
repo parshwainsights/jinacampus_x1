@@ -9,8 +9,20 @@ export const queueStudentAttendanceWhatsAppSchema = z.object({
   academicYearId: uuid,
   classSectionId: uuid,
   attendanceDate: z.coerce.date(),
-  attendanceRecordIds: z.array(uuid).optional()
+  attendanceRecordIds: z.array(uuid).optional(),
+  actorUserId: uuid.optional()
 }).strict();
+
+export const queueStaffWeeklyWhatsAppSummarySchema = z.object({
+  tenantId: uuid,
+  branchId: uuid,
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+  actorUserId: uuid.optional()
+}).strict().refine((value) => value.startDate <= value.endDate, {
+  message: "Weekly report start date must be on or before the end date.",
+  path: ["endDate"]
+});
 
 export const queueStaffMonthlyWhatsAppSummarySchema = z.object({
   tenantId: uuid,
@@ -30,6 +42,9 @@ export const updateNotificationAttendanceSettingsSchema = z.object({
   branchId: uuid,
   studentAttendanceWhatsAppEnabled: z.boolean().default(false),
   studentAttendanceNotificationMode: z.enum(["DISABLED", "EXCEPTION_ONLY", "ALL_STATUSES"]).default("EXCEPTION_ONLY"),
+  staffWeeklySummaryWhatsAppEnabled: z.boolean().default(false),
+  staffWeeklySummarySendDay: z.number().int().min(1).max(7).default(1),
+  staffWeeklySummarySendTime: z.string().regex(hhmm).default("09:00"),
   staffMonthlySummaryWhatsAppEnabled: z.boolean().default(false),
   staffMonthlySummarySendDay: z.number().int().min(1).max(28).default(1),
   staffMonthlySummarySendTime: z.string().regex(hhmm).default("09:00")

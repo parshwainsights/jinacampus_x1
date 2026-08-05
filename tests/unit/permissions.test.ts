@@ -30,14 +30,20 @@ describe("permission registry", () => {
       "staffboard.attendance.self_view",
       "staffboard.attendance.view",
       "staffboard.attendance.correct",
-      "staffboard.attendance.report"
+      "staffboard.attendance.report",
+      "staffboard.leave.self_apply",
+      "staffboard.leave.self_view",
+      "staffboard.leave.view",
+      "staffboard.leave.approve",
+      "staffboard.leave.settings.manage",
+      "staffboard.leave.balance.manage"
     ]);
     expect(PERMISSION_DEFINITIONS.map((permission) => permission.module)).toContain("ACADEMIA");
     expect(PERMISSION_DEFINITIONS.map((permission) => permission.module)).toContain("STAFFBOARD");
   });
 
-  it("does not include out-of-scope StaffBoard permissions", () => {
-    expect(STAFFBOARD_LITE_PERMISSIONS.join(" ")).not.toMatch(/payroll|leave|appraisal/i);
+  it("does not include unapproved payroll or appraisal permissions", () => {
+    expect(STAFFBOARD_LITE_PERMISSIONS.join(" ")).not.toMatch(/payroll|appraisal/i);
   });
 
   it("guards unknown permission codes", () => {

@@ -72,6 +72,9 @@ export const NAVIGATION_GROUPS = [
       { title: "QR Display", href: "/staffboard/attendance/qr", permissions: ["staffboard.attendance.qr.generate"] },
       { title: "Scan QR", href: "/staffboard/attendance/scan", permissions: ["staffboard.attendance.self_scan"] },
       { title: "My Attendance", href: "/staffboard/attendance/me", permissions: ["staffboard.attendance.self_view"] },
+      { title: "My Leave", href: "/staffboard/leave", permissions: ["staffboard.leave.self_view"] },
+      { title: "Leave Review", href: "/staffboard/leave/review", permissions: ["staffboard.leave.view"] },
+      { title: "Leave Settings", href: "/staffboard/leave/settings", permissions: ["staffboard.leave.settings.manage"] },
       { title: "Staff Reports", href: "/staffboard/attendance/reports", permissions: ["staffboard.attendance.report"] }
     ]
   }
@@ -142,6 +145,12 @@ export const MOBILE_NAVIGATION_SHORTCUTS = [
     title: "Scan QR",
     href: "/staffboard/attendance/scan",
     permissions: ["staffboard.attendance.self_scan"],
+    audiences: ["office", "teacher", "staff"]
+  },
+  {
+    title: "My Leave",
+    href: "/staffboard/leave",
+    permissions: ["staffboard.leave.self_view"],
     audiences: ["office", "teacher", "staff"]
   },
   {
@@ -271,7 +280,8 @@ const ACTIVE_ROUTE_OVERRIDES = [
   { pattern: /^\/academia\/students\/[^/]+\/edit(?:\/|$)/, href: "/academia/students" },
   { pattern: /^\/academia\/guardians\/[^/]+\/edit(?:\/|$)/, href: "/academia/guardians" },
   { pattern: /^\/academia\/enrollments\/[^/]+\/edit(?:\/|$)/, href: "/academia/enrollments" },
-  { pattern: /^\/staffboard\/staff\/[^/]+\/edit(?:\/|$)/, href: "/staffboard/staff" }
+  { pattern: /^\/staffboard\/staff\/[^/]+\/edit(?:\/|$)/, href: "/staffboard/staff" },
+  { pattern: /^\/staffboard\/leave\/[0-9a-f-]+(?:\/|$)/i, href: "/staffboard/leave" }
 ] as const;
 
 const DESKTOP_DOCK_GROUP_CONFIG = {

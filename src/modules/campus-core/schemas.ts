@@ -1,11 +1,15 @@
 import { z } from "zod";
 import { isPermissionCode } from "@/lib/rbac/permissions";
+import { isValidTimeZone } from "@/lib/dates/time-zone";
 
 const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
 const tenantSlug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const uuid = z.string().uuid();
 const roleCode = z.string().min(2).max(80).regex(/^[A-Z0-9_]+$/);
 const permissionCode = z.string().min(3).refine(isPermissionCode, { message: "Unknown permission code" });
+const timeZone = z.string().trim().min(2).max(80).refine(isValidTimeZone, {
+  message: "Enter a valid IANA time zone, for example Asia/Kolkata."
+});
 const phone = z.string().min(6).max(20).optional();
 const password = z.string().min(8, "Password must be at least 8 characters.").max(200);
 const displayName = z.preprocess(
@@ -88,7 +92,7 @@ export const createBranchSchema = z.object({
   postalCode: z.string().max(20).optional(),
   phone,
   email: z.string().email().optional(),
-  timezone: z.string().min(2).max(80).default("Asia/Kolkata")
+  timezone: timeZone.default("Asia/Kolkata")
 });
 
 export const updateBranchSchema = createBranchSchema.partial().extend({
@@ -265,7 +269,7 @@ export const removeUserBranchSchema = assignUserBranchSchema;
 export const updateTenantSettingsSchema = z.object({
   brandName: z.string().min(2).max(120),
   brandByline: z.string().max(160).optional(),
-  timezone: z.string().min(2).max(80).default("Asia/Kolkata"),
+  timezone: timeZone.default("Asia/Kolkata"),
   locale: z.string().min(2).max(20).default("en-IN"),
   dateFormat: z.string().min(4).max(30).default("dd/MM/yyyy"),
   currency: z.string().length(3).default("INR"),
@@ -289,6 +293,9 @@ export const updateAttendanceSettingsSchema = z.object({
   staffHalfDayBeforeMinutes: z.number().int().min(0).max(720).default(240),
   staffMinimumWorkingMinutes: z.number().int().min(0).max(900).default(360),
   staffQrTokenValiditySeconds: z.number().int().min(30).max(900).default(180),
+  staffWeeklySummaryWhatsAppEnabled: z.boolean().default(false),
+  staffWeeklySummarySendDay: z.number().int().min(1).max(7).default(1),
+  staffWeeklySummarySendTime: z.string().regex(hhmm).default("09:00"),
   staffMonthlySummaryWhatsAppEnabled: z.boolean().default(false),
   staffMonthlySummarySendDay: z.number().int().min(1).max(28).default(1),
   staffMonthlySummarySendTime: z.string().regex(hhmm).default("09:00")

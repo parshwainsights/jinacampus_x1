@@ -234,7 +234,14 @@ export async function getSchoolByIdForAdministrator(
       createdAt: true,
       updatedAt: true,
       institutions: {
-        select: { id: true, name: true, displayName: true, code: true, status: true, logoUrl: true },
+        select: {
+          id: true,
+          name: true,
+          displayName: true,
+          code: true,
+          status: true,
+          logoUrl: true
+        },
         orderBy: { name: "asc" },
         take: 10
       },
@@ -526,8 +533,16 @@ export async function deleteSchoolPermanently(
       whatsAppSettings: (await tx.whatsAppIntegrationSetting.deleteMany({ where: { tenantId: school.id } })).count,
       notificationTemplates: (await tx.notificationTemplate.deleteMany({ where: { tenantId: school.id } })).count,
       communicationPreferences: (await tx.communicationPreference.deleteMany({ where: { tenantId: school.id } })).count,
+      staffLeaveDocuments: (await tx.staffLeaveDocument.deleteMany({ where: { tenantId: school.id } })).count,
+      staffLeaveActions: (await tx.staffLeaveApplicationAction.deleteMany({ where: { tenantId: school.id } })).count,
+      inAppNotifications: (await tx.inAppNotification.deleteMany({ where: { tenantId: school.id } })).count,
       studentAttendanceRecords: (await tx.studentAttendanceRecord.deleteMany({ where: { tenantId: school.id } })).count,
       staffAttendanceRecords: (await tx.staffAttendanceRecord.deleteMany({ where: { tenantId: school.id } })).count,
+      staffLeaveApplications: (await tx.staffLeaveApplication.deleteMany({ where: { tenantId: school.id } })).count,
+      staffLeaveBalances: (await tx.staffLeaveBalance.deleteMany({ where: { tenantId: school.id } })).count,
+      staffLeaveApprovers: (await tx.staffLeaveApprover.deleteMany({ where: { tenantId: school.id } })).count,
+      staffLeaveTypes: (await tx.staffLeaveType.deleteMany({ where: { tenantId: school.id } })).count,
+      staffLeaveSettings: (await tx.staffLeaveSetting.deleteMany({ where: { tenantId: school.id } })).count,
       staffAttendanceQrTokens: (await tx.staffAttendanceQrToken.deleteMany({ where: { tenantId: school.id } })).count,
       enrollments: (await tx.enrollment.deleteMany({ where: { tenantId: school.id } })).count,
       studentGuardianLinks: (await tx.studentGuardianLink.deleteMany({ where: { tenantId: school.id } })).count,

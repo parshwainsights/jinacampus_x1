@@ -114,7 +114,11 @@ const principalPermissions = [
   "staffboard.attendance.qr.generate",
   "staffboard.attendance.view",
   "staffboard.attendance.correct",
-  "staffboard.attendance.report"
+  "staffboard.attendance.report",
+  "staffboard.leave.view",
+  "staffboard.leave.approve",
+  "staffboard.leave.settings.manage",
+  "staffboard.leave.balance.manage"
 ] as const satisfies readonly PermissionCode[];
 
 const teacherPermissions = [
@@ -124,7 +128,9 @@ const teacherPermissions = [
   "academia.attendance.mark",
   "academia.attendance.report",
   "staffboard.attendance.self_scan",
-  "staffboard.attendance.self_view"
+  "staffboard.attendance.self_view",
+  "staffboard.leave.self_apply",
+  "staffboard.leave.self_view"
 ] as const satisfies readonly PermissionCode[];
 
 export const ROLE_PERMISSION_MAP: Record<KnownRoleCode, readonly PermissionCode[]> = {
@@ -140,13 +146,19 @@ export const ROLE_PERMISSION_MAP: Record<KnownRoleCode, readonly PermissionCode[
     "staffboard.attendance.self_view",
     "staffboard.attendance.view",
     "staffboard.attendance.correct",
-    "staffboard.attendance.report"
+    "staffboard.attendance.report",
+    "staffboard.leave.self_apply",
+    "staffboard.leave.self_view",
+    "staffboard.leave.view",
+    "staffboard.leave.approve"
   ],
   TEACHER: teacherPermissions,
   STAFF: [
     ...tenantContextPermission,
     "staffboard.attendance.self_scan",
-    "staffboard.attendance.self_view"
+    "staffboard.attendance.self_view",
+    "staffboard.leave.self_apply",
+    "staffboard.leave.self_view"
   ],
   TENANT_OWNER: principalPermissions,
   SUPER_ADMIN: principalPermissions,

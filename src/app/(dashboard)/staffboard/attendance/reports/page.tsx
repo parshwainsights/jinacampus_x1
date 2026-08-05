@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { forbidden } from "@/lib/errors";
+import { safeTimeZone } from "@/lib/dates/time-zone";
 import { requireAuth } from "@/lib/auth/require-auth";
 import { StaffAttendanceReportFilters } from "@/modules/staffboard-lite/components/attendance/staff-attendance-report-filters";
 import {
@@ -26,14 +27,14 @@ function searchParamValue(value: string | string[] | undefined) {
   return trimmed ? trimmed : undefined;
 }
 
-async function reportFilters(searchParams?: RouteSearchParams) {
+async function reportFilters(searchParams: RouteSearchParams | undefined, timeZone: string) {
   const params = searchParams ? await searchParams : {};
-  const currentMonthYear = currentIndiaMonthYear();
+  const currentMonthYear = currentIndiaMonthYear(timeZone);
   return {
     branchId: searchParamValue(params.branchId),
-    date: searchParamValue(params.date) ?? todayIndiaDateString(),
-    fromDate: searchParamValue(params.fromDate) ?? monthStartIndiaDateString(),
-    toDate: searchParamValue(params.toDate) ?? todayIndiaDateString(),
+    date: searchParamValue(params.date) ?? todayIndiaDateString(timeZone),
+    fromDate: searchParamValue(params.fromDate) ?? monthStartIndiaDateString(timeZone),
+    toDate: searchParamValue(params.toDate) ?? todayIndiaDateString(timeZone),
     staffType: searchParamValue(params.staffType),
     status: searchParamValue(params.status),
     department: searchParamValue(params.department),
@@ -47,11 +48,12 @@ async function reportFilters(searchParams?: RouteSearchParams) {
 
 export default async function StaffAttendanceReportsPage({ searchParams }: StaffAttendanceReportsPageProps) {
   const ctx = await requireAuth();
-  const filters = await reportFilters(searchParams);
+  const filters = await reportFilters(searchParams, safeTimeZone(ctx.timeZone));
   const data = await getStaffAttendanceReportsPageData(ctx, filters);
   if (!data.selectedBranchId) {
     throw forbidden("FORBIDDEN_STAFF_ATTENDANCE_REPORT_ACCESS");
   }
+  const timeZone = safeTimeZone(data.branchOptions.find((branch) => branch.id === data.selectedBranchId)?.timezone ?? ctx.timeZone);
 
   return (
     <div className="space-y-6">
@@ -88,6 +90,7 @@ export default async function StaffAttendanceReportsPage({ searchParams }: Staff
         emptyTitle="No daily staff attendance records"
         emptyDescription="Check-in, check-out, and manual attendance records for the selected date will appear here."
         rows={data.dailyRows}
+        timeZone={timeZone}
       />
 
       <div className="grid min-w-0 gap-6 xl:grid-cols-2">
@@ -97,6 +100,7 @@ export default async function StaffAttendanceReportsPage({ searchParams }: Staff
           emptyTitle="No teacher attendance records"
           emptyDescription="Teacher attendance records for the selected date range will appear here."
           rows={data.teacherRows}
+          timeZone={timeZone}
         />
 
         <NamedStaffAttendanceRowsTable
@@ -105,6 +109,7 @@ export default async function StaffAttendanceReportsPage({ searchParams }: Staff
           emptyTitle="No non-teaching staff attendance records"
           emptyDescription="Non-teaching staff records for the selected date range will appear here."
           rows={data.nonTeachingRows}
+          timeZone={timeZone}
         />
       </div>
 
@@ -115,6 +120,7 @@ export default async function StaffAttendanceReportsPage({ searchParams }: Staff
           emptyTitle="No late arrivals"
           emptyDescription="Late staff attendance records for the selected filters will appear here."
           rows={data.lateRows}
+          timeZone={timeZone}
         />
 
         <NamedStaffAttendanceRowsTable
@@ -123,12 +129,13 @@ export default async function StaffAttendanceReportsPage({ searchParams }: Staff
           emptyTitle="No half-day records"
           emptyDescription="Half-day staff attendance records for the selected filters will appear here."
           rows={data.halfDayRows}
+          timeZone={timeZone}
         />
       </div>
 
       <StaffMonthlySummaryTable rows={data.monthlyRows} />
 
-      <StaffCorrectionReportTable rows={data.correctionRows} />
+      <StaffCorrectionReportTable rows={data.correctionRows} timeZone={timeZone} />
     </div>
   );
 }

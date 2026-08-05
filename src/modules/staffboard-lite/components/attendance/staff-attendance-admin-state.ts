@@ -44,7 +44,7 @@ export function formatStaffAttendanceLabel(value: string) {
     .join(" ");
 }
 
-export function formatStaffAttendanceDateTime(value?: string | null) {
+export function formatStaffAttendanceDateTime(value?: string | null, timeZone = "Asia/Kolkata") {
   if (!value) return "-";
   const parts = new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -52,19 +52,19 @@ export function formatStaffAttendanceDateTime(value?: string | null) {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "Asia/Kolkata"
+    timeZone
   }).formatToParts(new Date(value));
   const values = new Map(parts.map((part) => [part.type, part.value]));
   return `${values.get("day") ?? "--"} ${values.get("month") ?? "---"}, ${values.get("hour") ?? "--"}:${values.get("minute") ?? "--"}`;
 }
 
-export function formatStaffAttendanceDate(value?: string | null) {
+export function formatStaffAttendanceDate(value?: string | null, timeZone = "Asia/Kolkata") {
   if (!value) return "-";
   const parts = new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-    timeZone: "Asia/Kolkata"
+    timeZone
   }).formatToParts(new Date(value));
   const values = new Map(parts.map((part) => [part.type, part.value]));
   return `${values.get("day") ?? "--"} ${values.get("month") ?? "---"} ${values.get("year") ?? "----"}`;
@@ -77,11 +77,51 @@ export function formatWorkingMinutes(value?: number | null) {
   return hours > 0 ? `${hours}h ${minutes.toString().padStart(2, "0")}m` : `${minutes} min`;
 }
 
-export function toDateTimeLocalValue(value?: string | null) {
+export function toDateTimeLocalValue(value?: string | null, timeZone = "Asia/Kolkata") {
   if (!value) return "";
   const date = new Date(value);
-  const offsetMs = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const values = new Map(parts.map((part) => [part.type, part.value]));
+  return `${values.get("year")}-${values.get("month")}-${values.get("day")}T${values.get("hour")}:${values.get("minute")}`;
+}
+
+export function institutionalDateTimeLocalToIso(value: string, timeZone = "Asia/Kolkata") {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return new Date(value).toISOString();
+  const desired = match.slice(1).map(Number);
+  let candidate = Date.UTC(desired[0], desired[1] - 1, desired[2], desired[3], desired[4]);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(new Date(candidate));
+    const values = new Map(parts.map((part) => [part.type, part.value]));
+    const observed = Date.UTC(
+      Number(values.get("year")),
+      Number(values.get("month")) - 1,
+      Number(values.get("day")),
+      Number(values.get("hour")),
+      Number(values.get("minute"))
+    );
+    const expected = Date.UTC(desired[0], desired[1] - 1, desired[2], desired[3], desired[4]);
+    candidate += expected - observed;
+  }
+
+  return new Date(candidate).toISOString();
 }
 
 export function staffAttendanceCorrectionErrorMessage(code: string, fallback: string) {

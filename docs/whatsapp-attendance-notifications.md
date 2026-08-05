@@ -1,215 +1,199 @@
-# WhatsApp Attendance Notification Foundation
+# WhatsApp Attendance Notifications And Reports
 
 ## Status
 
-- Phase: Base MVP Phase 10.7
-- Date: 2026-06-01
-- Status: foundation implemented, DB-backed dry-run smoke passed, provider live-send disabled by default
-- Scope: attendance notifications only
-- Explicitly not in scope: full SchoolCast, marketing broadcasts, fee reminders, result announcements, chatbot, parent/student apps, native mobile, and push notifications
+- Review date: 2026-08-05
+- Scope: student attendance alerts and staff weekly/monthly attendance reports
+- Implementation status: application foundation repaired and source-level verification passed
+- Live-delivery status: not ready until consent, approved templates, encrypted provider credentials, migration, and recurring worker configuration are complete
+- Full SchoolCast, salary management, marketing broadcasts, parent/student portals, and push notifications remain out of scope
 
-## Product Decision
+Attendance remains the source of truth. Notification failures never roll back or block a valid attendance submission.
 
-This phase adds a lightweight SchoolCast Lite foundation for attendance notifications without starting the full SchoolCast module.
+## Student Attendance Behavior
 
-The supported MVP notification use cases are:
+When attendance is submitted or corrected, the server:
 
-- Student daily attendance WhatsApp alerts for guardians.
-- Staff monthly attendance WhatsApp summaries for staff.
-- Tenant-safe notification outbox and delivery log infrastructure.
-- Disabled-by-default demo seed configuration.
-- Dry-run provider behavior unless approved production credentials are configured outside source control.
+1. Resolves tenant, branch, academic year, actor, and permissions from the authenticated server context.
+2. Loads the branch notification policy and approved tenant/branch WhatsApp template.
+3. Selects an explicitly consented recipient, prioritising the primary guardian and then father, mother, or authorised guardian.
+4. Uses the preference WhatsApp number, or the registered guardian phone only after explicit WhatsApp consent has been captured.
+5. Queues and immediately processes the notification outbox on a best-effort basis.
 
-Attendance submission remains the source of truth. Notification queueing is best-effort and must not block attendance submission.
+`EXCEPTION_ONLY` supports Absent, Late, Half Day, and On Leave alerts. Absent and Late remain separately configurable. `ALL_STATUSES` sends the daily marked status for every eligible student.
 
-## Data Model
-
-New Prisma models:
-
-- `CommunicationPreference`
-- `NotificationTemplate`
-- `NotificationOutbox`
-- `NotificationDeliveryLog`
-- `WhatsAppIntegrationSetting`
-
-DB uniqueness is enforced with partial unique indexes for global and branch-scoped notification templates and WhatsApp integration settings.
-
-New attendance settings fields:
-
-- `studentAttendanceWhatsAppEnabled`
-- `studentAttendanceNotificationMode`
-- `staffMonthlySummaryWhatsAppEnabled`
-- `staffMonthlySummarySendDay`
-- `staffMonthlySummarySendTime`
-
-New notification enums cover preference owner type, channel, template category, recipient type, outbox status, delivery status, WhatsApp provider, and student attendance notification mode.
-
-## Student Attendance Alerts
-
-Student attendance submission queues WhatsApp notifications only when all of these are true:
-
-- Attendance settings enable student WhatsApp alerts.
-- A matching active WhatsApp template exists.
-- The attendance status is allowed by the configured mode.
-- A guardian is linked.
-- The guardian has WhatsApp consent enabled.
-- The guardian has attendance alerts enabled.
-- A WhatsApp number is available.
-
-Modes:
-
-- `DISABLED`: queue nothing.
-- `EXCEPTION_ONLY`: queue `ABSENT`, `LATE`, `HALF_DAY`, and `ON_LEAVE`.
-- `ALL_STATUSES`: queue any marked status except `NOT_MARKED`.
-
-Queueing uses an idempotency key per tenant, attendance record, and status to prevent duplicate outbox rows.
-
-Notification payloads intentionally include only safe attendance fields:
+The student payload includes only:
 
 - student name
-- class-section display name
+- scholar/admission number
+- class and section
 - attendance status
 - attendance date
-- institution name
+- attendance marking time in the branch time zone
+- institution display name
 
-They do not include remarks, medical details, tenant IDs, actor IDs, password hashes, token hashes, or QR tokens.
+It does not contain remarks, medical information, tenant IDs, actor IDs, passwords, session data, QR data, or provider secrets.
 
-## Staff Monthly Summaries
+### Ten-Minute And Duplicate Rules
 
-Staff monthly summaries are queued by the staff monthly summary job helper when:
+- Attendance submission and authorised correction invoke outbox processing immediately, which is the primary under-ten-minute delivery path.
+- A production worker must also call `/api/cron/attendance-notifications` at an approved interval of ten minutes or less to drain queued messages and run scheduled staff reports.
+- The worker route requires `Authorization: Bearer <CRON_SECRET>` and uses timing-safe secret comparison.
+- An Absent notification uses one idempotency key per tenant, student, and attendance date. Corrections or repeated submissions cannot create another Absent outbox row for the same day.
+- Other daily statuses use a tenant/student/date/status key.
+- Database uniqueness remains the final duplicate-concurrency guard.
 
-- Staff monthly WhatsApp summaries are enabled in attendance settings.
-- A matching active WhatsApp template exists.
-- The staff profile is active.
-- The staff member has WhatsApp consent enabled.
-- Monthly summaries are enabled for that staff member.
-- A WhatsApp number is available.
+The live ten-minute SLA cannot be claimed until the production provider and recurring worker are configured and monitored.
 
-Summary payloads include:
+## Employee Attendance Reports
 
-- staff name
-- month label
-- present day count
-- late day count
-- half-day count
-- leave day count
-- absent/not-marked count
-- institution name
+Staff reports are available for active staff profiles with explicit WhatsApp consent and the matching weekly or monthly preference enabled.
 
-The helper is ready for a future scheduler, but no production scheduler or broadcast system is introduced in this phase.
+Weekly reports cover the previous seven completed institutional calendar days. Monthly reports cover the previous completed calendar month. Both include:
 
-## Outbox And Provider Behavior
+- working days represented by available attendance records
+- marked days
+- present days
+- absent days
+- leave days
+- late arrivals
+- half days
+- not-marked days
+- week-off days
+- holiday days
+- total working minutes
+- institution display name and reporting period
 
-Outbox rows are tenant-scoped and optionally branch/academic-year scoped. Processing sends queued rows through the provider abstraction and records delivery logs.
+Missing days are not invented as Absent. Calendar/roster-derived working-day inference requires a separately approved working-calendar design.
 
-Provider behavior:
+Salary values are intentionally excluded. They may be added to the monthly report only after Salary Management is implemented, authorised, and verified.
 
-- `WHATSAPP_PROVIDER_MODE=DRY_RUN` returns a safe dry-run success and sends no real messages.
-- Missing provider configuration fails safely.
-- Live Meta Cloud API sending is deferred until approved credential storage and secret decryption are configured.
-- Provider errors are sanitized before persistence or user-facing handling.
+## Institutional Time Zone
 
-Local environment placeholders:
+Time-zone resolution follows this precedence:
+
+1. active branch IANA time zone
+2. tenant/institution IANA time zone
+3. safe default `Asia/Kolkata`
+
+CampusCore validates IANA time-zone values. The resolved zone is used for:
+
+- dashboard live clock and date
+- student attendance dates, cut-offs, alerts, and marking time
+- staff attendance dates, QR validity display, check-in/check-out display, and correction inputs
+- staff report periods and timestamps
+- notification schedules and payload labels
+- audit-log display
+
+Database timestamps remain stored as UTC instants. The institutional zone is applied at business-date and presentation boundaries.
+
+## Settings Review
+
+CampusCore Settings now keeps the existing attendance policy and adds only required notification controls:
+
+- institution time zone, locale, date format, and currency
+- student WhatsApp enabled/disabled
+- student notification mode
+- Absent and Late alert controls
+- staff weekly WhatsApp enabled, weekday, and time
+- staff monthly WhatsApp enabled, day-of-month, and time
+- provider and template readiness status without revealing secrets
+
+Enabling a notification setting ensures tenant-scoped mappings exist for:
+
+- `student_daily_attendance_alert`
+- `staff_weekly_attendance_summary`
+- `staff_monthly_attendance_summary`
+
+Guardian edit and staff edit pages provide an authorised preference panel for consent and report choices. The server derives the owner branch, rejects cross-tenant/cross-branch records, and requires `notifications.settings.manage`. Admin and Principal receive governance permissions by default; Teacher and Staff do not.
+
+The settings form also preserves previously stored locale/date/currency/multiple-academic-year values rather than silently resetting hidden fields.
+
+## Consent And Audit
+
+- No recipient is eligible without `whatsappEnabled`, the relevant alert/report preference, and `consentCapturedAt`.
+- Registered phone data is not treated as WhatsApp consent.
+- Preference changes and outbox state changes are audit logged.
+- Audit metadata stores booleans and masked recipient information, never raw passwords, provider tokens, or message secrets.
+- The outbox claim uses an atomic status update, preventing two workers from sending the same queued row concurrently.
+
+## Requested Record Readiness
+
+A read-only DB check was performed for the requested test records.
+
+### Scholar No. 1
+
+- Student, active class-section enrollment, primary guardian, branch, and institutional time zone: found.
+- A registered guardian phone field exists.
+- Explicit WhatsApp number/preference, attendance-alert opt-in, and consent capture: not configured.
+
+### Employee Code D-01
+
+- Active staff profile, branch, and institutional time zone: found.
+- A registered staff phone field exists.
+- Explicit WhatsApp number/preference, weekly/monthly opt-in, and consent capture: not configured.
+
+### Tenant Notification Readiness
+
+- Student alerts: disabled.
+- Staff weekly/monthly reports: disabled.
+- Approved template mappings for the requested tenant: not configured.
+- Enabled WhatsApp provider integration: not configured.
+
+No consent was fabricated, no recipient number was printed, and no message was sent during this review.
+
+## Provider And Worker Configuration
+
+Safe defaults:
 
 ```bash
 WHATSAPP_PROVIDER_MODE="DRY_RUN"
 WHATSAPP_WEBHOOK_VERIFY_TOKEN_SHA256=""
 WHATSAPP_APP_SECRET=""
+CRON_SECRET=""
 ```
 
-Do not commit provider credentials, access tokens, app secrets, webhook verify tokens, private URLs, or phone-number fixture data from real users.
+`DRY_RUN` exercises outbox and delivery-log behavior without contacting WhatsApp. Live Meta Cloud/BSP delivery remains deliberately blocked until approved encrypted secret storage/decryption and provider implementation are completed. Do not place provider access tokens in source control, public settings, logs, or documentation.
 
-## Webhook Behavior
+The application includes the protected worker endpoint but does not assume a hosting plan or silently add an unsupported schedule. Configure the recurring invocation in the approved deployment scheduler after confirming its minimum interval and secret-injection behavior.
 
-The WhatsApp webhook route supports:
+## Migration
 
-- GET verification by comparing the submitted verify token hash with `WHATSAPP_WEBHOOK_VERIFY_TOKEN_SHA256`.
-- POST signature verification using `x-hub-signature-256` and `WHATSAPP_APP_SECRET`.
-- Delivery status extraction and recording for known provider message IDs.
+Migration `20260805180000_add_weekly_attendance_notifications` adds disabled-by-default weekly settings and staff preference fields. It does not enable messages or create consent.
 
-Webhook processing ignores unknown delivery message IDs safely.
+Apply with the project deployment convention only after the target environment is confirmed:
 
-## Settings And Permissions
+```bash
+npx prisma migrate deploy
+```
 
-Attendance settings now expose notification controls for authorized users:
+## Verification Coverage
 
-- Student WhatsApp attendance alerts.
-- Student notification mode.
-- Staff monthly WhatsApp summaries.
-- Staff monthly summary send day/time.
+Automated coverage includes:
 
-Notification permissions:
+- student status filtering and required payload fields
+- guardian ordering, consent, and phone gating
+- Absent duplicate-safe idempotency
+- non-blocking attendance submission behavior
+- weekly and monthly staff summary calculation and queueing
+- registered-phone fallback only after explicit consent
+- outbox atomic claim and sent/failed behavior
+- provider dry-run and sanitized errors
+- webhook signature/status handling
+- notification RBAC and strict client schemas
+- institutional date/time boundaries and correction-input round trips
+- scheduler tenant/branch scoping and cron-secret guard
+- dashboard clock and settings UI presence
 
-- `notifications.settings.manage`
-- `notifications.outbox.view`
-- `notifications.outbox.process`
-- `notifications.whatsapp.manage`
+## Remaining Release Gates
 
-Default role policy:
+1. Apply the weekly notification migration to the intended environment.
+2. Have an authorised school administrator record valid WhatsApp consent for the requested guardian and employee.
+3. Enable the required student/weekly/monthly branch settings.
+4. Register and approve provider template names for all three template keys.
+5. Complete approved encrypted provider-secret storage/decryption and live-send adapter work.
+6. Configure a recurring worker interval of ten minutes or less and alerting for failed delivery.
+7. Run DRY_RUN DB smoke, then provider sandbox QA, then controlled real-recipient QA with explicit consent.
+8. Verify webhook delivered/failed statuses and duplicate prevention under concurrent worker calls.
 
-- Admin and Principal receive notification governance permissions.
-- Teacher and Staff do not receive notification governance permissions.
-
-Server-side permission checks remain authoritative. UI visibility is not a security boundary.
-
-## Consent And Privacy
-
-Demo seed creates notification templates, disabled WhatsApp integration settings, and disabled communication preferences.
-
-Rules:
-
-- No real messages are sent by default.
-- Consent is required before queueing.
-- Phone numbers in audit metadata are masked.
-- Notification queue failures are swallowed by attendance submission and can be reviewed through logs/outbox processing later.
-- Raw passwords, password hashes, session secrets, bearer tokens, token hashes, raw QR tokens, tenant IDs in normal UI, actor IDs, and provider secrets must not appear in UI, logs, docs, or screenshots.
-
-## Testing Checklist
-
-Source/unit coverage includes:
-
-- Student attendance status filtering.
-- Consent and phone gating.
-- Idempotency behavior.
-- Non-blocking queue failure behavior.
-- Staff monthly summary calculation and queueing.
-- Outbox queued/sent/failed behavior.
-- Provider dry-run and sanitized errors.
-- Webhook status extraction and signature verification.
-- Notification RBAC defaults.
-- Client schema rejection of tenant/actor IDs.
-- Payload privacy guards.
-
-DB-backed checks still require a running PostgreSQL instance:
-
-- Apply migration.
-- Seed demo data.
-- Verify templates/preferences/settings are seeded.
-- Submit student attendance with alerts disabled.
-- Enable alerts in a local QA branch and verify outbox rows are queued only for eligible statuses and consented recipients.
-- Process the outbox in dry-run mode.
-- Verify delivery logs contain no secrets.
-
-## DB Smoke Result
-
-The 2026-06-01 DB-backed dry-run smoke passed against local PostgreSQL for:
-
-- migration application
-- seed verification
-- student attendance notification outbox queueing
-- staff monthly summary outbox queueing
-- outbox processing in DRY_RUN mode
-- delivery log creation
-- webhook status handling
-- tenant/branch scoping
-- seeded notification RBAC
-
-See `docs/whatsapp-notification-db-smoke.md`.
-
-## Remaining TODOs
-
-- Add an approved secret storage/decryption path before live Meta Cloud API sending.
-- Add a scheduler only after product approval.
-- Add an admin outbox review UI only if needed.
-- Add fuller fixture coverage for consent edge cases.
-- Keep full SchoolCast deferred until explicitly started.
+Until those gates pass, the correct status is: **application foundation ready; live WhatsApp attendance delivery not yet release-ready**.

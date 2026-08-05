@@ -17,7 +17,7 @@ describe("CampusCore attendance notification settings UI", () => {
     expect(route).toContain("WhatsApp notification status");
     expect(route).toContain("DRY_RUN / provider not configured");
     expect(route).toContain("without sending real WhatsApp messages");
-    expect(route).toContain("Student and staff templates active");
+    expect(route).toContain("Student, weekly, and monthly templates active");
   });
 
   it("loads notification status without selecting provider secrets", () => {

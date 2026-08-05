@@ -5,11 +5,13 @@ import { db } from "@/lib/db";
 import type { TenantContext } from "@/lib/tenant/context";
 import { listStaffAttendanceSchema } from "@/modules/staffboard-lite/schemas";
 import { pagination } from "./shared";
+import { dateOnlyInTimeZone } from "@/lib/dates/time-zone";
 
 export type StaffAttendanceBranchOption = {
   id: string;
   name: string;
   code: string;
+  timezone: string;
 };
 
 export type StaffAttendanceAdminRow = {
@@ -49,7 +51,6 @@ export type StaffAttendanceAdminData = {
   pageSize: number;
 };
 
-const DEFAULT_ATTENDANCE_TIME_ZONE = "Asia/Kolkata";
 const EMPTY_SUMMARY: StaffAttendanceDailySummary = {
   totalStaff: 0,
   checkedIn: 0,
@@ -62,20 +63,6 @@ const EMPTY_SUMMARY: StaffAttendanceDailySummary = {
 
 function isForbiddenPermissionError(error: unknown) {
   return error instanceof Error && error.message.startsWith("FORBIDDEN_");
-}
-
-function todayDateInTimeZone(timeZone = DEFAULT_ATTENDANCE_TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-  const valueByType = new Map(parts.map((part) => [part.type, part.value]));
-  const year = Number(valueByType.get("year"));
-  const month = Number(valueByType.get("month"));
-  const day = Number(valueByType.get("day"));
-  return new Date(Date.UTC(year, month - 1, day));
 }
 
 function toDateOnlyString(date: Date) {
@@ -119,7 +106,8 @@ export async function listStaffAttendanceBranchOptions(ctx: TenantContext): Prom
     select: {
       id: true,
       name: true,
-      code: true
+      code: true,
+      timezone: true
     },
     orderBy: [{ name: "asc" }, { code: "asc" }]
   });
@@ -148,7 +136,7 @@ export async function listStaffAttendanceForDate(
     return {
       branchOptions,
       selectedBranchId: null,
-      selectedDate: toDateOnlyString(params.date ?? todayDateInTimeZone()),
+      selectedDate: toDateOnlyString(params.date ?? dateOnlyInTimeZone(new Date(), ctx.timeZone)),
       summary: EMPTY_SUMMARY,
       rows: [],
       totalRows: 0,
@@ -168,7 +156,8 @@ export async function listStaffAttendanceForDate(
       : branchOptions[0].id);
   await requirePermission({ ctx, permission: "staffboard.attendance.view", branchId: selectedBranchId });
 
-  const attendanceDate = params.date ?? todayDateInTimeZone();
+  const selectedBranch = branchOptions.find((branch) => branch.id === selectedBranchId);
+  const attendanceDate = params.date ?? dateOnlyInTimeZone(new Date(), selectedBranch?.timezone ?? ctx.timeZone);
   const where: Prisma.StaffProfileWhereInput = {
     tenantId: ctx.tenantId,
     branchId: selectedBranchId,

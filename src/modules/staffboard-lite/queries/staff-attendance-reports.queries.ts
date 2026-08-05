@@ -10,11 +10,13 @@ import {
   staffMonthlyAttendanceSummaryFilterSchema
 } from "@/modules/staffboard-lite/schemas";
 import { pagination } from "./shared";
+import { dateOnlyInTimeZone, getZonedDateTimeParts } from "@/lib/dates/time-zone";
 
 export type StaffAttendanceReportBranchOption = {
   id: string;
   name: string;
   code: string;
+  timezone: string;
 };
 
 type StaffAttendanceReportScope = {
@@ -125,34 +127,12 @@ type StaffAttendanceReportRecord = {
   } | null;
 };
 
-const DEFAULT_ATTENDANCE_TIME_ZONE = "Asia/Kolkata";
-
 function isForbiddenPermissionError(error: unknown) {
   return error instanceof Error && error.message.startsWith("FORBIDDEN_");
 }
 
-function indiaDateParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: DEFAULT_ATTENDANCE_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(date);
-  const values = new Map(parts.map((part) => [part.type, part.value]));
-  return {
-    year: Number(values.get("year") ?? "2026"),
-    month: Number(values.get("month") ?? "1"),
-    day: Number(values.get("day") ?? "1")
-  };
-}
-
-function todayDateInTimeZone() {
-  const { year, month, day } = indiaDateParts();
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function currentMonthYear() {
-  const { year, month } = indiaDateParts();
+function currentMonthYear(timeZone?: string) {
+  const { year, month } = getZonedDateTimeParts(new Date(), timeZone);
   return { year, month };
 }
 
@@ -163,8 +143,8 @@ function monthRange(year: number, month: number) {
   };
 }
 
-function defaultDateRange(params: StaffReportFilterParams) {
-  const today = todayDateInTimeZone();
+function defaultDateRange(params: StaffReportFilterParams, timeZone?: string) {
+  const today = dateOnlyInTimeZone(new Date(), timeZone);
   const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   return {
     fromDate: normalizeDateOnly(params.fromDate ?? monthStart),
@@ -249,7 +229,8 @@ async function resolveReportScope(ctx: TenantContext, branchId?: string): Promis
     select: {
       id: true,
       name: true,
-      code: true
+      code: true,
+      timezone: true
     },
     orderBy: [{ name: "asc" }, { code: "asc" }]
   });
@@ -315,7 +296,7 @@ async function findReportRecords(
   const staffWhere = buildStaffWhere(ctx, scope.selectedBranchId, params, options);
   if (!staffWhere) return { ...scope, rows: [] };
 
-  const { fromDate, toDate } = defaultDateRange(params);
+  const { fromDate, toDate } = defaultDateRange(params, ctx.timeZone);
   const dateFilter = options.exactDate
     ? normalizeDateOnly(options.exactDate)
     : { gte: fromDate, lte: toDate };
@@ -375,7 +356,7 @@ export async function listStaffAttendanceReportBranchOptions(ctx: TenantContext)
 
 export async function getDailyStaffAttendanceReport(ctx: TenantContext, input: unknown = {}) {
   const params = staffDailyAttendanceReportFilterSchema.parse(input);
-  return findReportRecords(ctx, params, { exactDate: params.date ?? todayDateInTimeZone() });
+  return findReportRecords(ctx, params, { exactDate: params.date ?? dateOnlyInTimeZone(new Date(), ctx.timeZone) });
 }
 
 export async function getTeacherAttendanceReport(ctx: TenantContext, input: unknown = {}) {
@@ -400,7 +381,7 @@ export async function getHalfDayStaffAttendanceReport(ctx: TenantContext, input:
 
 export async function getMonthlyStaffAttendanceSummary(ctx: TenantContext, input: unknown = {}) {
   const params = staffMonthlyAttendanceSummaryFilterSchema.parse(input);
-  const { month: currentMonth, year: currentYear } = currentMonthYear();
+  const { month: currentMonth, year: currentYear } = currentMonthYear(ctx.timeZone);
   const month = params.month ?? currentMonth;
   const year = params.year ?? currentYear;
   const scope = await resolveReportScope(ctx, params.branchId);
@@ -479,7 +460,7 @@ export async function getManualStaffCorrectionReport(ctx: TenantContext, input: 
 
   const staffWhere = buildStaffWhere(ctx, scope.selectedBranchId, params, {});
   if (!staffWhere) return { ...scope, rows: [] as StaffManualCorrectionReportRow[] };
-  const { fromDate, toDate } = defaultDateRange(params);
+  const { fromDate, toDate } = defaultDateRange(params, ctx.timeZone);
   const records = await db.staffAttendanceRecord.findMany({
     where: {
       tenantId: ctx.tenantId,

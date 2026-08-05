@@ -16,6 +16,7 @@ type StaffAttendanceTableProps = {
   totalRows: number;
   page: number;
   pageSize: number;
+  timeZone: string;
   filterParams?: {
     branchId?: string | null;
     staffType?: string;
@@ -41,11 +42,13 @@ const columns = [
 function CorrectionAction({
   row,
   canCorrect,
-  selectedDate
+  selectedDate,
+  timeZone
 }: {
   row: StaffAttendanceAdminRow;
   canCorrect: boolean;
   selectedDate: string;
+  timeZone: string;
 }) {
   if (!canCorrect) {
     return (
@@ -74,6 +77,7 @@ function CorrectionAction({
       checkOutAt={row.checkOutAt}
       workingMinutes={row.workingMinutes}
       correctionReason={row.correctionReason}
+      timeZone={timeZone}
     />
   );
 }
@@ -85,6 +89,7 @@ export function StaffAttendanceTable({
   totalRows,
   page,
   pageSize,
+  timeZone,
   filterParams
 }: StaffAttendanceTableProps) {
   if (rows.length === 0) {
@@ -132,15 +137,15 @@ export function StaffAttendanceTable({
             <td className="whitespace-nowrap px-4 py-4">
               <StatusBadge value={row.status} label={formatStaffAttendanceLabel(row.status)} />
             </td>
-            <td className="whitespace-nowrap px-4 py-4">{formatStaffAttendanceDateTime(row.checkInAt)}</td>
-            <td className="whitespace-nowrap px-4 py-4">{formatStaffAttendanceDateTime(row.checkOutAt)}</td>
+            <td className="whitespace-nowrap px-4 py-4">{formatStaffAttendanceDateTime(row.checkInAt, timeZone)}</td>
+            <td className="whitespace-nowrap px-4 py-4">{formatStaffAttendanceDateTime(row.checkOutAt, timeZone)}</td>
             <td className="whitespace-nowrap px-4 py-4">{formatWorkingMinutes(row.workingMinutes)}</td>
             <td className="whitespace-nowrap px-4 py-4">{formatStaffAttendanceLabel(row.source)}</td>
             <td className="max-w-64 px-4 py-4 text-sm leading-6 text-slate-600">
               {row.correctionReason ? row.correctionReason : "-"}
             </td>
             <td className="px-4 py-4">
-              <CorrectionAction row={row} canCorrect={canCorrect} selectedDate={selectedDate} />
+              <CorrectionAction row={row} canCorrect={canCorrect} selectedDate={selectedDate} timeZone={timeZone} />
             </td>
           </tr>
         ))}

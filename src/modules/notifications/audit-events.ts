@@ -1,5 +1,6 @@
 export const NOTIFICATION_AUDIT_EVENTS = {
   SETTINGS_UPDATED: "notification.settings.updated",
+  COMMUNICATION_PREFERENCE_UPDATED: "notification.communication_preference.updated",
   OUTBOX_QUEUED: "notification.outbox.queued",
   OUTBOX_SENT: "notification.outbox.sent",
   OUTBOX_FAILED: "notification.outbox.failed",

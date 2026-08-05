@@ -247,6 +247,9 @@ describe("CampusCore tenant isolation", () => {
       staffHalfDayBeforeMinutes: 240,
       staffMinimumWorkingMinutes: 360,
       staffQrTokenValiditySeconds: 180,
+      staffWeeklySummaryWhatsAppEnabled: false,
+      staffWeeklySummarySendDay: 1,
+      staffWeeklySummarySendTime: "09:00",
       staffMonthlySummaryWhatsAppEnabled: false,
       staffMonthlySummarySendDay: 1,
       staffMonthlySummarySendTime: "09:00"

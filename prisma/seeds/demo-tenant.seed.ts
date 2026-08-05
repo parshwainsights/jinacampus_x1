@@ -712,6 +712,67 @@ async function upsertDemoStaffAttendance(
   }
 }
 
+async function upsertDemoStaffLeaveFoundation(
+  db: PrismaClient,
+  tenantId: string,
+  branchId: string,
+  staffProfiles: Map<string, { id: string }>
+) {
+  await db.staffLeaveSetting.upsert({
+    where: { branchId },
+    create: {
+      tenantId,
+      branchId,
+      allowHalfDay: true,
+      allowBackdatedApplications: false,
+      minimumNoticeDays: 0,
+      maximumConsecutiveDays: 30,
+      nonWorkingWeekdays: [0],
+      approvalMode: "PRINCIPAL_OR_DESIGNATED",
+      whatsappNotificationsEnabled: false
+    },
+    update: {
+      allowHalfDay: true,
+      allowBackdatedApplications: false,
+      minimumNoticeDays: 0,
+      maximumConsecutiveDays: 30,
+      nonWorkingWeekdays: [0],
+      approvalMode: "PRINCIPAL_OR_DESIGNATED",
+      whatsappNotificationsEnabled: false
+    }
+  });
+
+  const leaveTypes = [
+    { code: "CASUAL", name: "Casual Leave", isPaid: true, balanceTracked: true, annualLimit: 12, allowHalfDay: true, supportingDocumentRequired: false },
+    { code: "SICK", name: "Sick Leave", isPaid: true, balanceTracked: true, annualLimit: 12, allowHalfDay: true, supportingDocumentRequired: false, documentRequiredAfterDays: 2 },
+    { code: "UNPAID", name: "Unpaid Leave", isPaid: false, balanceTracked: false, annualLimit: 0, allowHalfDay: true, supportingDocumentRequired: false }
+  ] as const;
+  const year = new Date().getUTCFullYear();
+  for (const type of leaveTypes) {
+    const leaveType = await db.staffLeaveType.upsert({
+      where: { tenantId_branchId_code: { tenantId, branchId, code: type.code } },
+      create: { tenantId, branchId, ...type, carryForwardLimit: 0, isActive: true },
+      update: { ...type, carryForwardLimit: 0, isActive: true }
+    });
+    if (!leaveType.balanceTracked) continue;
+    for (const staff of staffProfiles.values()) {
+      await db.staffLeaveBalance.upsert({
+        where: {
+          tenantId_branchId_staffId_leaveTypeId_year: {
+            tenantId,
+            branchId,
+            staffId: staff.id,
+            leaveTypeId: leaveType.id,
+            year
+          }
+        },
+        create: { tenantId, branchId, staffId: staff.id, leaveTypeId: leaveType.id, year, allocatedDays: leaveType.annualLimit },
+        update: { allocatedDays: leaveType.annualLimit }
+      });
+    }
+  }
+}
+
 async function upsertDemoNotificationFoundation(db: PrismaClient, tenantId: string, branchId: string) {
   const templates = [
     {
@@ -720,8 +781,18 @@ async function upsertDemoNotificationFoundation(db: PrismaClient, tenantId: stri
       languageCode: "en"
     },
     {
+      templateKey: WHATSAPP_TEMPLATE_KEYS.STAFF_WEEKLY_ATTENDANCE_SUMMARY,
+      providerTemplateName: "staff_weekly_attendance_summary",
+      languageCode: "en"
+    },
+    {
       templateKey: WHATSAPP_TEMPLATE_KEYS.STAFF_MONTHLY_ATTENDANCE_SUMMARY,
       providerTemplateName: "staff_monthly_attendance_summary",
+      languageCode: "en"
+    },
+    {
+      templateKey: WHATSAPP_TEMPLATE_KEYS.STAFF_LEAVE_STATUS_UPDATE,
+      providerTemplateName: "staff_leave_status_update",
       languageCode: "en"
     }
   ];
@@ -796,14 +867,18 @@ async function upsertDemoNotificationFoundation(db: PrismaClient, tenantId: stri
         ownerId: guardian.id,
         whatsappEnabled: false,
         attendanceAlertsEnabled: false,
+        weeklySummaryEnabled: false,
         monthlySummaryEnabled: false,
+        leaveUpdatesEnabled: false,
         consentSource: "demo-disabled-default"
       },
       update: {
         branchId,
         whatsappEnabled: false,
         attendanceAlertsEnabled: false,
+        weeklySummaryEnabled: false,
         monthlySummaryEnabled: false,
+        leaveUpdatesEnabled: false,
         consentSource: "demo-disabled-default"
       }
     });
@@ -823,14 +898,18 @@ async function upsertDemoNotificationFoundation(db: PrismaClient, tenantId: stri
         ownerId: staff.id,
         whatsappEnabled: false,
         attendanceAlertsEnabled: false,
+        weeklySummaryEnabled: false,
         monthlySummaryEnabled: false,
+        leaveUpdatesEnabled: false,
         consentSource: "demo-disabled-default"
       },
       update: {
         branchId,
         whatsappEnabled: false,
         attendanceAlertsEnabled: false,
+        weeklySummaryEnabled: false,
         monthlySummaryEnabled: false,
+        leaveUpdatesEnabled: false,
         consentSource: "demo-disabled-default"
       }
     });
@@ -952,5 +1031,6 @@ export async function seedDemoTenant(db: PrismaClient) {
   await upsertDemoStudentAttendance(db, tenant.id, branch.id, academicYear.id, students, users);
   const staffProfiles = await upsertDemoStaffBoard(db, tenant.id, branch.id, users);
   await upsertDemoStaffAttendance(db, tenant.id, branch.id, academicYear.id, staffProfiles, users);
+  await upsertDemoStaffLeaveFoundation(db, tenant.id, branch.id, staffProfiles);
   await upsertDemoNotificationFoundation(db, tenant.id, branch.id);
 }

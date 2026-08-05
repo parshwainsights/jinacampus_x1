@@ -26,12 +26,13 @@ describe("CampusCore Prisma tenant scoping", () => {
     "AuditLog",
     "StaffProfile",
     "StaffAttendanceRecord",
-    "StaffAttendanceQrToken"
+    "StaffAttendanceQrToken",
+    "StudentDocument"
   ])("%s includes tenantId", (modelName) => {
     expect(getModelBlock(modelName)).toMatch(/\btenantId\s+String\b/);
   });
 
-  it.each(["UserBranchAccess", "AttendanceSetting", "AuditLog", "StaffProfile", "StaffAttendanceRecord", "StaffAttendanceQrToken"])("%s includes branch scoping", (modelName) => {
+  it.each(["UserBranchAccess", "AttendanceSetting", "AuditLog", "StaffProfile", "StaffAttendanceRecord", "StaffAttendanceQrToken", "StudentDocument"])("%s includes branch scoping", (modelName) => {
     expect(getModelBlock(modelName)).toMatch(/\bbranchId\s+String\??(?:\s|$)/);
   });
 });

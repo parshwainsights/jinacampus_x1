@@ -10,6 +10,9 @@ import {
 } from "@/modules/academia/queries";
 import { PageHeader, StatusPill, formatDateTime, formatEnumLabel } from "@/modules/academia/components/academia-page-shell";
 import { AssignStudentClassForm } from "@/modules/academia/components/assign-student-class-form";
+import { env } from "@/lib/env";
+import { listStudentDocuments } from "@/modules/academia/services/student-document.service";
+import { StudentDocumentsPanel } from "@/modules/academia/components/student-documents-panel";
 
 function displayName(student: {
   fullName: string | null;
@@ -72,6 +75,7 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
   const classSections = canManageEnrollment && !currentYearEnrollment
     ? await listStudentRegistrationClassSectionOptions(ctx, student.branchId)
     : [];
+  const documents = canUpdate ? await listStudentDocuments(ctx, student.id) : [];
 
   return (
     <div className="space-y-6">
@@ -121,6 +125,17 @@ export default async function StudentProfilePage({ params }: { params: Promise<{
         <InfoRow label="SSSM ID" value={student.sssmIdNumber} />
         <InfoRow label="APAAR ID" value={student.apaarIdNumber} />
       </ProfileSection>
+
+      {canUpdate ? (
+        <StudentDocumentsPanel
+          studentId={student.id}
+          maxBytes={env.STUDENT_DOCUMENT_MAX_BYTES}
+          documents={documents.map((document) => ({
+            ...document,
+            createdAt: document.createdAt.toISOString()
+          }))}
+        />
+      ) : null}
 
       <ProfileSection title="Social / Demographic" description="School admission demographics.">
         <InfoRow label="Religion" value={student.religion} />

@@ -29,7 +29,7 @@ Do not build the following in this phase:
 - Full SchoolCast communication module, except the approved disabled-by-default attendance notification foundation
 - Advanced dashboards
 - Payroll
-- Leave balance automation
+- Payroll-linked leave settlement (staff leave applications and basic balances are approved separately)
 - Biometric attendance
 - Transport
 - Library
@@ -217,7 +217,7 @@ Required attendance capabilities:
 - Attendance correction stores before/after values in audit log.
 
 ## 6.3 StaffBoard Lite
-StaffBoard Lite manages staff profiles and QR-based staff attendance.
+StaffBoard Lite manages staff profiles, QR-based staff attendance, and the approved staff leave workflow.
 
 ### Required Features
 
@@ -229,6 +229,11 @@ StaffBoard Lite manages staff profiles and QR-based staff attendance.
 6. Manual correction with reason
 7. Staff attendance reports
 8. Dashboard cards
+9. Staff leave applications and supporting documents
+10. Branch-configured leave types, balances, and approvers
+11. Leave review, clarification, approval, rejection, withdrawal, and cancellation
+12. Approved-leave synchronization with staff attendance
+13. In-system leave updates and consent-controlled WhatsApp outbox events
 
 ### Staff Categories
 
@@ -307,6 +312,14 @@ Only `QR_SCAN` and `MANUAL_ADMIN` are implemented in first development. `IMPORT`
 - Check-in/check-out are transactional.
 - Late and half-day status are calculated from branch attendance settings.
 - Manual correction requires reason and audit log.
+- Leave applicants are resolved from the authenticated user's linked staff profile.
+- Leave types, approvers, policy, balances, and applications are tenant- and branch-scoped.
+- Leave totals, working dates, balance usage, and attendance status are calculated server-side.
+- Approval is transactional and rejects overlapping leave, insufficient balance, required-document gaps, and conflicting attendance.
+- Approved full-day leave is synchronized as `ON_LEAVE`; approved half-day leave is synchronized as `HALF_DAY`.
+- Staff can withdraw pending applications; authorized approvers can cancel only future approved leave without attendance activity.
+- Every leave state, policy, approver, balance, and document change is audited.
+- WhatsApp leave updates are disabled by default and require branch enablement, staff consent, an active template, and notification processing.
 
 ## 7. Data Model Requirements
 
@@ -345,6 +358,14 @@ Required Prisma models:
 - `StaffProfile`
 - `StaffAttendanceRecord`
 - `StaffAttendanceQrToken`
+- `StaffLeaveSetting`
+- `StaffLeaveType`
+- `StaffLeaveApprover`
+- `StaffLeaveBalance`
+- `StaffLeaveApplication`
+- `StaffLeaveApplicationAction`
+- `StaffLeaveDocument`
+- `InAppNotification`
 
 ### Optional Foundation
 
@@ -400,6 +421,12 @@ The notification foundation is limited to attendance WhatsApp use cases and does
 - `staffboard.attendance.view`
 - `staffboard.attendance.correct`
 - `staffboard.attendance.report`
+- `staffboard.leave.self_apply`
+- `staffboard.leave.self_view`
+- `staffboard.leave.view`
+- `staffboard.leave.approve`
+- `staffboard.leave.settings.manage`
+- `staffboard.leave.balance.manage`
 
 ### Notification Foundation Permissions
 
@@ -445,6 +472,12 @@ The notification foundation is limited to attendance WhatsApp use cases and does
 - `/staffboard/attendance/scan`
 - `/staffboard/attendance/me`
 - `/staffboard/attendance/reports`
+- `/staffboard/leave`
+- `/staffboard/leave/apply`
+- `/staffboard/leave/review`
+- `/staffboard/leave/[applicationId]`
+- `/staffboard/leave/[applicationId]/edit`
+- `/staffboard/leave/settings`
 
 ## 10. Reporting Requirements
 

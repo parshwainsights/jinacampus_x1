@@ -98,6 +98,11 @@ export const updateSchoolSchema = z.object({
   message: "At least one school field is required."
 });
 
+export const updateInstitutionLogoSchema = z.object({
+  tenantId: uuid,
+  institutionId: uuid
+});
+
 export const updateSchoolIdSchema = z.object({
   tenantId: uuid,
   currentSchoolId: schoolIdSchema,

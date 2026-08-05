@@ -2,6 +2,7 @@ import { cookies, headers } from "next/headers";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { hashSessionToken } from "@/lib/auth/session";
+import { safeTimeZone } from "@/lib/dates/time-zone";
 
 export type TenantContext = {
   tenantId: string;
@@ -15,6 +16,7 @@ export type TenantContext = {
   activeBranchId: string | null;
   activeBranchName?: string | null;
   activeBranchCode?: string | null;
+  timeZone?: string;
   accessibleBranchIds: string[];
   activeAcademicYearId: string | null;
   activeAcademicYearName?: string | null;
@@ -48,7 +50,13 @@ export async function getTenantContext(
   const session = await db.session.findUnique({
     where: { tokenHash },
     include: {
-      tenant: true,
+      tenant: {
+        include: {
+          tenantSettings: {
+            select: { timezone: true }
+          }
+        }
+      },
       user: {
         include: {
           passwordCredential: {
@@ -66,6 +74,7 @@ export async function getTenantContext(
                   institutionId: true,
                   name: true,
                   code: true,
+                  timezone: true,
                   status: true,
                   institution: {
                     select: {
@@ -117,7 +126,6 @@ export async function getTenantContext(
       ? activeBranchAccesses.find((b) => b.branchId === requestedBranchId)
       : activeBranchAccesses.find((b) => b.isPrimary) ?? activeBranchAccesses[0] ?? null;
   const activeBranchId = activeBranchAccess?.branchId ?? null;
-
   const fallbackInstitution = activeBranchAccess
     ? null
     : await db.institution.findFirst({
@@ -172,6 +180,7 @@ export async function getTenantContext(
     activeBranchId,
     activeBranchName: activeBranchAccess?.branch.name ?? null,
     activeBranchCode: activeBranchAccess?.branch.code ?? null,
+    timeZone: safeTimeZone(activeBranchAccess?.branch.timezone ?? session.tenant.tenantSettings?.timezone),
     accessibleBranchIds,
     activeAcademicYearId: activeAcademicYear?.id ?? null,
     activeAcademicYearName: activeAcademicYear?.name ?? null,

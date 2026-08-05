@@ -154,4 +154,14 @@ describe("profile server actions", () => {
     });
     expect(JSON.stringify(result)).not.toMatch(/Prisma|tenantId|00000000-0000-0000-0000-000000000001/);
   });
+
+  it("returns the created student id for permission-checked document uploads", async () => {
+    const studentId = "00000000-0000-0000-0000-000000000099";
+    mocks.createStudentRegistration.mockResolvedValueOnce({ student: { id: studentId } });
+
+    const result = await createStudentAction({ ok: false }, studentFormData());
+
+    expect(result).toEqual({ ok: true, message: "Student created.", studentId });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(`/academia/students/${studentId}`);
+  });
 });

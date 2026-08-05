@@ -1,4 +1,4 @@
-import { ClipboardList, FileText, QrCode, UsersRound, WalletCards } from "lucide-react";
+import { CalendarDays, ClipboardCheck, ClipboardList, FileText, QrCode, UsersRound, WalletCards } from "lucide-react";
 import type { PermissionCode } from "@/lib/rbac/permissions";
 import { getVisibleStaffboardModuleCards, type StaffboardModuleKey } from "@/modules/staffboard-lite/ui-config";
 import { CardLink, ComingSoonPill } from "./staffboard-page-shell";
@@ -9,7 +9,9 @@ const icons: Record<StaffboardModuleKey, typeof UsersRound> = {
   attendance: ClipboardList,
   "qr-attendance": QrCode,
   scan: QrCode,
-  reports: FileText
+  reports: FileText,
+  leave: CalendarDays,
+  "leave-review": ClipboardCheck
 };
 
 export function StaffboardOverviewCards({ permissions }: { permissions: ReadonlySet<PermissionCode> }) {

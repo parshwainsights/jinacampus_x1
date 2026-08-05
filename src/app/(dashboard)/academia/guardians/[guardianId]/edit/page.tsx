@@ -4,6 +4,8 @@ import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
 import { getGuardianById } from "@/modules/academia/queries";
 import { GuardianEditForm } from "@/modules/academia/components/core-record-edit-forms";
+import { CommunicationPreferenceForm } from "@/modules/notifications/components/communication-preference-form";
+import { getCommunicationPreference } from "@/modules/notifications/services/communication-preference.service";
 
 export default async function EditGuardianPage({ params }: { params: Promise<{ guardianId: string }> }) {
   const ctx = await requireAuth();
@@ -13,25 +15,42 @@ export default async function EditGuardianPage({ params }: { params: Promise<{ g
 
   const guardian = await getGuardianById(ctx, guardianId);
   if (!guardian) notFound();
+  const canManageNotifications = permissions.has("notifications.settings.manage");
+  const notificationPreference = canManageNotifications
+    ? await getCommunicationPreference(ctx, { ownerType: "GUARDIAN", ownerId: guardian.id })
+    : null;
 
   return (
-    <GuardianEditForm
-      guardian={{
-        id: guardian.id,
-        firstName: guardian.firstName,
-        middleName: guardian.middleName,
-        lastName: guardian.lastName,
-        displayName: guardian.displayName,
-        phone: guardian.phone,
-        email: guardian.email,
-        occupation: guardian.occupation,
-        addressLine1: guardian.addressLine1,
-        addressLine2: guardian.addressLine2,
-        city: guardian.city,
-        state: guardian.state,
-        postalCode: guardian.postalCode,
-        country: guardian.country
-      }}
-    />
+    <div className="space-y-6">
+      <GuardianEditForm
+        guardian={{
+          id: guardian.id,
+          firstName: guardian.firstName,
+          middleName: guardian.middleName,
+          lastName: guardian.lastName,
+          displayName: guardian.displayName,
+          phone: guardian.phone,
+          email: guardian.email,
+          occupation: guardian.occupation,
+          addressLine1: guardian.addressLine1,
+          addressLine2: guardian.addressLine2,
+          city: guardian.city,
+          state: guardian.state,
+          postalCode: guardian.postalCode,
+          country: guardian.country
+        }}
+      />
+      {notificationPreference ? (
+        <CommunicationPreferenceForm
+          ownerType="GUARDIAN"
+          ownerId={guardian.id}
+          hasRegisteredPhone={notificationPreference.hasRegisteredPhone}
+          preference={notificationPreference.preference ? {
+            ...notificationPreference.preference,
+            consentCapturedAt: notificationPreference.preference.consentCapturedAt?.toISOString() ?? null
+          } : null}
+        />
+      ) : null}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { PermissionState } from "@/components/ui/empty-state";
 import { requireAuth } from "@/lib/auth/require-auth";
 import { getEffectivePermissions } from "@/lib/rbac/require-permission";
+import { safeTimeZone } from "@/lib/dates/time-zone";
 import { StaffAttendanceFilters } from "@/modules/staffboard-lite/components/attendance/staff-attendance-filters";
 import { StaffAttendanceSummaryCards } from "@/modules/staffboard-lite/components/attendance/staff-attendance-summary-cards";
 import { StaffAttendanceTable } from "@/modules/staffboard-lite/components/attendance/staff-attendance-table";
@@ -40,6 +41,7 @@ export default async function StaffAttendancePage({ searchParams }: StaffAttenda
 
   const permissions = await getEffectivePermissions({ ctx, branchId: data.selectedBranchId });
   const canCorrect = permissions.has("staffboard.attendance.correct");
+  const timeZone = safeTimeZone(data.branchOptions.find((branch) => branch.id === data.selectedBranchId)?.timezone ?? ctx.timeZone);
 
   return (
     <div className="space-y-6">
@@ -66,6 +68,7 @@ export default async function StaffAttendancePage({ searchParams }: StaffAttenda
         totalRows={data.totalRows}
         page={data.page}
         pageSize={data.pageSize}
+        timeZone={timeZone}
         filterParams={{
           branchId: data.selectedBranchId,
           staffType: filters.staffType,

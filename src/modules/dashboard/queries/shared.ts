@@ -1,4 +1,5 @@
 import { forbidden } from "@/lib/errors";
+import { dateOnlyInTimeZone } from "@/lib/dates/time-zone";
 import { requirePermission } from "@/lib/rbac/require-permission";
 import type { TenantContext } from "@/lib/tenant/context";
 import { DASHBOARD_VIEW_PERMISSION } from "@/modules/dashboard/permissions";
@@ -11,22 +12,6 @@ export type DashboardQueryScope = {
   date: Date;
   dateString: string;
 };
-
-const DEFAULT_DASHBOARD_TIME_ZONE = "Asia/Kolkata";
-
-function todayDateInTimeZone(timeZone = DEFAULT_DASHBOARD_TIME_ZONE) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-  const valueByType = new Map(parts.map((part) => [part.type, part.value]));
-  const year = Number(valueByType.get("year"));
-  const month = Number(valueByType.get("month"));
-  const day = Number(valueByType.get("day"));
-  return new Date(Date.UTC(year, month - 1, day));
-}
 
 export function normalizeDashboardDateOnly(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -55,7 +40,7 @@ export async function resolveDashboardScope(ctx: TenantContext, input: unknown =
     branchId: selectedBranchId
   });
 
-  const date = normalizeDashboardDateOnly(params.date ?? todayDateInTimeZone());
+  const date = normalizeDashboardDateOnly(params.date ?? dateOnlyInTimeZone(new Date(), ctx.timeZone));
   return {
     branchIds,
     selectedBranchId,

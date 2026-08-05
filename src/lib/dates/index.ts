@@ -6,3 +6,5 @@ export function startOfToday() {
 export function formatDateForInput(date: Date) {
   return date.toISOString().slice(0, 10);
 }
+
+export * from "./time-zone";

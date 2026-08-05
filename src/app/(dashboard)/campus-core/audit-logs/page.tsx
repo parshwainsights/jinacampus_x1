@@ -3,6 +3,7 @@ import { getEffectivePermissions } from "@/lib/rbac/require-permission";
 import { listAuditLogs } from "@/modules/campus-core/queries";
 import { EmptyState, PermissionState } from "@/components/ui/empty-state";
 import { ResponsiveTable } from "@/components/ui/table-primitives";
+import { formatDateTimeInTimeZone } from "@/lib/dates/time-zone";
 
 export default async function AuditLogsPage() {
   const ctx = await requireAuth();
@@ -17,7 +18,7 @@ export default async function AuditLogsPage() {
         <ResponsiveTable columns={["Created At", "Action", "Entity", "Actor", "Branch"]} caption="Audit logs table">
           {logs.map((log) => (
             <tr key={log.id}>
-              <td className="whitespace-nowrap px-4 py-3">{log.createdAt.toISOString()}</td>
+              <td className="whitespace-nowrap px-4 py-3">{formatDateTimeInTimeZone(log.createdAt, ctx.timeZone)}</td>
               <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{log.action}</td>
               <td className="whitespace-nowrap px-4 py-3">{log.entityType}</td>
               <td className="whitespace-nowrap px-4 py-3">{log.actor?.email ?? "System"}</td>

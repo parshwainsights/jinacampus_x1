@@ -17,6 +17,11 @@ const optionalPostgresUrl = z.preprocess(
   postgresUrl.optional()
 );
 
+const optionalUrl = z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().url().optional()
+);
+
 const environmentSchema = z.object({
   DATABASE_URL: postgresUrl,
   DIRECT_URL: optionalPostgresUrl,
@@ -45,7 +50,15 @@ const environmentSchema = z.object({
   SEED_BRANCH_CODE: optionalText,
   SEED_ACADEMIC_YEAR_NAME: optionalText,
   SEED_ACADEMIC_YEAR_START_DATE: optionalText,
-  SEED_ACADEMIC_YEAR_END_DATE: optionalText
+  SEED_ACADEMIC_YEAR_END_DATE: optionalText,
+  SUPABASE_URL: optionalUrl,
+  SUPABASE_SERVICE_ROLE_KEY: optionalText,
+  STUDENT_DOCUMENTS_BUCKET: z.string().trim().min(1).default("student-documents"),
+  STUDENT_DOCUMENT_MAX_BYTES: z.coerce.number().int().min(1024).max(6_000_000).default(4_000_000),
+  STAFF_LEAVE_DOCUMENTS_BUCKET: z.string().trim().min(1).default("staff-leave-documents"),
+  STAFF_LEAVE_DOCUMENT_MAX_BYTES: z.coerce.number().int().min(1024).max(6_000_000).default(4_000_000),
+  INSTITUTION_LOGOS_BUCKET: z.string().trim().min(1).default("institution-logos"),
+  INSTITUTION_LOGO_MAX_BYTES: z.coerce.number().int().min(1024).max(4_000_000).default(2_000_000)
 }).passthrough();
 
 function isLocalDatabaseUrl(value: string) {
@@ -93,6 +106,9 @@ export function validateEnvironment(environment: EnvironmentInput) {
 
   if ((value.OTP_QA_ENABLED === "true" || value.SMS_PROVIDER !== "dev") && !value.SEED_ADMIN_PHONE) {
     missing.push("SEED_ADMIN_PHONE");
+  }
+  if (Boolean(value.SUPABASE_URL) !== Boolean(value.SUPABASE_SERVICE_ROLE_KEY)) {
+    missing.push("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured together");
   }
   if (missing.length > 0) throw configurationError(missing);
 

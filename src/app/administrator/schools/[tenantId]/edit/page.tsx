@@ -3,7 +3,11 @@ import { PermissionState } from "@/components/ui/empty-state";
 import { requireAdministratorContext } from "@/modules/campus-core/administrator-auth";
 import { getSchoolByIdForAdministrator } from "@/modules/campus-core/administrator-services";
 import { AdministratorShell } from "@/modules/campus-core/components/administrator-shell";
-import { SchoolEditForm, SchoolIdUpdateForm } from "@/modules/campus-core/components/administrator-school-forms";
+import {
+  InstitutionLogoUploadForm,
+  SchoolEditForm,
+  SchoolIdUpdateForm
+} from "@/modules/campus-core/components/administrator-school-forms";
 
 type PageParams = Promise<{ tenantId: string }>;
 
@@ -29,6 +33,19 @@ export default async function EditAdministratorSchoolPage({ params }: { params: 
           </p>
         </section>
         <SchoolEditForm school={school} />
+        <section className="space-y-4" aria-labelledby="institution-logo-upload-title">
+          <div>
+            <h2 id="institution-logo-upload-title" className="text-xl font-semibold text-slate-950">Institution Logos</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              Upload public branding images for this school. Only signed-in JinaCampus administrators can perform this action.
+            </p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {school.institutions.map((institution) => (
+              <InstitutionLogoUploadForm key={institution.id} tenantId={school.id} institution={institution} />
+            ))}
+          </div>
+        </section>
         <SchoolIdUpdateForm school={{ id: school.id, slug: school.slug }} />
       </AdministratorShell>
     );

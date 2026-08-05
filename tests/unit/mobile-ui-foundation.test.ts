@@ -52,7 +52,8 @@ describe("mobile UI foundation", () => {
     expect(cardSource).toContain("min-w-0");
     expect(cardSource).toContain("break-words");
     expect(quickActionSource).toContain("min-h-24");
-    expect(headerSource).toContain("sm:grid-cols-3");
+    expect(headerSource).toContain("xl:grid-cols-4");
+    expect(headerSource).toContain("DashboardLiveClock");
     expect(dashboardSource).toContain("Today's Attendance");
   });
 

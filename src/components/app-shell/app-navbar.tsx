@@ -7,8 +7,10 @@ import { usePathname } from "next/navigation";
 import { getNavbarRouteContext, isNavbarAutoHideEnabled } from "@/config/navbar";
 import { useAutoHideNavbar } from "@/hooks/use-auto-hide-navbar";
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { InstitutionLogo } from "@/components/brand/institution-logo";
 
 import type { AppShellBranding } from "./branding";
+import { InstitutionBrand } from "./institution-brand";
 import { MobileNavigationDrawer } from "./mobile-navigation-drawer";
 import { MobileNavigationTrigger } from "./mobile-navigation-trigger";
 import { NavbarContextMenu } from "./navbar-context-menu";
@@ -79,8 +81,9 @@ export function AppNavbar({
         onPointerLeave={() => setPointerWithin(false)}
       >
         <div className="mx-auto hidden min-h-[5.5rem] w-full max-w-[100rem] min-w-0 items-center justify-between gap-5 px-7 lg:flex xl:px-10">
-          <div className="flex min-w-0 flex-1 items-center gap-5">
-            <BrandLogo className="w-44 shrink-0 xl:w-48" priority />
+          <div className="flex min-w-0 flex-1 items-center gap-4 xl:gap-5">
+            <BrandLogo className="w-36 shrink-0 xl:w-44" priority />
+            <InstitutionBrand branding={branding} className="max-w-[10rem] xl:max-w-[14rem]" />
             <span className="h-10 w-px shrink-0 bg-campus-border" aria-hidden="true" />
             <div className="min-w-0">
               <NavbarPageContext routeContext={routeContext} variant="desktop" />
@@ -102,7 +105,15 @@ export function AppNavbar({
             isOpen={mobileNavigationOpen}
             onClick={() => onMobileNavigationOpenChange(!mobileNavigationOpen)}
           />
+          <InstitutionLogo
+            name={branding.institutionName}
+            logoUrl={branding.logoUrl}
+            className="h-8 w-8"
+          />
           <div className="min-w-0 flex-1">
+            <p className="truncate text-[10px] font-bold text-brand-800" title={branding.institutionName}>
+              {branding.institutionName}
+            </p>
             <NavbarPageContext routeContext={routeContext} variant="mobile" />
           </div>
           <NavbarUserMenu compact context={context} branding={branding} onOpenChange={setAccountMenuOpen} />

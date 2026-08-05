@@ -26,10 +26,10 @@ export function formatPurpose(value: StaffQrPurposeOption) {
   return value === "CHECK_IN" ? "Check-in" : "Check-out";
 }
 
-export function formatQrDateTime(value: string) {
+export function formatQrDateTime(value: string, timeZone = "Asia/Kolkata") {
   return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
     timeStyle: "short",
-    timeZone: "Asia/Kolkata"
+    timeZone
   }).format(new Date(value));
 }

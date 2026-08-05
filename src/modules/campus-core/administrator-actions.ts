@@ -8,6 +8,7 @@ import {
   deactivateSchoolSchema,
   deleteSchoolSchema,
   reactivateSchoolSchema,
+  updateInstitutionLogoSchema,
   updateSchoolIdSchema,
   updateSchoolSchema
 } from "@/modules/campus-core/administrator-schemas";
@@ -20,6 +21,7 @@ import {
   updateSchool,
   updateSchoolId
 } from "@/modules/campus-core/administrator-services";
+import { updateInstitutionLogoForAdministrator } from "@/modules/campus-core/administrator-branding.service";
 import type { CampusCoreFormActionState } from "@/modules/campus-core/actions";
 import { changeOwnPasswordSchema } from "@/modules/campus-core/schemas";
 
@@ -108,14 +110,43 @@ export async function updateSchoolAction(
       legalName: nullableS(formData, "legalName"),
       supportEmail: nullableS(formData, "supportEmail"),
       status: s(formData, "status"),
-      institutionDisplayName: nullableS(formData, "institutionDisplayName"),
-      institutionLogoUrl: nullableS(formData, "institutionLogoUrl")
+      institutionDisplayName: nullableS(formData, "institutionDisplayName")
     });
     await updateSchool(await getPlatformAdministratorContext(), input);
     revalidateAdministratorSchoolRoutes(input.tenantId);
     return { ok: true, message: "School profile updated." };
   } catch (error) {
     return formError(error, "Unable to update school. Please try again.");
+  }
+}
+
+export async function updateInstitutionLogoAction(
+  _state: CampusCoreFormActionState,
+  formData: FormData
+): Promise<CampusCoreFormActionState> {
+  try {
+    const input = updateInstitutionLogoSchema.parse({
+      tenantId: req(formData, "tenantId"),
+      institutionId: req(formData, "institutionId")
+    });
+    const file = formData.get("institutionLogo");
+    if (!(file instanceof File)) {
+      throw new Error("INSTITUTION_LOGO_FILE_REQUIRED");
+    }
+
+    const result = await updateInstitutionLogoForAdministrator(
+      await getPlatformAdministratorContext(),
+      { ...input, file }
+    );
+    revalidateAdministratorSchoolRoutes(input.tenantId);
+    revalidatePath("/");
+    revalidatePath(`/t/${result.tenantSlug}/login`);
+    revalidatePath("/attendance-login");
+    revalidatePath("/dashboard");
+    revalidatePath("/campus-core/institutions");
+    return { ok: true, message: "Institution logo updated successfully." };
+  } catch (error) {
+    return formError(error, "Unable to update the institution logo. Please try again.");
   }
 }
 

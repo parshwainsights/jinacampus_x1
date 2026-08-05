@@ -219,7 +219,8 @@ Full quality gate commands were run after documentation updates.
 
 - Live Meta Cloud sending remains deferred.
 - Approved encrypted provider secret storage remains deferred.
-- Scheduler/cron production wiring remains deferred.
+- The protected scheduler endpoint now exists; production recurring invocation and monitoring remain deployment gates.
+- Weekly staff reports and institutional time-zone behavior require the 20260805180000 migration and a fresh DB-backed smoke pass.
 - Outbox review UI remains deferred.
 - Full SchoolCast remains deferred.
 - Real provider webhook QA remains deferred until live provider setup is approved.

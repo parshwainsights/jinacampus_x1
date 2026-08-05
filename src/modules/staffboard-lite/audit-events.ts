@@ -9,5 +9,19 @@ export const STAFFBOARD_LITE_AUDIT_EVENTS = {
   STAFF_ATTENDANCE_QR_GENERATED: "staffboard.attendance.qr.generated",
   STAFF_ATTENDANCE_CHECK_IN: "staffboard.attendance.check_in",
   STAFF_ATTENDANCE_CHECK_OUT: "staffboard.attendance.check_out",
-  STAFF_ATTENDANCE_CORRECTED: "staffboard.attendance.corrected"
+  STAFF_ATTENDANCE_CORRECTED: "staffboard.attendance.corrected",
+  STAFF_LEAVE_SUBMITTED: "staffboard.leave.submitted",
+  STAFF_LEAVE_MODIFIED: "staffboard.leave.modified",
+  STAFF_LEAVE_CLARIFICATION_REQUESTED: "staffboard.leave.clarification_requested",
+  STAFF_LEAVE_CLARIFICATION_PROVIDED: "staffboard.leave.clarification_provided",
+  STAFF_LEAVE_APPROVED: "staffboard.leave.approved",
+  STAFF_LEAVE_REJECTED: "staffboard.leave.rejected",
+  STAFF_LEAVE_CANCELLED: "staffboard.leave.cancelled",
+  STAFF_LEAVE_WITHDRAWN: "staffboard.leave.withdrawn",
+  STAFF_LEAVE_SETTING_UPDATED: "staffboard.leave.setting_updated",
+  STAFF_LEAVE_TYPE_UPSERTED: "staffboard.leave.type_upserted",
+  STAFF_LEAVE_APPROVER_UPDATED: "staffboard.leave.approver_updated",
+  STAFF_LEAVE_BALANCE_ADJUSTED: "staffboard.leave.balance_adjusted",
+  STAFF_LEAVE_DOCUMENT_UPLOADED: "staffboard.leave.document_uploaded",
+  STAFF_LEAVE_DOCUMENT_DELETED: "staffboard.leave.document_deleted"
 } as const;

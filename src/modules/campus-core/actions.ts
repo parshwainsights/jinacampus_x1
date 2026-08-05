@@ -477,6 +477,9 @@ export async function updateAttendanceSettingsAction(formData: FormData) {
     staffHalfDayBeforeMinutes: Number(s(formData, "staffHalfDayBeforeMinutes") ?? 240),
     staffMinimumWorkingMinutes: Number(s(formData, "staffMinimumWorkingMinutes") ?? 360),
     staffQrTokenValiditySeconds: Number(s(formData, "staffQrTokenValiditySeconds") ?? 180),
+    staffWeeklySummaryWhatsAppEnabled: checked(formData, "staffWeeklySummaryWhatsAppEnabled"),
+    staffWeeklySummarySendDay: Number(s(formData, "staffWeeklySummarySendDay") ?? 1),
+    staffWeeklySummarySendTime: s(formData, "staffWeeklySummarySendTime") ?? "09:00",
     staffMonthlySummaryWhatsAppEnabled: checked(formData, "staffMonthlySummaryWhatsAppEnabled"),
     staffMonthlySummarySendDay: Number(s(formData, "staffMonthlySummarySendDay") ?? 1),
     staffMonthlySummarySendTime: s(formData, "staffMonthlySummarySendTime") ?? "09:00"

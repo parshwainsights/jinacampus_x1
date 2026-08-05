@@ -1,6 +1,6 @@
 import type { PermissionCode } from "@/lib/rbac/permissions";
 
-export type StaffboardModuleKey = "staff" | "categories" | "attendance" | "qr-attendance" | "scan" | "reports";
+export type StaffboardModuleKey = "staff" | "categories" | "attendance" | "qr-attendance" | "scan" | "reports" | "leave" | "leave-review";
 
 export type StaffboardModuleCard = {
   key: StaffboardModuleKey;
@@ -34,7 +34,9 @@ export const staffboardRoutes = {
   attendance: "/staffboard/attendance",
   qr: "/staffboard/attendance/qr",
   scan: "/staffboard/attendance/scan",
-  reports: "/staffboard/attendance/reports"
+  reports: "/staffboard/attendance/reports",
+  leave: "/staffboard/leave",
+  leaveReview: "/staffboard/leave/review"
 } as const;
 
 export const staffboardModuleCards: readonly StaffboardModuleCard[] = [
@@ -79,6 +81,20 @@ export const staffboardModuleCards: readonly StaffboardModuleCard[] = [
     description: "Review daily, teacher, non-teaching, late, half-day, monthly, and correction reports.",
     href: staffboardRoutes.reports,
     permissions: ["staffboard.attendance.report"]
+  },
+  {
+    key: "leave",
+    title: "My Leave",
+    description: "Apply for leave, review balances, upload supporting documents, and track decisions.",
+    href: staffboardRoutes.leave,
+    permissions: ["staffboard.leave.self_view"]
+  },
+  {
+    key: "leave-review",
+    title: "Leave Management",
+    description: "Review branch leave applications and keep approved leave synchronised with attendance.",
+    href: staffboardRoutes.leaveReview,
+    permissions: ["staffboard.leave.view"]
   }
 ] as const;
 

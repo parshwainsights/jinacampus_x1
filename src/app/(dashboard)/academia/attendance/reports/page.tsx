@@ -20,31 +20,26 @@ import {
   listLateStudentsForDate
 } from "@/modules/academia/queries";
 import { academiaAttendanceRoutes } from "@/modules/academia/ui-config";
+import { getZonedDateTimeParts } from "@/lib/dates/time-zone";
 
 const attendanceStatuses = ["", "PRESENT", "ABSENT", "LATE", "HALF_DAY", "ON_LEAVE", "EXCUSED", "NOT_MARKED"] as const;
 
-function indiaDateParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(date);
-  const values = new Map(parts.map((part) => [part.type, part.value]));
+function institutionalDateParts(timeZone?: string, date = new Date()) {
+  const parts = getZonedDateTimeParts(date, timeZone);
   return {
-    year: values.get("year") ?? "2026",
-    month: values.get("month") ?? "01",
-    day: values.get("day") ?? "01"
+    year: String(parts.year),
+    month: String(parts.month).padStart(2, "0"),
+    day: String(parts.day).padStart(2, "0")
   };
 }
 
-function todayIndiaDateString() {
-  const parts = indiaDateParts();
+function todayInstitutionDateString(timeZone?: string) {
+  const parts = institutionalDateParts(timeZone);
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function monthStartDateString() {
-  const parts = indiaDateParts();
+function monthStartDateString(timeZone?: string) {
+  const parts = institutionalDateParts(timeZone);
   return `${parts.year}-${parts.month}-01`;
 }
 
@@ -95,13 +90,13 @@ export default async function StudentAttendanceReportsPage({ searchParams }: { s
   }
 
   const params = searchParams ? await searchParams : {};
-  const date = getSearchValue(params, "date") ?? todayIndiaDateString();
+  const date = getSearchValue(params, "date") ?? todayInstitutionDateString(ctx.timeZone);
   const classSectionId = getSearchValue(params, "classSectionId");
   const status = getSearchValue(params, "status");
   const studentId = getSearchValue(params, "studentId");
-  const fromDate = getSearchValue(params, "fromDate") ?? monthStartDateString();
+  const fromDate = getSearchValue(params, "fromDate") ?? monthStartDateString(ctx.timeZone);
   const toDate = getSearchValue(params, "toDate") ?? date;
-  const currentParts = indiaDateParts();
+  const currentParts = institutionalDateParts(ctx.timeZone);
   const month = Number(getSearchValue(params, "month") ?? currentParts.month);
   const year = Number(getSearchValue(params, "year") ?? currentParts.year);
 

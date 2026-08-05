@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { InstitutionLogo } from "@/components/brand/institution-logo";
 import { PasswordInput } from "@/components/forms/password-input";
 import {
   FieldErrorMessage,
@@ -14,6 +15,7 @@ import {
   deactivateSchoolAction,
   deleteSchoolAction,
   reactivateSchoolAction,
+  updateInstitutionLogoAction,
   updateSchoolAction,
   updateSchoolIdAction
 } from "@/modules/campus-core/administrator-actions";
@@ -29,6 +31,8 @@ type SchoolFormRecord = {
   legalName: string | null;
   supportEmail: string | null;
   institutions: Array<{
+    id: string;
+    name: string;
     displayName: string | null;
     logoUrl: string | null;
   }>;
@@ -171,12 +175,63 @@ export function SchoolEditForm({ school }: { school: SchoolFormRecord }) {
         <FormField id="edit-institution-display-name" label="Institution Display Name" error={fieldError(state, "institutionDisplayName")}>
           <input id="edit-institution-display-name" name="institutionDisplayName" defaultValue={institution?.displayName ?? ""} className={inputClassName} />
         </FormField>
-        <FormField id="edit-institution-logo-url" label="Institution Logo URL" error={fieldError(state, "institutionLogoUrl")}>
-          <input id="edit-institution-logo-url" name="institutionLogoUrl" type="url" defaultValue={institution?.logoUrl ?? ""} className={inputClassName} />
-        </FormField>
       </div>
       <FieldErrorMessage id="school-edit-form-error" message={fieldError(state, "form")} />
       <FormActions pending={pending} label="Save School" pendingLabel="Saving..." backHref={`/administrator/schools/${school.id}`} />
+    </form>
+  );
+}
+
+export function InstitutionLogoUploadForm({
+  tenantId,
+  institution
+}: {
+  tenantId: string;
+  institution: SchoolFormRecord["institutions"][number];
+}) {
+  const [state, formAction, pending] = useActionState(updateInstitutionLogoAction, initialState);
+  const displayName = institution.displayName ?? institution.name;
+  const helpId = `institution-logo-help-${institution.id}`;
+
+  return (
+    <form action={formAction} className="premium-card p-5">
+      <input type="hidden" name="tenantId" value={tenantId} />
+      <input type="hidden" name="institutionId" value={institution.id} />
+      <div className="flex items-start gap-4">
+        <InstitutionLogo name={displayName} logoUrl={institution.logoUrl} className="h-16 w-16" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-slate-500">Institution branding</p>
+          <h3 className="mt-1 truncate text-lg font-bold text-slate-950" title={displayName}>{displayName}</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            {institution.logoUrl ? "A logo is currently configured." : "Initials are shown until a logo is uploaded."}
+          </p>
+        </div>
+      </div>
+      <div className="mt-4">
+        <FormMessage state={state} />
+      </div>
+      <label htmlFor={`institution-logo-${institution.id}`} className="mt-4 block text-sm font-semibold text-slate-800">
+        {institution.logoUrl ? "Replace logo" : "Upload logo"}
+      </label>
+      <input
+        id={`institution-logo-${institution.id}`}
+        name="institutionLogo"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+        required
+        disabled={pending}
+        aria-describedby={helpId}
+        className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:font-semibold file:text-brand-700 premium-focus"
+      />
+      <p id={helpId} className="mt-2 text-xs leading-5 text-slate-500">
+        JPEG, PNG, or WebP, up to 2 MB. The logo is publicly readable as a school branding asset; uploads remain restricted to the Administrator Portal.
+      </p>
+      <FieldErrorMessage id={`institution-logo-error-${institution.id}`} message={fieldError(state, "form")} />
+      <div className="mt-4 flex justify-end">
+        <button type="submit" disabled={pending} className="premium-primary-button w-full premium-focus sm:w-auto">
+          {pending ? "Uploading..." : institution.logoUrl ? "Update Logo" : "Upload Logo"}
+        </button>
+      </div>
     </form>
   );
 }

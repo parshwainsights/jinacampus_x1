@@ -10,6 +10,7 @@ import {
   queueNotificationOutboxItem,
   type QueueNotificationOutboxItemInput
 } from "@/modules/notifications/services/notification-outbox.service";
+import { formatTimeInTimeZone, safeTimeZone } from "@/lib/dates/time-zone";
 
 export type StudentAttendanceWhatsAppQueueResult = {
   checked: number;
@@ -30,14 +31,19 @@ type StudentAttendanceNotificationRecord = {
   branchId: string;
   academicYearId: string;
   attendanceDate: Date;
+  markedAt: Date | null;
+  updatedAt: Date;
   status: StudentAttendanceNotificationStatus;
   student: {
     id: string;
+    admissionNumber: string;
     firstName: string;
     middleName: string | null;
     lastName: string | null;
     displayName: string | null;
     guardianLinks: Array<{
+      isPrimary: boolean;
+      relation: string;
       guardian: {
         id: string;
         phone: string | null;
@@ -47,6 +53,7 @@ type StudentAttendanceNotificationRecord = {
   classSection: {
     displayName: string;
     branch: {
+      timezone: string;
       institution: {
         name: string;
         displayName: string | null;
@@ -59,12 +66,15 @@ type CommunicationPreferenceRecord = {
   whatsappEnabled: boolean;
   whatsappNumber: string | null;
   attendanceAlertsEnabled: boolean;
+  consentCapturedAt: Date | null;
 };
 
 type StudentNotificationDeps = {
   loadSettings(input: { tenantId: string; branchId: string }): Promise<{
     studentAttendanceWhatsAppEnabled: boolean;
     studentAttendanceNotificationMode: StudentAttendanceNotificationMode;
+    sendStudentAbsentAlert: boolean;
+    sendStudentLateAlert: boolean;
   } | null>;
   loadTemplate(input: { tenantId: string; branchId: string; templateKey: string }): Promise<{ id: string } | null>;
   loadAttendanceRecords(input: {
@@ -98,12 +108,33 @@ function blankResult(): StudentAttendanceWhatsAppQueueResult {
   };
 }
 
-function toDateOnlyString(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
 function personName(input: { firstName: string; middleName: string | null; lastName: string | null; displayName: string | null }) {
   return input.displayName ?? [input.firstName, input.middleName, input.lastName].map((part) => part?.trim()).filter(Boolean).join(" ");
+}
+
+const guardianRelationPriority: Record<string, number> = {
+  FATHER: 0,
+  MOTHER: 1,
+  GUARDIAN: 2
+};
+
+function orderedGuardianLinks(record: StudentAttendanceNotificationRecord) {
+  return [...record.student.guardianLinks].sort((left, right) => {
+    if (left.isPrimary !== right.isPrimary) return left.isPrimary ? -1 : 1;
+    return (guardianRelationPriority[left.relation] ?? 10) - (guardianRelationPriority[right.relation] ?? 10);
+  });
+}
+
+function isStatusEnabled(
+  mode: StudentAttendanceNotificationMode,
+  status: StudentAttendanceNotificationStatus,
+  settings: { sendStudentAbsentAlert: boolean; sendStudentLateAlert: boolean }
+) {
+  if (!shouldQueueStudentAttendanceStatus(mode, status)) return false;
+  if (mode !== "EXCEPTION_ONLY") return true;
+  if (status === "ABSENT") return settings.sendStudentAbsentAlert;
+  if (status === "LATE") return settings.sendStudentLateAlert;
+  return true;
 }
 
 const defaultDeps: StudentNotificationDeps = {
@@ -112,7 +143,9 @@ const defaultDeps: StudentNotificationDeps = {
       where: { tenantId: input.tenantId, branchId: input.branchId },
       select: {
         studentAttendanceWhatsAppEnabled: true,
-        studentAttendanceNotificationMode: true
+        studentAttendanceNotificationMode: true,
+        sendStudentAbsentAlert: true,
+        sendStudentLateAlert: true
       }
     });
   },
@@ -157,25 +190,28 @@ const defaultDeps: StudentNotificationDeps = {
         branchId: true,
         academicYearId: true,
         attendanceDate: true,
+        markedAt: true,
+        updatedAt: true,
         status: true,
         student: {
           select: {
             id: true,
+            admissionNumber: true,
             firstName: true,
             middleName: true,
             lastName: true,
             displayName: true,
             guardianLinks: {
-              where: { isPrimary: true },
               select: {
+                isPrimary: true,
+                relation: true,
                 guardian: {
                   select: {
                     id: true,
                     phone: true
                   }
                 }
-              },
-              take: 1
+              }
             }
           }
         },
@@ -184,6 +220,7 @@ const defaultDeps: StudentNotificationDeps = {
             displayName: true,
             branch: {
               select: {
+                timezone: true,
                 institution: {
                   select: {
                     name: true,
@@ -208,7 +245,8 @@ const defaultDeps: StudentNotificationDeps = {
       select: {
         whatsappEnabled: true,
         whatsappNumber: true,
-        attendanceAlertsEnabled: true
+        attendanceAlertsEnabled: true,
+        consentCapturedAt: true
       },
       orderBy: { updatedAt: "desc" }
     });
@@ -253,32 +291,48 @@ export async function queueStudentAttendanceWhatsAppNotifications(
     result.checked = records.length;
 
     for (const record of records) {
-      if (!shouldQueueStudentAttendanceStatus(settings.studentAttendanceNotificationMode, record.status)) {
+      if (!isStatusEnabled(settings.studentAttendanceNotificationMode, record.status, settings)) {
         result.skippedStatus += 1;
         continue;
       }
 
-      const guardian = record.student.guardianLinks[0]?.guardian ?? null;
-      if (!guardian) {
+      const guardianLinks = orderedGuardianLinks(record);
+      if (guardianLinks.length === 0) {
         result.skippedNoGuardian += 1;
         continue;
       }
 
-      const preference = await deps.loadCommunicationPreference({
-        tenantId: record.tenantId,
-        branchId: record.branchId,
-        guardianId: guardian.id
-      });
-      if (!preference?.whatsappEnabled || !preference.attendanceAlertsEnabled) {
-        result.skippedNoConsent += 1;
+      let recipient: { guardianId: string; phone: string } | null = null;
+      let consentedGuardianWithoutPhone = false;
+      for (const link of guardianLinks) {
+        const preference = await deps.loadCommunicationPreference({
+          tenantId: record.tenantId,
+          branchId: record.branchId,
+          guardianId: link.guardian.id
+        });
+        if (!preference?.whatsappEnabled || !preference.attendanceAlertsEnabled || !preference.consentCapturedAt) {
+          continue;
+        }
+        const phone = preference.whatsappNumber ?? link.guardian.phone;
+        if (phone) {
+          recipient = { guardianId: link.guardian.id, phone };
+          break;
+        }
+        consentedGuardianWithoutPhone = true;
+      }
+
+      if (!recipient && consentedGuardianWithoutPhone) {
+        result.skippedNoPhone += 1;
         continue;
       }
-      if (!preference.whatsappNumber) {
-        result.skippedNoPhone += 1;
+      if (!recipient) {
+        result.skippedNoConsent += 1;
         continue;
       }
 
       const institution = record.classSection.branch.institution;
+      const attendanceDate = record.attendanceDate.toISOString().slice(0, 10);
+      const timeZone = safeTimeZone(record.classSection.branch.timezone);
       const queueResult = await deps.queueOutbox({
         tenantId: record.tenantId,
         branchId: record.branchId,
@@ -286,16 +340,22 @@ export async function queueStudentAttendanceWhatsAppNotifications(
         channel: "WHATSAPP",
         templateKey: WHATSAPP_TEMPLATE_KEYS.STUDENT_DAILY_ATTENDANCE_ALERT,
         recipientType: "GUARDIAN",
-        recipientId: guardian.id,
-        recipientPhone: preference.whatsappNumber,
+        recipientId: recipient.guardianId,
+        recipientPhone: recipient.phone,
         payload: buildStudentAttendanceTemplatePayload({
           studentName: personName(record.student),
+          scholarNumber: record.student.admissionNumber,
           classSection: record.classSection.displayName,
           attendanceStatus: record.status,
-          attendanceDate: toDateOnlyString(record.attendanceDate),
+          attendanceDate,
+          attendanceMarkingTime: formatTimeInTimeZone(record.markedAt ?? record.updatedAt, timeZone),
           institutionName: institution.displayName ?? institution.name
         }),
-        idempotencyKey: `student-daily-attendance:${record.tenantId}:${record.id}:${record.status}`
+        idempotencyKey: record.status === "ABSENT"
+          ? `student-absence:${record.tenantId}:${record.student.id}:${attendanceDate}`
+          : `student-daily-attendance:${record.tenantId}:${record.student.id}:${attendanceDate}:${record.status}`,
+        scheduledFor: new Date(),
+        actorUserId: data.actorUserId ?? null
       });
       if (queueResult.status === "queued") result.queued += 1;
       if (queueResult.status === "alreadyQueued") result.alreadyQueued += 1;

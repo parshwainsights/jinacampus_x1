@@ -7,7 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createPortal } from "react-dom";
 
-import { AppMark } from "@/components/brand/app-mark";
+import { InstitutionLogo } from "@/components/brand/institution-logo";
 
 import type { AppShellBranding } from "./branding";
 import type { NavbarSessionContext } from "./navbar-types";
@@ -126,7 +126,7 @@ export function MobileNavigationDrawer({
         className="flex h-full w-[min(23rem,calc(100vw-1.25rem))] flex-col overflow-hidden bg-white pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-elevated motion-slide-in-left"
       >
         <div className="flex min-h-16 items-center gap-3 border-b border-campus-border px-4">
-          <AppMark className="h-10 w-10 shrink-0" priority />
+          <InstitutionLogo name={branding.institutionName} logoUrl={branding.logoUrl} className="h-10 w-10" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-ink">{branding.institutionName}</p>
             <p className="truncate text-xs text-slate-500">JinaCampus workspace</p>

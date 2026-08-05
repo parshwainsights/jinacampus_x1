@@ -124,6 +124,18 @@ enum StudentStatus {
   WITHDRAWN
 }
 
+enum StudentDocumentType {
+  PASSPORT_PHOTO
+  TRANSFER_CERTIFICATE
+  BIRTH_CERTIFICATE
+  IDENTITY_PROOF
+  PREVIOUS_SCHOOL_REPORT
+  CASTE_CERTIFICATE
+  MIGRATION_CERTIFICATE
+  MEDICAL_CERTIFICATE
+  OTHER
+}
+
 enum EnrollmentStatus {
   ACTIVE
   PROMOTED
@@ -220,6 +232,38 @@ enum StaffAttendanceSource {
   BIOMETRIC
 }
 
+enum StaffLeaveApplicationStatus {
+  PENDING
+  CLARIFICATION_REQUIRED
+  APPROVED
+  REJECTED
+  CANCELLED
+  WITHDRAWN
+}
+
+enum StaffLeaveDuration {
+  FULL_DAY
+  FIRST_HALF
+  SECOND_HALF
+}
+
+enum StaffLeaveActionType {
+  SUBMITTED
+  MODIFIED
+  CLARIFICATION_REQUESTED
+  CLARIFICATION_PROVIDED
+  APPROVED
+  REJECTED
+  CANCELLED
+  WITHDRAWN
+}
+
+enum StaffLeaveApprovalMode {
+  PRINCIPAL_ONLY
+  DESIGNATED_APPROVERS
+  PRINCIPAL_OR_DESIGNATED
+}
+
 enum StaffQrPurpose {
   CHECK_IN
   CHECK_OUT
@@ -303,6 +347,7 @@ model Tenant {
   classSections            ClassSection[]
   subjects                 Subject[]
   students                 Student[]
+  studentDocuments         StudentDocument[]
   guardians                Guardian[]
   studentGuardianLinks     StudentGuardianLink[]
   enrollments              Enrollment[]
@@ -310,6 +355,14 @@ model Tenant {
   staffProfiles            StaffProfile[]
   staffAttendanceRecords   StaffAttendanceRecord[]
   staffAttendanceQrTokens  StaffAttendanceQrToken[]
+  staffLeaveSettings       StaffLeaveSetting[]
+  staffLeaveTypes          StaffLeaveType[]
+  staffLeaveApprovers      StaffLeaveApprover[]
+  staffLeaveBalances       StaffLeaveBalance[]
+  staffLeaveApplications   StaffLeaveApplication[]
+  staffLeaveActions        StaffLeaveApplicationAction[]
+  staffLeaveDocuments      StaffLeaveDocument[]
+  inAppNotifications       InAppNotification[]
   communicationPreferences CommunicationPreference[]
   notificationTemplates    NotificationTemplate[]
   notificationOutboxItems  NotificationOutbox[]
@@ -442,18 +495,27 @@ model Branch {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  tenant                   Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  institution              Institution                  @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  tenant                   Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  institution              Institution                   @relation(fields: [institutionId], references: [id], onDelete: Restrict)
   userBranchAccesses       UserBranchAccess[]
   attendanceSetting        AttendanceSetting?
   auditLogs                AuditLog[]
   classSections            ClassSection[]
   students                 Student[]
+  studentDocuments         StudentDocument[]
   enrollments              Enrollment[]
   studentAttendanceRecords StudentAttendanceRecord[]
   staffProfiles            StaffProfile[]
   staffAttendanceRecords   StaffAttendanceRecord[]
   staffAttendanceQrTokens  StaffAttendanceQrToken[]
+  staffLeaveSetting        StaffLeaveSetting?
+  staffLeaveTypes          StaffLeaveType[]
+  staffLeaveApprovers      StaffLeaveApprover[]
+  staffLeaveBalances       StaffLeaveBalance[]
+  staffLeaveApplications   StaffLeaveApplication[]
+  staffLeaveActions        StaffLeaveApplicationAction[]
+  staffLeaveDocuments      StaffLeaveDocument[]
+  inAppNotifications       InAppNotification[]
   communicationPreferences CommunicationPreference[]
   notificationTemplates    NotificationTemplate[]
   notificationOutboxItems  NotificationOutbox[]
@@ -514,7 +576,7 @@ model User {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  tenant                     Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tenant                     Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   passwordCredential         PasswordCredential?
   sessions                   Session[]
   loginOtps                  LoginOtp[]
@@ -522,14 +584,18 @@ model User {
   passkeyChallenges          PasskeyChallenge[]
   roleAssignments            UserRoleAssignment[]
   branchAccesses             UserBranchAccess[]
-  auditLogs                  AuditLog[]                @relation("AuditActor")
-  classSectionsAsTeacher     ClassSection[]            @relation("ClassSectionTeacher")
-  markedStudentAttendance    StudentAttendanceRecord[] @relation("StudentAttendanceMarkedBy")
-  correctedStudentAttendance StudentAttendanceRecord[] @relation("StudentAttendanceCorrectedBy")
-  staffProfile               StaffProfile?             @relation("StaffProfileUser")
-  markedStaffAttendance      StaffAttendanceRecord[]   @relation("StaffAttendanceMarkedBy")
-  updatedStaffAttendance     StaffAttendanceRecord[]   @relation("StaffAttendanceUpdatedBy")
-  createdStaffQrTokens       StaffAttendanceQrToken[]  @relation("StaffAttendanceQrTokenCreatedBy")
+  auditLogs                  AuditLog[]                    @relation("AuditActor")
+  classSectionsAsTeacher     ClassSection[]                @relation("ClassSectionTeacher")
+  markedStudentAttendance    StudentAttendanceRecord[]     @relation("StudentAttendanceMarkedBy")
+  correctedStudentAttendance StudentAttendanceRecord[]     @relation("StudentAttendanceCorrectedBy")
+  staffProfile               StaffProfile?                 @relation("StaffProfileUser")
+  markedStaffAttendance      StaffAttendanceRecord[]       @relation("StaffAttendanceMarkedBy")
+  updatedStaffAttendance     StaffAttendanceRecord[]       @relation("StaffAttendanceUpdatedBy")
+  createdStaffQrTokens       StaffAttendanceQrToken[]      @relation("StaffAttendanceQrTokenCreatedBy")
+  staffLeaveApproverScopes   StaffLeaveApprover[]          @relation("StaffLeaveApproverUser")
+  actionedStaffLeave         StaffLeaveApplication[]       @relation("StaffLeaveApplicationActionedBy")
+  staffLeaveActions          StaffLeaveApplicationAction[] @relation("StaffLeaveActionActor")
+  inAppNotifications         InAppNotification[]
 
   @@unique([tenantId, email])
   @@unique([tenantId, phone])
@@ -784,6 +850,9 @@ model AttendanceSetting {
   staffHalfDayBeforeMinutes          Int                               @default(240)
   staffMinimumWorkingMinutes         Int                               @default(360)
   staffQrTokenValiditySeconds        Int                               @default(180)
+  staffWeeklySummaryWhatsAppEnabled  Boolean                           @default(false)
+  staffWeeklySummarySendDay          Int                               @default(1)
+  staffWeeklySummarySendTime         String                            @default("09:00")
   staffMonthlySummaryWhatsAppEnabled Boolean                           @default(false)
   staffMonthlySummarySendDay         Int                               @default(1)
   staffMonthlySummarySendTime        String                            @default("09:00")
@@ -976,12 +1045,42 @@ model Student {
   guardianLinks            StudentGuardianLink[]
   enrollments              Enrollment[]
   studentAttendanceRecords StudentAttendanceRecord[]
+  documents                StudentDocument[]
 
   @@unique([tenantId, admissionNumber])
   @@index([tenantId, branchId, status])
   @@index([tenantId, branchId, category])
   @@index([tenantId, displayName])
   @@map("students")
+}
+
+model StudentDocument {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @db.Uuid
+  branchId         String              @db.Uuid
+  studentId        String              @db.Uuid
+  type             StudentDocumentType
+  title            String
+  originalFileName String
+  storageBucket    String
+  storagePath      String
+  mimeType         String
+  sizeBytes        Int
+  checksumSha256   String
+  uploadedById     String?             @db.Uuid
+  deletedById      String?             @db.Uuid
+  deletedAt        DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch  Branch  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([storageBucket, storagePath])
+  @@index([tenantId, studentId, deletedAt])
+  @@index([tenantId, branchId, type])
+  @@map("student_documents")
 }
 
 model Guardian {
@@ -1129,6 +1228,8 @@ model StaffProfile {
   branch                 Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
   user                   User?                   @relation("StaffProfileUser", fields: [userId], references: [id], onDelete: SetNull)
   staffAttendanceRecords StaffAttendanceRecord[]
+  leaveBalances          StaffLeaveBalance[]
+  leaveApplications      StaffLeaveApplication[]
 
   @@unique([tenantId, employeeCode])
   @@index([tenantId, branchId])
@@ -1138,41 +1239,264 @@ model StaffProfile {
 }
 
 model StaffAttendanceRecord {
-  id                String                 @id @default(uuid()) @db.Uuid
-  tenantId          String                 @db.Uuid
-  branchId          String                 @db.Uuid
-  academicYearId    String?                @db.Uuid
-  staffId           String                 @db.Uuid
-  attendanceDate    DateTime               @db.Date
-  status            StaffAttendanceStatus  @default(NOT_MARKED)
-  checkInAt         DateTime?
-  checkOutAt        DateTime?
-  workingMinutes    Int?
-  checkInSource     StaffAttendanceSource?
-  checkOutSource    StaffAttendanceSource?
-  checkInQrTokenId  String?                @db.Uuid
-  checkOutQrTokenId String?                @db.Uuid
-  markedById        String?                @db.Uuid
-  updatedById       String?                @db.Uuid
-  correctionReason  String?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  id                 String                 @id @default(uuid()) @db.Uuid
+  tenantId           String                 @db.Uuid
+  branchId           String                 @db.Uuid
+  academicYearId     String?                @db.Uuid
+  staffId            String                 @db.Uuid
+  attendanceDate     DateTime               @db.Date
+  status             StaffAttendanceStatus  @default(NOT_MARKED)
+  checkInAt          DateTime?
+  checkOutAt         DateTime?
+  workingMinutes     Int?
+  checkInSource      StaffAttendanceSource?
+  checkOutSource     StaffAttendanceSource?
+  checkInQrTokenId   String?                @db.Uuid
+  checkOutQrTokenId  String?                @db.Uuid
+  markedById         String?                @db.Uuid
+  updatedById        String?                @db.Uuid
+  leaveApplicationId String?                @db.Uuid
+  correctionReason   String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
-  tenant          Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch          Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  academicYear    AcademicYear?           @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
-  staff           StaffProfile            @relation(fields: [staffId], references: [id], onDelete: Restrict)
-  checkInQrToken  StaffAttendanceQrToken? @relation("StaffAttendanceCheckInQrToken", fields: [checkInQrTokenId], references: [id], onDelete: SetNull)
-  checkOutQrToken StaffAttendanceQrToken? @relation("StaffAttendanceCheckOutQrToken", fields: [checkOutQrTokenId], references: [id], onDelete: SetNull)
-  markedBy        User?                   @relation("StaffAttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
-  updatedBy       User?                   @relation("StaffAttendanceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch           Branch                  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  academicYear     AcademicYear?           @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  staff            StaffProfile            @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  checkInQrToken   StaffAttendanceQrToken? @relation("StaffAttendanceCheckInQrToken", fields: [checkInQrTokenId], references: [id], onDelete: SetNull)
+  checkOutQrToken  StaffAttendanceQrToken? @relation("StaffAttendanceCheckOutQrToken", fields: [checkOutQrTokenId], references: [id], onDelete: SetNull)
+  markedBy         User?                   @relation("StaffAttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+  updatedBy        User?                   @relation("StaffAttendanceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  leaveApplication StaffLeaveApplication?  @relation(fields: [leaveApplicationId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, branchId, staffId, attendanceDate])
   @@index([tenantId, branchId, attendanceDate])
   @@index([tenantId, branchId, academicYearId])
   @@index([tenantId, staffId])
   @@index([tenantId, status, attendanceDate])
+  @@index([tenantId, leaveApplicationId])
+  @@index([leaveApplicationId])
   @@map("staff_attendance_records")
+}
+
+model StaffLeaveSetting {
+  id                           String                 @id @default(uuid()) @db.Uuid
+  tenantId                     String                 @db.Uuid
+  branchId                     String                 @unique @db.Uuid
+  allowHalfDay                 Boolean                @default(true)
+  allowBackdatedApplications   Boolean                @default(false)
+  minimumNoticeDays            Int                    @default(0)
+  maximumConsecutiveDays       Int                    @default(30)
+  nonWorkingWeekdays           Int[]                  @default([0])
+  approvalMode                 StaffLeaveApprovalMode @default(PRINCIPAL_OR_DESIGNATED)
+  whatsappNotificationsEnabled Boolean                @default(false)
+  createdById                  String?                @db.Uuid
+  updatedById                  String?                @db.Uuid
+  createdAt                    DateTime               @default(now())
+  updatedAt                    DateTime               @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId])
+  @@map("staff_leave_settings")
+}
+
+model StaffLeaveType {
+  id                         String   @id @default(uuid()) @db.Uuid
+  tenantId                   String   @db.Uuid
+  branchId                   String   @db.Uuid
+  code                       String
+  name                       String
+  isPaid                     Boolean  @default(true)
+  balanceTracked             Boolean  @default(true)
+  annualLimit                Decimal  @default(0) @db.Decimal(8, 2)
+  carryForwardLimit          Decimal  @default(0) @db.Decimal(8, 2)
+  allowHalfDay               Boolean  @default(true)
+  supportingDocumentRequired Boolean  @default(false)
+  documentRequiredAfterDays  Int?
+  isActive                   Boolean  @default(true)
+  createdById                String?  @db.Uuid
+  updatedById                String?  @db.Uuid
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch       Branch                  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  balances     StaffLeaveBalance[]
+  applications StaffLeaveApplication[]
+
+  @@unique([tenantId, branchId, code])
+  @@index([tenantId, branchId, isActive])
+  @@index([branchId])
+  @@map("staff_leave_types")
+}
+
+model StaffLeaveApprover {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  branchId    String   @db.Uuid
+  userId      String   @db.Uuid
+  isActive    Boolean  @default(true)
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user   User   @relation("StaffLeaveApproverUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, branchId, userId])
+  @@index([tenantId, branchId, isActive])
+  @@index([branchId])
+  @@index([userId])
+  @@map("staff_leave_approvers")
+}
+
+model StaffLeaveBalance {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @db.Uuid
+  branchId      String   @db.Uuid
+  staffId       String   @db.Uuid
+  leaveTypeId   String   @db.Uuid
+  year          Int
+  allocatedDays Decimal  @default(0) @db.Decimal(8, 2)
+  adjustedDays  Decimal  @default(0) @db.Decimal(8, 2)
+  usedDays      Decimal  @default(0) @db.Decimal(8, 2)
+  updatedById   String?  @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch    Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  staff     StaffProfile   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  leaveType StaffLeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, branchId, staffId, leaveTypeId, year])
+  @@index([tenantId, branchId, year])
+  @@index([tenantId, staffId, year])
+  @@index([branchId])
+  @@index([staffId])
+  @@index([leaveTypeId])
+  @@map("staff_leave_balances")
+}
+
+model StaffLeaveApplication {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  tenantId           String                      @db.Uuid
+  branchId           String                      @db.Uuid
+  staffId            String                      @db.Uuid
+  leaveTypeId        String                      @db.Uuid
+  startDate          DateTime                    @db.Date
+  endDate            DateTime                    @db.Date
+  duration           StaffLeaveDuration          @default(FULL_DAY)
+  totalDays          Decimal                     @db.Decimal(8, 2)
+  reason             String
+  status             StaffLeaveApplicationStatus @default(PENDING)
+  staffClarification String?
+  approverRemarks    String?
+  actionedById       String?                     @db.Uuid
+  actionedAt         DateTime?
+  submittedAt        DateTime                    @default(now())
+  cancelledAt        DateTime?
+  withdrawnAt        DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  tenant            Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch            Branch                        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  staff             StaffProfile                  @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  leaveType         StaffLeaveType                @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  actionedBy        User?                         @relation("StaffLeaveApplicationActionedBy", fields: [actionedById], references: [id], onDelete: SetNull)
+  actions           StaffLeaveApplicationAction[]
+  documents         StaffLeaveDocument[]
+  attendanceRecords StaffAttendanceRecord[]
+
+  @@index([tenantId, branchId, status, submittedAt])
+  @@index([tenantId, staffId, startDate, endDate])
+  @@index([tenantId, leaveTypeId, startDate])
+  @@index([branchId])
+  @@index([staffId])
+  @@index([leaveTypeId])
+  @@index([actionedById])
+  @@map("staff_leave_applications")
+}
+
+model StaffLeaveApplicationAction {
+  id             String                       @id @default(uuid()) @db.Uuid
+  tenantId       String                       @db.Uuid
+  branchId       String                       @db.Uuid
+  applicationId  String                       @db.Uuid
+  actorUserId    String?                      @db.Uuid
+  action         StaffLeaveActionType
+  previousStatus StaffLeaveApplicationStatus?
+  nextStatus     StaffLeaveApplicationStatus?
+  remarks        String?
+  createdAt      DateTime                     @default(now())
+
+  tenant      Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch      Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  application StaffLeaveApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  actor       User?                 @relation("StaffLeaveActionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, branchId, applicationId, createdAt])
+  @@index([tenantId, actorUserId, createdAt])
+  @@index([branchId])
+  @@index([applicationId])
+  @@index([actorUserId])
+  @@map("staff_leave_application_actions")
+}
+
+model StaffLeaveDocument {
+  id               String    @id @default(uuid()) @db.Uuid
+  tenantId         String    @db.Uuid
+  branchId         String    @db.Uuid
+  applicationId    String    @db.Uuid
+  title            String
+  originalFileName String
+  storageBucket    String
+  storagePath      String
+  mimeType         String
+  sizeBytes        Int
+  checksumSha256   String
+  uploadedById     String?   @db.Uuid
+  deletedAt        DateTime?
+  deletedById      String?   @db.Uuid
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant      Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch      Branch                @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  application StaffLeaveApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId, applicationId, deletedAt])
+  @@index([branchId])
+  @@index([applicationId])
+  @@map("staff_leave_documents")
+}
+
+model InAppNotification {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  branchId  String?   @db.Uuid
+  userId    String    @db.Uuid
+  type      String
+  title     String
+  message   String
+  actionUrl String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, readAt, createdAt])
+  @@index([tenantId, branchId, createdAt])
+  @@index([branchId])
+  @@index([userId])
+  @@map("in_app_notifications")
 }
 
 model StaffAttendanceQrToken {
@@ -1208,7 +1532,9 @@ model CommunicationPreference {
   whatsappEnabled         Boolean                          @default(false)
   whatsappNumber          String?
   attendanceAlertsEnabled Boolean                          @default(false)
+  weeklySummaryEnabled    Boolean                          @default(false)
   monthlySummaryEnabled   Boolean                          @default(false)
+  leaveUpdatesEnabled     Boolean                          @default(false)
   consentCapturedAt       DateTime?
   consentSource           String?
   createdAt               DateTime                         @default(now())

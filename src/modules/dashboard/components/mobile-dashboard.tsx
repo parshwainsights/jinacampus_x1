@@ -33,6 +33,7 @@ import type {
 import type { DashboardAttentionItem } from "./dashboard-attention-panel";
 import type { AdminMobileAction, DashboardQuickAction } from "./dashboard-state";
 import { DashboardTrendChart } from "./dashboard-visualizations";
+import { DashboardLiveClock } from "./dashboard-live-clock";
 
 type MobileDashboardProps = {
   userName: string;
@@ -41,6 +42,7 @@ type MobileDashboardProps = {
   adminTools: readonly AdminMobileAction[];
   branchLabel: string;
   dateLabel: string;
+  timeZone?: string | null;
   activeAcademicYearName: string | null;
   quickActions: readonly DashboardQuickAction[];
   hasQueryFailure: boolean;
@@ -98,12 +100,12 @@ function percentage(value: number, total: number) {
   return total > 0 ? Math.min(Math.round((value / total) * 100), 100) : null;
 }
 
-function formatSelfAttendanceTime(value: string | null) {
+function formatSelfAttendanceTime(value: string | null, timeZone?: string | null) {
   if (!value) return "Not recorded";
   return new Intl.DateTimeFormat("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Asia/Kolkata"
+    timeZone: timeZone ?? "Asia/Kolkata"
   }).format(new Date(value));
 }
 
@@ -114,6 +116,7 @@ export function MobileDashboard({
   adminTools,
   branchLabel,
   dateLabel,
+  timeZone,
   activeAcademicYearName,
   quickActions,
   hasQueryFailure,
@@ -150,6 +153,7 @@ export function MobileDashboard({
         title={`Good day, ${userName}`}
         description={`${branchLabel} · ${activeAcademicYearName ?? "Academic year setup pending"}`}
       />
+      <DashboardLiveClock timeZone={timeZone} compact />
 
       {hasQueryFailure ? (
         <MobileEmptyState title="Some dashboard data is unavailable" description="Only verified data for your current school context is shown." />
@@ -257,7 +261,7 @@ export function MobileDashboard({
           {selfAttendance ? (
             <MobileListCard
               title={selfAttendance.status.replaceAll("_", " ")}
-              subtitle={`Check in ${formatSelfAttendanceTime(selfAttendance.checkInAt)} · Check out ${formatSelfAttendanceTime(selfAttendance.checkOutAt)}`}
+              subtitle={`Check in ${formatSelfAttendanceTime(selfAttendance.checkInAt, timeZone)} · Check out ${formatSelfAttendanceTime(selfAttendance.checkOutAt, timeZone)}`}
               status={<ClipboardCheck className="h-5 w-5 text-emerald-600" aria-hidden="true" />}
               meta={[
                 { label: "Date", value: selfAttendance.attendanceDate },

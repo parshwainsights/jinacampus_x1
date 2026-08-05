@@ -6,17 +6,7 @@ import { AttendanceMarkForm } from "@/modules/academia/components/attendance/att
 import { PageHeader } from "@/modules/academia/components/academia-page-shell";
 import { listClassSectionsForAttendance } from "@/modules/academia/queries";
 import { academiaAttendanceRoutes } from "@/modules/academia/ui-config";
-
-function indiaDateString(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(date);
-  const values = new Map(parts.map((part) => [part.type, part.value]));
-  return `${values.get("year")}-${values.get("month")}-${values.get("day")}`;
-}
+import { dateOnlyStringInTimeZone } from "@/lib/dates/time-zone";
 
 export default async function MarkStudentAttendancePage() {
   const ctx = await requireAuth();
@@ -47,7 +37,7 @@ export default async function MarkStudentAttendancePage() {
         </Link>
       </div>
 
-      <AttendanceMarkForm classSections={classSections} defaultDate={indiaDateString()} />
+      <AttendanceMarkForm classSections={classSections} defaultDate={dateOnlyStringInTimeZone(new Date(), ctx.timeZone)} />
     </div>
   );
 }

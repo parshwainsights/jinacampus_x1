@@ -270,6 +270,9 @@ export async function scanStaffAttendanceQr(
         attendanceDate
       }
     });
+    if (existingRecord?.leaveApplicationId) {
+      throw new AppError("STAFF_ON_APPROVED_LEAVE", "STAFF_ON_APPROVED_LEAVE", 409);
+    }
 
     const before = existingRecord;
     let after;

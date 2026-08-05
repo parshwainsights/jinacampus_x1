@@ -1170,6 +1170,95 @@ Acceptance criteria:
 - Assign Class does not accept tenant, branch, or academic-year identifiers from the client.
 - Teacher attendance continues to expose only assigned class-sections and active enrolled students.
 
+## Phase 10.10 - Student Bulk Records and Admission Documents
+
+Goal: support large school roster onboarding and secure student admission records without weakening Academia tenancy or RBAC.
+
+Implementation:
+
+- [x] Branch-scoped Excel and Google Sheets-compatible CSV templates.
+- [x] Server-side spreadsheet parsing with row/field preview errors.
+- [x] Atomic, batched imports for up to 5,000 student rows.
+- [x] Duplicate admission, roll-number, class-capacity, and guardian-contact checks.
+- [x] Mask Aadhaar and bank-account values before persistence and export.
+- [x] Branch-scoped audited Excel/CSV exports with formula-injection protection.
+- [x] Private Supabase Storage metadata model and additive Prisma migration.
+- [x] Admission-form photograph, Transfer Certificate, Birth Certificate, and additional document inputs.
+- [x] Student-profile document upload, short-lived access, and audited deletion.
+- [x] File size, signature, MIME, filename, tenant, branch, and permission enforcement.
+- [x] Focused parser, storage, schema, security, and UI source tests.
+- [ ] Apply the migration to the approved deployment database.
+- [x] Configure server-only Supabase Storage variables in Vercel.
+- [ ] Run DB-backed cross-tenant/branch import, export, and document browser QA.
+
+Acceptance criteria:
+
+- Client input cannot select tenant, actor, or database branch IDs inside spreadsheet rows.
+- Invalid files and any invalid row prevent the complete import.
+- No full Aadhaar, bank account, storage path, checksum, or private key appears in exports or normal UI.
+- Student documents remain private and require branch-scoped `academia.student.update` access.
+- Existing single-student registration behavior remains available.
+
+## Phase 10.11 - Administrator Institution Branding Upload
+
+Goal: let the separate JinaCampus Administrator Portal manage institution logo files while presenting school identity consistently in authenticated application chrome.
+
+Implementation:
+
+- [x] Platform-administrator-only institution logo upload action.
+- [x] Tenant/institution relationship validation before storage writes.
+- [x] JPEG, PNG, and WebP signature validation with a bounded file size.
+- [x] Dedicated public-read Supabase branding bucket with server-only upload credentials.
+- [x] Opaque object names that do not expose tenant or institution IDs.
+- [x] Atomic institution URL/object-key update with platform audit logging and upload rollback.
+- [x] Administrator school edit/detail logo preview and replacement controls.
+- [x] Institution logo and highlighted Display Name in desktop/mobile authenticated chrome.
+- [x] Initials fallback for missing or invalid logo images.
+- [x] Focused storage, authority, scoping, security, and shell source tests.
+- [ ] Configure branding storage variables in the approved deployment environment.
+- [ ] Run DB-backed Supabase upload, replacement, and cross-tenant browser QA.
+
+Acceptance criteria:
+
+- School users cannot access the Administrator Portal upload action.
+- Client input cannot bypass the tenant/institution relationship check.
+- SVG, PDF, arbitrary, empty, and oversized files are rejected safely.
+- Public logo URLs contain no tenant, institution, actor, credential, or token identifiers.
+- The institution Display Name remains visible when the image is missing or cannot load.
+- Successful replacements are platform-audited without storage keys or sensitive credentials.
+
+## Phase 10.12 - Staff Leave Application and Management
+
+Goal: add a tenant-safe staff leave workflow to StaffBoard Lite without expanding into payroll or full HR management.
+
+Implementation:
+
+- [x] Tenant- and branch-scoped leave policy, type, approver, balance, application, action, document, and in-system notification models.
+- [x] Self-service applications for linked Teacher, Staff, and Office Staff profiles.
+- [x] Server-calculated working dates, half days, overlap checks, notice rules, consecutive-day limits, and balance enforcement.
+- [x] Pending, clarification-required, approved, rejected, withdrawn, and cancelled workflows with remarks and action history.
+- [x] Principal or designated-approver governance with branch-scoped permission enforcement.
+- [x] Required supporting-document enforcement with private Supabase Storage and short-lived access URLs.
+- [x] Transactional approved-leave synchronization to staff attendance and protection against QR/manual attendance conflicts.
+- [x] In-system notifications and disabled-by-default, consent-controlled WhatsApp outbox events.
+- [x] Branch settings for leave policy, leave types, designated approvers, and staff balances.
+- [x] Leave navigation and responsive applicant, reviewer, detail, document, and settings screens.
+- [x] Audit events for application, review, cancellation, policy, type, approver, balance, and document changes.
+- [x] Focused calculation, validation, RBAC, notification-payload, security, navigation, and tenant-deletion tests.
+- [x] Apply the additive leave schema and foreign-key index migrations to the approved database.
+- [x] Configure the private staff leave document bucket variables in deployment environments.
+- [x] Run DB-backed Principal/approver and Teacher/Staff browser QA, including attendance conflict and cross-branch denial.
+
+Acceptance criteria:
+
+- Client input cannot select tenant, branch, staff identity, role, total leave days, balance usage, or attendance status.
+- A Principal can approve according to branch policy; a non-principal approver must have both permission and an active branch designation.
+- Approval is atomic across application status, balance usage, attendance synchronization, action history, notifications, and audit logging.
+- Approved leave cannot overwrite real QR activity or non-placeholder attendance.
+- Staff can access only their own applications and private documents; reviewers remain branch-scoped.
+- WhatsApp delivery is never implied unless consent, settings, an approved template, and outbox processing are configured.
+- Payroll, salary calculation, email invitation, native mobile leave, and broad HR automation remain out of scope.
+
 ## Final Delivery Checklist
 
 - [ ] CampusCore schema complete

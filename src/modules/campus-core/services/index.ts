@@ -10,6 +10,7 @@ import {
 } from "@/lib/rbac/roles";
 import { writeAuditLog } from "@/lib/audit/audit-log";
 import { CAMPUS_CORE_AUDIT_EVENTS } from "@/modules/campus-core/audit-events";
+import { ensureAttendanceNotificationTemplates } from "@/modules/notifications/services/notification-template.service";
 import type {
   activateAcademicYearSchema,
   adminResetPasswordSchema,
@@ -963,6 +964,9 @@ export async function updateAttendanceSettingsService(ctx: TenantContext, input:
     select: {
       studentAttendanceWhatsAppEnabled: true,
       studentAttendanceNotificationMode: true,
+      staffWeeklySummaryWhatsAppEnabled: true,
+      staffWeeklySummarySendDay: true,
+      staffWeeklySummarySendTime: true,
       staffMonthlySummaryWhatsAppEnabled: true,
       staffMonthlySummarySendDay: true,
       staffMonthlySummarySendTime: true
@@ -971,11 +975,17 @@ export async function updateAttendanceSettingsService(ctx: TenantContext, input:
   const notificationSettingsChanged = existingNotificationSettings
     ? existingNotificationSettings.studentAttendanceWhatsAppEnabled !== input.studentAttendanceWhatsAppEnabled ||
       existingNotificationSettings.studentAttendanceNotificationMode !== input.studentAttendanceNotificationMode ||
+      existingNotificationSettings.staffWeeklySummaryWhatsAppEnabled !== input.staffWeeklySummaryWhatsAppEnabled ||
+      existingNotificationSettings.staffWeeklySummarySendDay !== input.staffWeeklySummarySendDay ||
+      existingNotificationSettings.staffWeeklySummarySendTime !== input.staffWeeklySummarySendTime ||
       existingNotificationSettings.staffMonthlySummaryWhatsAppEnabled !== input.staffMonthlySummaryWhatsAppEnabled ||
       existingNotificationSettings.staffMonthlySummarySendDay !== input.staffMonthlySummarySendDay ||
       existingNotificationSettings.staffMonthlySummarySendTime !== input.staffMonthlySummarySendTime
     : input.studentAttendanceWhatsAppEnabled ||
       input.studentAttendanceNotificationMode !== "EXCEPTION_ONLY" ||
+      input.staffWeeklySummaryWhatsAppEnabled ||
+      input.staffWeeklySummarySendDay !== 1 ||
+      input.staffWeeklySummarySendTime !== "09:00" ||
       input.staffMonthlySummaryWhatsAppEnabled ||
       input.staffMonthlySummarySendDay !== 1 ||
       input.staffMonthlySummarySendTime !== "09:00";
@@ -998,6 +1008,13 @@ export async function updateAttendanceSettingsService(ctx: TenantContext, input:
       create: { tenantId: ctx.tenantId, ...input, createdById: ctx.userId },
       update: { ...input, updatedById: ctx.userId }
     });
+    if (
+      input.studentAttendanceWhatsAppEnabled ||
+      input.staffWeeklySummaryWhatsAppEnabled ||
+      input.staffMonthlySummaryWhatsAppEnabled
+    ) {
+      await ensureAttendanceNotificationTemplates(tx, ctx.tenantId);
+    }
     await writeAuditLog({ ctx, action: CAMPUS_CORE_AUDIT_EVENTS.ATTENDANCE_SETTINGS_UPDATED, entityType: "AttendanceSetting", entityId: after.id, branchId: input.branchId, before, after }, tx);
     return after;
   });

@@ -24,6 +24,7 @@ type ReportSectionProps = {
 
 type AttendanceRowsTableProps = {
   rows: StaffAttendanceReportRow[];
+  timeZone: string;
 };
 
 type NamedAttendanceRowsTableProps = AttendanceRowsTableProps & {
@@ -31,6 +32,7 @@ type NamedAttendanceRowsTableProps = AttendanceRowsTableProps & {
   description: string;
   emptyTitle: string;
   emptyDescription: string;
+  timeZone: string;
 };
 
 const attendanceColumns = [
@@ -66,19 +68,19 @@ export function StaffAttendanceReportSection({
   );
 }
 
-export function StaffAttendanceRowsTable({ rows }: AttendanceRowsTableProps) {
+export function StaffAttendanceRowsTable({ rows, timeZone }: AttendanceRowsTableProps) {
   return (
     <TableShell columns={attendanceColumns}>
       {rows.map((row) => (
         <tr key={row.attendanceRecordId}>
-          <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceReportDate(row.attendanceDate)}</td>
+          <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceReportDate(row.attendanceDate, timeZone)}</td>
           <td className="whitespace-nowrap px-4 py-3">{row.employeeCode}</td>
           <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{row.staffName}</td>
           <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceLabel(row.staffType)}</td>
           <td className="whitespace-nowrap px-4 py-3">{row.department ?? "-"}</td>
           <td className="whitespace-nowrap px-4 py-3"><StatusBadge value={row.status} label={formatStaffAttendanceLabel(row.status)} /></td>
-          <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceDateTime(row.checkInAt)}</td>
-          <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceDateTime(row.checkOutAt)}</td>
+          <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceDateTime(row.checkInAt, timeZone)}</td>
+          <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceDateTime(row.checkOutAt, timeZone)}</td>
           <td className="whitespace-nowrap px-4 py-3">{formatWorkingMinutes(row.workingMinutes)}</td>
           <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceLabel(row.source)}</td>
           <td className="max-w-72 px-4 py-3 text-sm leading-6 text-slate-600">{row.correctionReason ?? "-"}</td>
@@ -93,7 +95,8 @@ export function NamedStaffAttendanceRowsTable({
   description,
   emptyTitle,
   emptyDescription,
-  rows
+  rows,
+  timeZone
 }: NamedAttendanceRowsTableProps) {
   return (
     <StaffAttendanceReportSection
@@ -103,7 +106,7 @@ export function NamedStaffAttendanceRowsTable({
       emptyDescription={emptyDescription}
       rowCount={rows.length}
     >
-      <StaffAttendanceRowsTable rows={rows} />
+      <StaffAttendanceRowsTable rows={rows} timeZone={timeZone} />
     </StaffAttendanceReportSection>
   );
 }
@@ -152,7 +155,7 @@ export function StaffMonthlySummaryTable({ rows }: { rows: MonthlyStaffAttendanc
   );
 }
 
-export function StaffCorrectionReportTable({ rows }: { rows: StaffManualCorrectionReportRow[] }) {
+export function StaffCorrectionReportTable({ rows, timeZone }: { rows: StaffManualCorrectionReportRow[]; timeZone: string }) {
   return (
     <StaffAttendanceReportSection
       title="Manual Correction Report"
@@ -164,13 +167,13 @@ export function StaffCorrectionReportTable({ rows }: { rows: StaffManualCorrecti
       <TableShell columns={["Date", "Employee Code", "Staff Name", "Status", "Correction Reason", "Updated By", "Updated At"]}>
         {rows.map((row) => (
           <tr key={row.attendanceRecordId}>
-            <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceReportDate(row.attendanceDate)}</td>
+            <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceReportDate(row.attendanceDate, timeZone)}</td>
             <td className="whitespace-nowrap px-4 py-3">{row.employeeCode}</td>
             <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{row.staffName}</td>
             <td className="whitespace-nowrap px-4 py-3"><StatusBadge value={row.status} label={formatStaffAttendanceLabel(row.status)} /></td>
             <td className="max-w-96 px-4 py-3 text-sm leading-6 text-slate-600">{row.correctionReason}</td>
             <td className="whitespace-nowrap px-4 py-3">{row.updatedByName ?? "-"}</td>
-            <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceDateTime(row.updatedAt)}</td>
+            <td className="whitespace-nowrap px-4 py-3">{formatStaffAttendanceDateTime(row.updatedAt, timeZone)}</td>
           </tr>
         ))}
       </TableShell>

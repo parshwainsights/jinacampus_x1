@@ -9,6 +9,7 @@ import {
   updateStudentAction,
   type ProfileFormActionState
 } from "@/modules/academia/actions/profile.actions";
+import type { StudentDocumentTypeValue } from "@/modules/academia/schemas/student-document.schema";
 import {
   INDIAN_STATE_OPTIONS,
   NATIONALITY_OPTIONS,
@@ -68,6 +69,70 @@ export type StudentRegistrationRecord = {
 };
 
 const initialState: ProfileFormActionState = { ok: false };
+
+const admissionDocumentFields = [
+  { field: "passportPhoto", type: "PASSPORT_PHOTO", title: "Passport-size photograph" },
+  { field: "transferCertificate", type: "TRANSFER_CERTIFICATE", title: "School Transfer Certificate" },
+  { field: "birthCertificate", type: "BIRTH_CERTIFICATE", title: "Birth Certificate" }
+] as const satisfies readonly {
+  field: string;
+  type: StudentDocumentTypeValue;
+  title: string;
+}[];
+
+async function uploadAdmissionDocument(
+  studentId: string,
+  document: { file: File; type: StudentDocumentTypeValue; title: string }
+) {
+  const body = new FormData();
+  body.set("type", document.type);
+  body.set("title", document.title);
+  body.set("file", document.file);
+  const response = await fetch(`/api/academia/students/${studentId}/documents`, {
+    method: "POST",
+    body
+  });
+  if (!response.ok) throw new Error("Document upload failed.");
+}
+
+async function createStudentWithDocuments(
+  state: ProfileFormActionState,
+  formData: FormData
+): Promise<ProfileFormActionState> {
+  const documents: Array<{ file: File; type: StudentDocumentTypeValue; title: string }> = [];
+  for (const documentField of admissionDocumentFields) {
+    const file = formData.get(documentField.field);
+    if (file instanceof File && file.size > 0) {
+      documents.push({ file, type: documentField.type, title: documentField.title });
+    }
+    formData.delete(documentField.field);
+  }
+  for (const file of formData.getAll("additionalAdmissionDocuments")) {
+    if (file instanceof File && file.size > 0) {
+      documents.push({ file, type: "OTHER", title: "Additional admission document" });
+    }
+  }
+  formData.delete("additionalAdmissionDocuments");
+
+  const result = await createStudentAction(state, formData);
+  if (!result.ok || !result.studentId || !documents.length) return result;
+
+  let failedUploads = 0;
+  for (const document of documents) {
+    try {
+      await uploadAdmissionDocument(result.studentId, document);
+    } catch {
+      failedUploads += 1;
+    }
+  }
+
+  return {
+    ...result,
+    message: failedUploads
+      ? `Student created. ${failedUploads} document upload(s) need to be retried from the student profile.`
+      : "Student and admission documents created."
+  };
+}
 
 const genderOptions = [
   { value: "NOT_SPECIFIED", label: "Gender not specified" },
@@ -157,7 +222,7 @@ export function StudentRegistrationForm({
   defaultBranchId?: string;
   student?: StudentRegistrationRecord;
 }) {
-  const action = mode === "create" ? createStudentAction : updateStudentAction;
+  const action = mode === "create" ? createStudentWithDocuments : updateStudentAction;
   const [state, formAction] = useActionState(action, initialState);
   const admissionNumberError = fieldError(state, "admissionNumber") ?? fieldError(state, "admissionNo");
   const isCreate = mode === "create";
@@ -332,6 +397,26 @@ export function StudentRegistrationForm({
           <input id="student-apaar-id" name="apaarIdNumber" defaultValue={value(student, "apaarIdNumber")} className="min-h-11 w-full" />
         </FormField>
       </FormSection>
+
+      {isCreate ? (
+        <FormSection
+          title="Admission File Uploads"
+          description="Optional private admission records. PDF, JPEG, PNG, and WebP files are accepted; additional files can be added from the student profile."
+        >
+          <FormField id="student-passport-photo" label="Passport-size Photograph" helpText={<OptionalBadge>Optional</OptionalBadge>}>
+            <input id="student-passport-photo" name="passportPhoto" type="file" accept="image/jpeg,image/png,image/webp" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" />
+          </FormField>
+          <FormField id="student-transfer-certificate" label="Transfer Certificate" helpText={<OptionalBadge>Optional</OptionalBadge>}>
+            <input id="student-transfer-certificate" name="transferCertificate" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" />
+          </FormField>
+          <FormField id="student-birth-certificate" label="Birth Certificate" helpText={<OptionalBadge>Optional</OptionalBadge>}>
+            <input id="student-birth-certificate" name="birthCertificate" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" />
+          </FormField>
+          <FormField id="student-additional-documents" label="Other Admission Documents" helpText="Select one or more board- or school-required records." className="md:col-span-3">
+            <input id="student-additional-documents" name="additionalAdmissionDocuments" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm" />
+          </FormField>
+        </FormSection>
+      ) : null}
 
       <FormSection
         title="Social / Demographic"

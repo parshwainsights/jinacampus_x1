@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { formatDateInTimeZone, safeTimeZone } from "@/lib/dates/time-zone";
 import { queueStaffMonthlyWhatsAppSummarySchema } from "@/modules/notifications/schemas";
 import {
   buildStaffMonthlySummaryTemplatePayload,
@@ -17,6 +18,10 @@ export type StaffMonthlyAttendanceSummary = {
   halfDayDays: number;
   leaveDays: number;
   absentDays: number;
+  notMarkedDays: number;
+  weekOffDays: number;
+  holidayDays: number;
+  workingDays: number;
   markedDays: number;
   totalWorkingMinutes: number;
 };
@@ -32,14 +37,15 @@ export type StaffMonthlyWhatsAppQueueResult = {
   failed: number;
 };
 
-type StaffRecord = {
+export type StaffAttendanceSummaryMember = {
   id: string;
   firstName: string;
   middleName: string | null;
   lastName: string | null;
+  phone: string | null;
 };
 
-type StaffAttendanceRecord = {
+export type StaffAttendanceSummaryRecord = {
   staffId: string;
   status: "PRESENT" | "ABSENT" | "LATE" | "HALF_DAY" | "ON_LEAVE" | "WEEK_OFF" | "HOLIDAY" | "NOT_MARKED";
   workingMinutes: number | null;
@@ -49,6 +55,7 @@ type CommunicationPreferenceRecord = {
   whatsappEnabled: boolean;
   whatsappNumber: string | null;
   monthlySummaryEnabled: boolean;
+  consentCapturedAt: Date | null;
 };
 
 type StaffMonthlyDeps = {
@@ -56,21 +63,21 @@ type StaffMonthlyDeps = {
     staffMonthlySummaryWhatsAppEnabled: boolean;
   } | null>;
   loadTemplate(input: { tenantId: string; branchId: string; templateKey: string }): Promise<{ id: string } | null>;
-  loadActiveStaff(input: { tenantId: string; branchId: string }): Promise<StaffRecord[]>;
+  loadActiveStaff(input: { tenantId: string; branchId: string }): Promise<StaffAttendanceSummaryMember[]>;
   loadAttendanceRecords(input: {
     tenantId: string;
     branchId: string;
     staffIds: string[];
     startDate: Date;
     endDate: Date;
-  }): Promise<StaffAttendanceRecord[]>;
+  }): Promise<StaffAttendanceSummaryRecord[]>;
   loadCommunicationPreference(input: {
     tenantId: string;
     branchId: string;
     staffId: string;
   }): Promise<CommunicationPreferenceRecord | null>;
   queueOutbox(input: QueueNotificationOutboxItemInput): Promise<{ status: "queued" | "alreadyQueued"; outboxId: string }>;
-  getInstitutionName(input: { tenantId: string; branchId: string }): Promise<string>;
+  getInstitutionContext(input: { tenantId: string; branchId: string }): Promise<{ name: string; timeZone: string }>;
 };
 
 function blankResult(): StaffMonthlyWhatsAppQueueResult {
@@ -93,21 +100,21 @@ function monthRange(year: number, month: number) {
   };
 }
 
-function staffName(staff: StaffRecord) {
+function staffName(staff: StaffAttendanceSummaryMember) {
   return [staff.firstName, staff.middleName, staff.lastName].map((part) => part?.trim()).filter(Boolean).join(" ");
 }
 
-function monthLabel(year: number, month: number) {
-  return new Intl.DateTimeFormat("en-IN", {
+function monthLabel(year: number, month: number, timeZone: string) {
+  return formatDateInTimeZone(new Date(Date.UTC(year, month - 1, 15)), timeZone, {
+    day: undefined,
     month: "long",
-    year: "numeric",
-    timeZone: "Asia/Kolkata"
-  }).format(new Date(Date.UTC(year, month - 1, 1)));
+    year: "numeric"
+  });
 }
 
 export function calculateStaffMonthlySummary(
-  staff: StaffRecord,
-  records: StaffAttendanceRecord[]
+  staff: StaffAttendanceSummaryMember,
+  records: StaffAttendanceSummaryRecord[]
 ): StaffMonthlyAttendanceSummary {
   const summary: StaffMonthlyAttendanceSummary = {
     staffId: staff.id,
@@ -117,6 +124,10 @@ export function calculateStaffMonthlySummary(
     halfDayDays: 0,
     leaveDays: 0,
     absentDays: 0,
+    notMarkedDays: 0,
+    weekOffDays: 0,
+    holidayDays: 0,
+    workingDays: 0,
     markedDays: 0,
     totalWorkingMinutes: 0
   };
@@ -124,11 +135,15 @@ export function calculateStaffMonthlySummary(
   for (const record of records) {
     summary.markedDays += 1;
     summary.totalWorkingMinutes += record.workingMinutes ?? 0;
+    if (record.status !== "WEEK_OFF" && record.status !== "HOLIDAY") summary.workingDays += 1;
     if (record.status === "PRESENT") summary.presentDays += 1;
     if (record.status === "LATE") summary.lateDays += 1;
     if (record.status === "HALF_DAY") summary.halfDayDays += 1;
     if (record.status === "ON_LEAVE") summary.leaveDays += 1;
-    if (record.status === "ABSENT" || record.status === "NOT_MARKED") summary.absentDays += 1;
+    if (record.status === "ABSENT") summary.absentDays += 1;
+    if (record.status === "NOT_MARKED") summary.notMarkedDays += 1;
+    if (record.status === "WEEK_OFF") summary.weekOffDays += 1;
+    if (record.status === "HOLIDAY") summary.holidayDays += 1;
   }
 
   return summary;
@@ -176,7 +191,8 @@ const defaultDeps: StaffMonthlyDeps = {
         id: true,
         firstName: true,
         middleName: true,
-        lastName: true
+        lastName: true,
+        phone: true
       },
       orderBy: [{ firstName: "asc" }, { lastName: "asc" }]
     });
@@ -207,7 +223,8 @@ const defaultDeps: StaffMonthlyDeps = {
       select: {
         whatsappEnabled: true,
         whatsappNumber: true,
-        monthlySummaryEnabled: true
+        monthlySummaryEnabled: true,
+        consentCapturedAt: true
       },
       orderBy: { updatedAt: "desc" }
     });
@@ -215,12 +232,15 @@ const defaultDeps: StaffMonthlyDeps = {
   async queueOutbox(input) {
     return queueNotificationOutboxItem(input);
   },
-  async getInstitutionName(input) {
+  async getInstitutionContext(input) {
     const branch = await db.branch.findFirst({
       where: { tenantId: input.tenantId, id: input.branchId },
-      select: { institution: { select: { name: true, displayName: true } } }
+      select: { timezone: true, institution: { select: { name: true, displayName: true } } }
     });
-    return branch?.institution.displayName ?? branch?.institution.name ?? "JinaCampus";
+    return {
+      name: branch?.institution.displayName ?? branch?.institution.name ?? "JinaCampus",
+      timeZone: safeTimeZone(branch?.timezone)
+    };
   }
 };
 
@@ -257,8 +277,8 @@ export async function queueStaffMonthlyAttendanceWhatsAppSummaries(
       startDate,
       endDate
     });
-    const institutionName = await deps.getInstitutionName({ tenantId: data.tenantId, branchId: data.branchId });
-    const recordsByStaffId = new Map<string, StaffAttendanceRecord[]>();
+    const institution = await deps.getInstitutionContext({ tenantId: data.tenantId, branchId: data.branchId });
+    const recordsByStaffId = new Map<string, StaffAttendanceSummaryRecord[]>();
     for (const record of records) {
       const staffRecords = recordsByStaffId.get(record.staffId) ?? [];
       staffRecords.push(record);
@@ -272,11 +292,12 @@ export async function queueStaffMonthlyAttendanceWhatsAppSummaries(
         branchId: data.branchId,
         staffId: member.id
       });
-      if (!preference?.whatsappEnabled || !preference.monthlySummaryEnabled) {
+      if (!preference?.whatsappEnabled || !preference.monthlySummaryEnabled || !preference.consentCapturedAt) {
         result.skippedNoConsent += 1;
         continue;
       }
-      if (!preference.whatsappNumber) {
+      const recipientPhone = preference.whatsappNumber ?? member.phone;
+      if (!recipientPhone) {
         result.skippedNoPhone += 1;
         continue;
       }
@@ -290,16 +311,22 @@ export async function queueStaffMonthlyAttendanceWhatsAppSummaries(
         templateKey: WHATSAPP_TEMPLATE_KEYS.STAFF_MONTHLY_ATTENDANCE_SUMMARY,
         recipientType: "STAFF",
         recipientId: member.id,
-        recipientPhone: preference.whatsappNumber,
+        recipientPhone,
         payload: buildStaffMonthlySummaryTemplatePayload({
           staffName: summary.staffName,
-          month: monthLabel(data.year, data.month),
+          month: monthLabel(data.year, data.month, institution.timeZone),
+          workingDays: summary.workingDays,
+          markedDays: summary.markedDays,
           presentDays: summary.presentDays,
           lateDays: summary.lateDays,
           halfDayDays: summary.halfDayDays,
           leaveDays: summary.leaveDays,
           absentDays: summary.absentDays,
-          institutionName
+          notMarkedDays: summary.notMarkedDays,
+          weekOffDays: summary.weekOffDays,
+          holidayDays: summary.holidayDays,
+          totalWorkingMinutes: summary.totalWorkingMinutes,
+          institutionName: institution.name
         }),
         idempotencyKey: `staff-monthly-summary:${data.tenantId}:${member.id}:${data.year}:${data.month}`,
         actorUserId: data.actorUserId ?? null

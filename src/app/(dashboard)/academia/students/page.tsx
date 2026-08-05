@@ -171,13 +171,16 @@ export default async function StudentsPage({ searchParams }: { searchParams?: Ro
   return (
     <div className="space-y-6">
       <PageHeader title={config.title} description={config.description} />
-      {canCreateStudents ? (
-        <div className="flex justify-end">
+      <div className="flex flex-col justify-end gap-2 sm:flex-row">
+          <Link href="/academia/students/bulk" className="premium-secondary-button w-full sm:w-auto">
+            Import / Export
+          </Link>
+        {canCreateStudents ? (
           <Link href="/academia/students/create" className="premium-primary-button w-full sm:w-auto">
             Register Student
           </Link>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       <StudentsFilterBar
         branchOptions={branchOptions}
         classSectionOptions={classSectionOptions}

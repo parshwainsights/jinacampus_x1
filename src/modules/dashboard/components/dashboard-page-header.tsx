@@ -1,11 +1,14 @@
+import { DashboardLiveClock } from "./dashboard-live-clock";
+
 type DashboardPageHeaderProps = {
   userName?: string;
   activeAcademicYearName: string | null;
   branchLabel: string;
   dateLabel: string;
+  timeZone?: string | null;
 };
 
-export function DashboardPageHeader({ userName, activeAcademicYearName, branchLabel, dateLabel }: DashboardPageHeaderProps) {
+export function DashboardPageHeader({ userName, activeAcademicYearName, branchLabel, dateLabel, timeZone }: DashboardPageHeaderProps) {
   const yearLabel = activeAcademicYearName ?? "academic year not set";
   const overviewText = `Today's operational overview for ${branchLabel}, ${yearLabel}.`;
   const contextItems = [
@@ -28,14 +31,17 @@ export function DashboardPageHeader({ userName, activeAcademicYearName, branchLa
             {overviewText}
           </p>
         </div>
-        <dl className="grid min-w-0 gap-2 sm:grid-cols-3 xl:min-w-[560px]">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:min-w-[640px] xl:grid-cols-4">
+          <dl className="contents">
           {contextItems.map((item) => (
             <div key={item.label} className="motion-soft-hover min-w-0 rounded-lg border border-white/80 bg-white/70 px-3 py-2.5 shadow-sm">
               <dt className="text-xs font-semibold uppercase text-slate-500">{item.label}</dt>
               <dd className="mt-1 truncate text-sm font-medium text-slate-800">{item.value}</dd>
             </div>
           ))}
-        </dl>
+          </dl>
+          <DashboardLiveClock timeZone={timeZone} />
+        </div>
       </div>
     </header>
   );

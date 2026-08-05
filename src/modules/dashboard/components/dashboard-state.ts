@@ -138,11 +138,11 @@ export function getVisibleAdminMobileActions(
   return actions.filter((action) => permissions.has(action.permission));
 }
 
-export function formatDashboardDate(date: string | Date) {
+export function formatDashboardDate(date: string | Date, timeZone = "Asia/Kolkata") {
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-    timeZone: "Asia/Kolkata"
+    timeZone
   }).format(new Date(date));
 }

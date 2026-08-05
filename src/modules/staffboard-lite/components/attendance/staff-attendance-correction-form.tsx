@@ -9,6 +9,7 @@ import {
   formatStaffAttendanceDateTime,
   formatStaffAttendanceLabel,
   formatWorkingMinutes,
+  institutionalDateTimeLocalToIso,
   STAFF_ATTENDANCE_CORRECTION_STATUS_OPTIONS,
   staffAttendanceCorrectionErrorMessage,
   toDateTimeLocalValue,
@@ -25,6 +26,7 @@ type StaffAttendanceCorrectionFormProps = {
   checkOutAt: string | null;
   workingMinutes: number | null;
   correctionReason: string | null;
+  timeZone: string;
 };
 
 export function StaffAttendanceCorrectionForm({
@@ -36,13 +38,14 @@ export function StaffAttendanceCorrectionForm({
   checkInAt,
   checkOutAt,
   workingMinutes,
-  correctionReason: existingCorrectionReason
+  correctionReason: existingCorrectionReason,
+  timeZone
 }: StaffAttendanceCorrectionFormProps) {
   const router = useRouter();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const [status, setStatus] = useState(currentStatus === "NOT_MARKED" ? "PRESENT" : currentStatus);
-  const [checkInValue, setCheckInValue] = useState(toDateTimeLocalValue(checkInAt));
-  const [checkOutValue, setCheckOutValue] = useState(toDateTimeLocalValue(checkOutAt));
+  const [checkInValue, setCheckInValue] = useState(toDateTimeLocalValue(checkInAt, timeZone));
+  const [checkOutValue, setCheckOutValue] = useState(toDateTimeLocalValue(checkOutAt, timeZone));
   const [correctionReason, setCorrectionReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,16 +77,16 @@ export function StaffAttendanceCorrectionForm({
         status,
         correctionReason
       };
-      if (checkInValue) payload.checkInAt = new Date(checkInValue).toISOString();
-      if (checkOutValue) payload.checkOutAt = new Date(checkOutValue).toISOString();
+      if (checkInValue) payload.checkInAt = institutionalDateTimeLocalToIso(checkInValue, timeZone);
+      if (checkOutValue) payload.checkOutAt = institutionalDateTimeLocalToIso(checkOutValue, timeZone);
 
       const result = await correctStaffAttendanceAction(payload);
       if (result.ok) {
         setMessage(`Attendance corrected to ${formatStaffAttendanceLabel(result.data.newStatus)}.`);
         setCorrectionReason("");
         setStatus(result.data.newStatus);
-        setCheckInValue(toDateTimeLocalValue(result.data.checkInAt));
-        setCheckOutValue(toDateTimeLocalValue(result.data.checkOutAt));
+        setCheckInValue(toDateTimeLocalValue(result.data.checkInAt, timeZone));
+        setCheckOutValue(toDateTimeLocalValue(result.data.checkOutAt, timeZone));
         router.refresh();
       } else {
         setError(staffAttendanceCorrectionErrorMessage(result.code, result.error));
@@ -93,8 +96,8 @@ export function StaffAttendanceCorrectionForm({
 
   function cancelCorrection() {
     setStatus(currentStatus === "NOT_MARKED" ? "PRESENT" : currentStatus);
-    setCheckInValue(toDateTimeLocalValue(checkInAt));
-    setCheckOutValue(toDateTimeLocalValue(checkOutAt));
+    setCheckInValue(toDateTimeLocalValue(checkInAt, timeZone));
+    setCheckOutValue(toDateTimeLocalValue(checkOutAt, timeZone));
     setCorrectionReason("");
     setMessage(null);
     setError(null);
@@ -103,10 +106,10 @@ export function StaffAttendanceCorrectionForm({
 
   const summaryItems = [
     { label: "Employee", value: `${employeeCode} · ${staffName}` },
-    { label: "Date", value: formatStaffAttendanceDate(attendanceDate) },
+    { label: "Date", value: formatStaffAttendanceDate(attendanceDate, timeZone) },
     { label: "Current status", value: formatStaffAttendanceLabel(currentStatus) },
-    { label: "Check-in", value: formatStaffAttendanceDateTime(checkInAt) },
-    { label: "Check-out", value: formatStaffAttendanceDateTime(checkOutAt) },
+    { label: "Check-in", value: formatStaffAttendanceDateTime(checkInAt, timeZone) },
+    { label: "Check-out", value: formatStaffAttendanceDateTime(checkOutAt, timeZone) },
     { label: "Working minutes", value: formatWorkingMinutes(workingMinutes) },
     { label: "Existing reason", value: existingCorrectionReason ?? "-" }
   ];

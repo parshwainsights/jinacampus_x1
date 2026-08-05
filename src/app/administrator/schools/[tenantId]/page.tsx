@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PermissionState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/table-primitives";
+import { InstitutionLogo } from "@/components/brand/institution-logo";
 import { AppError } from "@/lib/errors";
 import { requireAdministratorContext } from "@/modules/campus-core/administrator-auth";
 import { getSchoolByIdForAdministrator } from "@/modules/campus-core/administrator-services";
@@ -66,10 +67,19 @@ export default async function AdministratorSchoolDetailPage({ params }: { params
             <h3 className="text-lg font-semibold text-slate-950">Institution and Branches</h3>
             <div className="mt-4 space-y-3">
               {school.institutions.map((institution) => (
-                <div key={institution.id} className="rounded-2xl border border-slate-200 bg-slate-50/75 p-4">
-                  <p className="font-semibold text-slate-950">{institution.displayName ?? institution.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">Code: {institution.code} · Status: {institution.status}</p>
-                  <p className="mt-1 text-sm text-slate-500">Logo: {institution.logoUrl ? "Configured" : "Fallback initials"}</p>
+                <div key={institution.id} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/75 p-4">
+                  <InstitutionLogo
+                    name={institution.displayName ?? institution.name}
+                    logoUrl={institution.logoUrl}
+                    className="h-12 w-12"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-slate-950" title={institution.displayName ?? institution.name}>
+                      {institution.displayName ?? institution.name}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">Code: {institution.code} · Status: {institution.status}</p>
+                    <p className="mt-1 text-sm text-slate-500">Logo: {institution.logoUrl ? "Configured" : "Fallback initials"}</p>
+                  </div>
                 </div>
               ))}
               {school.branches.map((branch) => (

@@ -11,6 +11,7 @@ import {
   submitStudentAttendanceSchema
 } from "@/modules/academia/schemas";
 import { queueStudentAttendanceWhatsAppNotifications } from "@/modules/notifications/services/attendance-whatsapp-notification.service";
+import { processNotificationOutbox } from "@/modules/notifications/services/notification-outbox.service";
 import { conflict, validationError } from "./shared";
 
 type SubmittedAttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "HALF_DAY" | "ON_LEAVE" | "EXCUSED";
@@ -201,6 +202,34 @@ async function loadAutoLockPolicy(tx: AttendanceLockClient, ctx: TenantContext, 
   };
 }
 
+async function queueAndDispatchStudentAttendanceNotifications(
+  ctx: TenantContext,
+  input: {
+    branchId: string;
+    academicYearId: string;
+    classSectionId: string;
+    attendanceDate: Date;
+    attendanceRecordIds: string[];
+  }
+) {
+  const queued = await queueStudentAttendanceWhatsAppNotifications({
+    tenantId: ctx.tenantId,
+    branchId: input.branchId,
+    academicYearId: input.academicYearId,
+    classSectionId: input.classSectionId,
+    attendanceDate: input.attendanceDate,
+    attendanceRecordIds: input.attendanceRecordIds,
+    actorUserId: ctx.userId
+  });
+  if (queued.queued > 0) {
+    await processNotificationOutbox({
+      tenantId: ctx.tenantId,
+      branchId: input.branchId,
+      limit: Math.min(Math.max(queued.queued, 1), 100)
+    });
+  }
+}
+
 async function lockStudentAttendanceRecordsForScope(
   tx: AttendanceLockClient,
   ctx: TenantContext,
@@ -254,7 +283,7 @@ async function lockStudentAttendanceRecordsForScope(
       branchId,
       academicYearId,
       attendanceDate,
-      sessionType: "FULL_DAY",
+      sessionType: "FULL_DAY" as const,
       ...(classSectionId ? { classSectionId } : {})
     },
     select: { id: true, lockedAt: true }
@@ -359,7 +388,7 @@ export async function correctStudentAttendance(
   if (!branchId) throw validationError("ACTIVE_BRANCH_REQUIRED");
   if (!academicYearId) throw validationError("ACTIVE_ACADEMIC_YEAR_REQUIRED");
 
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     await requirePermission({
       ctx,
       permission: "academia.attendance.correct",
@@ -422,7 +451,7 @@ export async function correctStudentAttendance(
       studentId: after.studentId,
       classSectionId: after.classSectionId,
       attendanceDate: toDateOnlyString(after.attendanceDate),
-      sessionType: "FULL_DAY",
+      sessionType: "FULL_DAY" as const,
       previousStatus: before.status,
       newStatus: after.status,
       correctionReason: data.correctionReason,
@@ -430,6 +459,16 @@ export async function correctStudentAttendance(
       lockedAt: after.lockedAt?.toISOString() ?? null
     };
   });
+
+  await queueAndDispatchStudentAttendanceNotifications(ctx, {
+    branchId,
+    academicYearId,
+    classSectionId: result.classSectionId,
+    attendanceDate: new Date(`${result.attendanceDate}T00:00:00.000Z`),
+    attendanceRecordIds: [result.attendanceRecordId]
+  }).catch(() => null);
+
+  return result;
 }
 
 export async function submitDailyStudentAttendance(
@@ -649,8 +688,7 @@ export async function submitDailyStudentAttendance(
       throw conflict("STUDENT_ATTENDANCE_CUTOFF_PASSED");
     }
 
-    await queueStudentAttendanceWhatsAppNotifications({
-      tenantId: ctx.tenantId,
+    await queueAndDispatchStudentAttendanceNotifications(ctx, {
       branchId,
       academicYearId,
       classSectionId: transactionResult.classSectionId,

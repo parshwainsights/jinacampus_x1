@@ -25,9 +25,9 @@ export const STAFF_ATTENDANCE_REPORT_TYPE_OPTIONS = [
   "OTHER"
 ] as const;
 
-function indiaDateParts(date = new Date()) {
+function institutionalDateParts(date = new Date(), timeZone = "Asia/Kolkata") {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
@@ -40,29 +40,32 @@ function indiaDateParts(date = new Date()) {
   };
 }
 
-export function todayIndiaDateString() {
-  const parts = indiaDateParts();
+export function todayIndiaDateString(timeZone?: string | null) {
+  const parts = institutionalDateParts(new Date(), timeZone ?? "Asia/Kolkata");
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-export function monthStartIndiaDateString() {
-  const parts = indiaDateParts();
+export function monthStartIndiaDateString(timeZone?: string | null) {
+  const parts = institutionalDateParts(new Date(), timeZone ?? "Asia/Kolkata");
   return `${parts.year}-${parts.month}-01`;
 }
 
-export function currentIndiaMonthYear() {
-  const parts = indiaDateParts();
+export function currentIndiaMonthYear(timeZone?: string | null) {
+  const parts = institutionalDateParts(new Date(), timeZone ?? "Asia/Kolkata");
   return {
     month: Number(parts.month),
     year: Number(parts.year)
   };
 }
 
-export function formatStaffAttendanceReportDate(value?: string | null) {
+export function formatStaffAttendanceReportDate(value?: string | null, _timeZone = "Asia/Kolkata") {
   if (!value) return "-";
+  const [year, month, day] = value.split("-").map(Number);
+  if (![year, month, day].every(Number.isInteger)) return "-";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
-    year: "numeric"
-  }).format(new Date(`${value}T00:00:00.000Z`));
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(year, month - 1, day)));
 }
