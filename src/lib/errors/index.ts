@@ -70,6 +70,21 @@ export function getSafeErrorCode(error: unknown) {
   return normalizeErrorCode(rawErrorCode(error));
 }
 
+export function getSafeHttpStatus(error: unknown) {
+  if (error instanceof AppError) return error.status;
+  if (error instanceof z.ZodError) return 400;
+
+  const code = getSafeErrorCode(error);
+  if (code === "UNAUTHENTICATED") return 401;
+  if (code === "FORBIDDEN" || code === "BRANCH_ACCESS_DENIED" || code === "ADMINISTRATOR_ACCESS_REQUIRED") {
+    return 403;
+  }
+  if (code === "NOT_FOUND" || code.endsWith("_NOT_FOUND")) return 404;
+  if (code === "CONFLICT" || code.endsWith("_ALREADY_EXISTS") || code.includes("_DUPLICATE")) return 409;
+  if (code === "VALIDATION_ERROR" || code.startsWith("INVALID_")) return 400;
+  return 500;
+}
+
 export function isKnownAppError(error: unknown) {
   return rawErrorCode(error) !== null;
 }

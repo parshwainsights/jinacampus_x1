@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AppError, mapActionError } from "@/lib/errors";
+import { AppError, getSafeHttpStatus, mapActionError } from "@/lib/errors";
 import { getTenantContext } from "@/lib/tenant/context";
 import { idSchema } from "@/modules/academia/schemas/shared";
 import { validateStudentBulkImport } from "@/modules/academia/services/student-bulk.service";
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       validationMessage: "Check the spreadsheet and try again."
     });
     return NextResponse.json(safe, {
-      status: error instanceof AppError ? error.status : safe.code === "VALIDATION_ERROR" ? 400 : 500
+      status: getSafeHttpStatus(error)
     });
   }
 }

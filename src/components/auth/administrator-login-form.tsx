@@ -74,6 +74,7 @@ export function AdministratorLoginForm() {
 
   return (
     <form
+      method="post"
       onSubmit={onSubmit}
       className="auth-form-panel min-w-0 p-5 sm:p-8 lg:p-9"
       aria-busy={isSubmitting}

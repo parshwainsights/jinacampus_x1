@@ -112,7 +112,7 @@ npx prisma migrate deploy
 
 Then configure the storage variables and redeploy. The migration adds only `StudentDocumentType` and `student_documents`; it does not alter existing student rows.
 
-The private bucket and server-only Storage variables were configured for Vercel Production and Preview on 2026-08-05. DB-backed student upload/replacement and cross-tenant browser QA remain a separate unchecked gate.
+The private bucket and server-only Storage variables were configured for Vercel Production and Preview on 2026-08-05. The additive migration and dedicated DB-backed student-record boundary QA were verified against the approved Supabase environment on 2026-08-06.
 
 ## QA Checklist
 
@@ -126,6 +126,36 @@ The private bucket and server-only Storage variables were configured for Vercel 
 - Verify an oversized file is rejected.
 - Verify the bucket is private and signed links expire.
 - Verify deleted files disappear from the profile and are removed from storage.
+
+## DB-Backed Browser QA - 2026-08-06
+
+Status: Passed
+
+The release-equivalent production build was exercised with disposable two-tenant fixtures and a same-tenant unauthorized branch. The authenticated browser was used for the bulk-import workflow and rendered student profile. Exact authenticated HTTP requests from the same session covered route-level negative boundaries without exposing the session value.
+
+| Area | Result | Evidence |
+|---|---|---|
+| Accessible branch selection | Pass | The Principal saw only the authorized branch in the bulk-record screen. |
+| Valid CSV import | Pass | Two rows previewed and committed; Student, Guardian, link, and Enrollment rows were created. |
+| Invalid mixed import | Pass | Invalid Aadhaar/category input disabled commit; a direct commit attempt returned 422 and persisted no rows. |
+| Class-section resolution | Pass | `Grade 1-A` resolved once after duplicate aliases generated for the same class-section were deduplicated. |
+| Branch and tenant isolation | Pass | Same-tenant unauthorized-branch and cross-tenant preview, commit, export, upload, open, and delete requests returned safe 403/404 responses. |
+| CSV export | Pass | UTF-8 BOM present; authorized rows only; formula-like cells escaped; Aadhaar and bank account masked. |
+| Excel export | Pass | Workbook opened successfully and contained only authorized, masked student records. |
+| Private document upload | Pass | PDF, JPEG, PNG, and WebP accepted; spoofed PDF and oversized input rejected safely. |
+| Private document access | Pass | The profile rendered four documents; access used a permission-checked signed download and exposed no storage path or checksum. |
+| Document deletion | Pass | All four records were soft-deleted, objects were removed from Storage, old document routes rejected access, and the profile no longer listed the files. |
+| Audit evidence | Pass | Bulk import, export, document upload, and document delete audit actions were present. |
+| Sensitive output | Pass | Normal UI and exports excluded tenant/actor IDs, storage metadata, credentials, password/token fields, and full Aadhaar/bank values. |
+| Storage posture | Pass | The configured student-document bucket remained private. |
+
+Confirmed QA defects fixed:
+
+- Deduplicate equivalent aliases generated for one class-section so a valid display name is not reported as ambiguous.
+- Map tenant/branch permission failures in student import, export, template, and document route handlers to safe 403 responses instead of generic 500 responses.
+- Give school and Administrator login forms an explicit POST fallback so an unhydrated browser cannot submit credentials through a URL query string.
+
+No persistent QA account, tenant, student, document object, or browser session is retained after cleanup.
 
 ## Known Limits
 

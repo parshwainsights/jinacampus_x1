@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AppError, mapActionError } from "@/lib/errors";
+import { getSafeHttpStatus, mapActionError } from "@/lib/errors";
 import { getTenantContext } from "@/lib/tenant/context";
 import {
   createStudentDocumentDownloadUrl,
@@ -15,7 +15,7 @@ type RouteContext = {
 function errorResponse(error: unknown, fallbackMessage: string) {
   const safe = mapActionError(error, { fallbackMessage });
   return NextResponse.json(safe, {
-    status: error instanceof AppError ? error.status : safe.code === "VALIDATION_ERROR" ? 400 : 500
+    status: getSafeHttpStatus(error)
   });
 }
 

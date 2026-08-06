@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AppError, mapActionError } from "@/lib/errors";
+import { AppError, getSafeHttpStatus, mapActionError } from "@/lib/errors";
 import { getTenantContext } from "@/lib/tenant/context";
 import { studentDocumentTypeSchema } from "@/modules/academia/schemas/student-document.schema";
 import { uploadStudentDocument } from "@/modules/academia/services/student-document.service";
@@ -12,7 +12,7 @@ function errorResponse(error: unknown) {
     validationMessage: "Check the document details and try again."
   });
   return NextResponse.json(safe, {
-    status: error instanceof AppError ? error.status : safe.code === "VALIDATION_ERROR" ? 400 : 500
+    status: getSafeHttpStatus(error)
   });
 }
 

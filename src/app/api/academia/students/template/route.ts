@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AppError, mapActionError } from "@/lib/errors";
+import { getSafeHttpStatus, mapActionError } from "@/lib/errors";
 import { getTenantContext } from "@/lib/tenant/context";
 import { idSchema } from "@/modules/academia/schemas/shared";
 import { getStudentBulkReferenceData } from "@/modules/academia/services/student-bulk.service";
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const safe = mapActionError(error, { fallbackMessage: "Unable to create the student import template." });
     return NextResponse.json(safe, {
-      status: error instanceof AppError ? error.status : safe.code === "VALIDATION_ERROR" ? 400 : 500
+      status: getSafeHttpStatus(error)
     });
   }
 }

@@ -1187,9 +1187,9 @@ Implementation:
 - [x] Student-profile document upload, short-lived access, and audited deletion.
 - [x] File size, signature, MIME, filename, tenant, branch, and permission enforcement.
 - [x] Focused parser, storage, schema, security, and UI source tests.
-- [ ] Apply the migration to the approved deployment database.
+- [x] Apply the migration to the approved deployment database.
 - [x] Configure server-only Supabase Storage variables in Vercel.
-- [ ] Run DB-backed cross-tenant/branch import, export, and document browser QA.
+- [x] Run DB-backed cross-tenant/branch import, export, and document browser QA.
 
 Acceptance criteria:
 
@@ -1215,8 +1215,8 @@ Implementation:
 - [x] Institution logo and highlighted Display Name in desktop/mobile authenticated chrome.
 - [x] Initials fallback for missing or invalid logo images.
 - [x] Focused storage, authority, scoping, security, and shell source tests.
-- [ ] Configure branding storage variables in the approved deployment environment.
-- [ ] Run DB-backed Supabase upload, replacement, and cross-tenant browser QA.
+- [x] Configure branding storage variables in the approved deployment environment.
+- [x] Run DB-backed Supabase upload, replacement, and cross-tenant browser QA.
 
 Acceptance criteria:
 

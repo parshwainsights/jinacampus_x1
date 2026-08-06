@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AppError,
   getSafeErrorCode,
+  getSafeHttpStatus,
   getUserSafeErrorMessage,
   isKnownAppError,
   mapActionError
@@ -96,6 +97,13 @@ describe("safe error handling", () => {
     expect(isKnownAppError(new Error("FORBIDDEN_PERMISSION:academia.attendance.mark"))).toBe(true);
     expect(getSafeErrorCode(new Error("FORBIDDEN_PERMISSION:academia.attendance.mark"))).toBe("FORBIDDEN");
     expect(isKnownAppError(new Error("database path C:\\secret\\query_engine-windows.dll.node"))).toBe(false);
+  });
+
+  it("maps normalized access errors to their safe HTTP status", () => {
+    expect(getSafeHttpStatus(new Error("FORBIDDEN_BRANCH_ACCESS"))).toBe(403);
+    expect(getSafeHttpStatus(new Error("FORBIDDEN_PERMISSION:academia.student.import"))).toBe(403);
+    expect(getSafeHttpStatus(new AppError("STUDENT_NOT_FOUND", "STUDENT_NOT_FOUND", 404))).toBe(404);
+    expect(getSafeHttpStatus(new Error("database connection failed"))).toBe(500);
   });
 
   it("maps account password errors to safe user-facing messages", () => {

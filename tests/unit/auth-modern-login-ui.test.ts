@@ -74,6 +74,8 @@ describe("modern responsive authentication UI", () => {
     expect(combined).toContain("spellCheck={false}");
     expect(school).toContain('password: formData.get("password")');
     expect(administrator).toContain("password: submittedPassword");
+    expect(school).toContain('<form method="post"');
+    expect(administrator).toContain('method="post"');
     expect(passwordInput).toContain('type="button"');
     expect(passwordInput).toContain("aria-label={label}");
     expect(combined).not.toMatch(/passwordHash|tokenHash|sessionSecret|rawToken/);

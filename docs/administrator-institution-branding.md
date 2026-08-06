@@ -64,4 +64,23 @@ The storage upload occurs before the database transaction. If the database updat
 7. Verify an institution ID from another tenant is rejected safely and creates no object or audit record.
 8. Verify the public logo URL contains no tenant, institution, actor, password, token, or storage credential values.
 
-DB-backed Supabase upload and cross-tenant browser QA remain deployment gates when storage credentials are not available locally.
+The server-only branding Storage variables are configured in the approved deployment environment. The DB-backed Supabase upload, replacement, invalid-file, and authorization-boundary browser gate passed on 2026-08-06.
+
+## DB-Backed Browser QA - 2026-08-06
+
+Status: Passed
+
+The release-equivalent production build was exercised with a disposable platform administrator, two disposable tenants, and a school Principal session. All QA schools, sessions, audit rows, and uploaded objects were removed after verification.
+
+| Area | Result | Evidence |
+|---|---|---|
+| Initial logo upload | Pass | A valid PNG uploaded from the Administrator school edit page, rendered immediately, persisted to the intended institution, and returned a publicly readable asset. |
+| Logo replacement | Pass | A second valid PNG replaced the first; the institution row stored the new URL/key and the previous managed object was removed. |
+| School chrome | Pass | The school Principal dashboard rendered the institution Display Name and replacement logo without exposing storage or authentication internals. |
+| Invalid files | Pass | An extension-spoofed PDF, SVG, empty file, and oversized PNG returned specific safe validation messages and created no successful update audit. |
+| Tenant/institution mismatch | Pass | Submitting an institution from a second tenant with the selected tenant returned a safe not-found response and left the second institution unchanged. |
+| School-user authorization | Pass | A school Principal attempting the Administrator school edit URL was redirected to the separate Administrator login. |
+| Storage posture | Pass | The configured branding bucket remained public-read, the replacement object was readable, and the generated public URL contained no tenant, institution, actor, credential, or token identifier. |
+| Audit and sensitive output | Pass | Exactly the two successful updates produced platform audit events; audit metadata excluded object keys, passwords, tokens, sessions, and service-role credentials. |
+
+No application defect was confirmed during this gate. Institution-logo replacement is ready for the Web Base MVP release candidate. Live WhatsApp provider delivery and Supabase advisory remediation remain separate, non-blocking follow-ups.

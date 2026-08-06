@@ -226,7 +226,7 @@ export function LoginForm({
         ) : null}
       </div>
 
-      <form onSubmit={onPasswordSubmit} className="mt-6 space-y-4" aria-label="JinaCampus sign in">
+      <form method="post" onSubmit={onPasswordSubmit} className="mt-6 space-y-4" aria-label="JinaCampus sign in">
         {schoolIdLocked ? (
           <>
             <input type="hidden" name="schoolId" value={schoolId ?? ""} />

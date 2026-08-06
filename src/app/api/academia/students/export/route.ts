@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { AppError, mapActionError } from "@/lib/errors";
+import { getSafeHttpStatus, mapActionError } from "@/lib/errors";
 import { getTenantContext } from "@/lib/tenant/context";
 import { idSchema } from "@/modules/academia/schemas/shared";
 import { exportStudentRecords } from "@/modules/academia/services/student-bulk.service";
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const safe = mapActionError(error, { fallbackMessage: "Unable to export student records." });
     return NextResponse.json(safe, {
-      status: error instanceof AppError ? error.status : safe.code === "VALIDATION_ERROR" ? 400 : 500
+      status: getSafeHttpStatus(error)
     });
   }
 }

@@ -16,7 +16,7 @@ import type {
 } from "./student-bulk-workbook.service";
 import { ensureActiveBranch, requireBranchPermission } from "./shared";
 
-type ClassSectionReference = {
+export type ClassSectionReference = {
   id: string;
   academicYearId: string;
   displayName: string;
@@ -105,13 +105,13 @@ function splitName(name: string) {
   };
 }
 
-function classSectionAliases(classSection: ClassSectionReference) {
-  return [
+export function classSectionAliases(classSection: ClassSectionReference) {
+  return Array.from(new Set([
     classSection.displayName,
     `${classSection.academicClass.name}-${classSection.section.name}`,
     `${classSection.academicClass.name} ${classSection.section.name}`,
     `${classSection.academicClass.code}-${classSection.section.code}`
-  ].map(normalizedLabel);
+  ].map(normalizedLabel)));
 }
 
 async function loadClassSectionReferences(ctx: TenantContext, branchId: string) {

@@ -8,6 +8,7 @@ import {
   buildStudentImportTemplate,
   parseStudentImportFile
 } from "@/modules/academia/services/student-bulk-workbook.service";
+import { classSectionAliases } from "@/modules/academia/services/student-bulk.service";
 
 const branchId = "00000000-0000-0000-0000-000000000003";
 
@@ -37,6 +38,18 @@ function csvFile(overrides: Record<string, string> = {}) {
 }
 
 describe("student bulk import and export", () => {
+  it("does not treat aliases from one class section as an ambiguous match", () => {
+    expect(classSectionAliases({
+      id: "class-section-1",
+      academicYearId: "academic-year-1",
+      displayName: "Grade 1-A",
+      capacity: 40,
+      currentEnrollmentCount: 0,
+      academicClass: { code: "G1", name: "Grade 1" },
+      section: { code: "A", name: "A" }
+    })).toEqual(["grade 1-a", "grade 1 a", "g1-a"]);
+  });
+
   it("parses a Google Sheets-compatible CSV using server-derived branch scope", async () => {
     const parsed = await parseStudentImportFile(csvFile(), branchId);
 
